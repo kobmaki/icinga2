@@ -27,9 +27,14 @@ using namespace icinga;
 
 REGISTER_TYPE(Zone);
 
+void Zone::OnAllConfigLoaded(void)
+{
+	m_Parent = Zone::GetByName(GetParentRaw());
+}
+
 Zone::Ptr Zone::GetParent(void) const
 {
-	return Zone::GetByName(GetParentRaw());
+	return m_Parent;
 }
 
 std::set<Endpoint::Ptr> Zone::GetEndpoints(void) const
