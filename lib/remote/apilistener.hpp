@@ -101,6 +101,8 @@ private:
 	Timer::Ptr m_Timer;
 	Endpoint::Ptr m_LocalEndpoint;
 
+	static ApiListener::Ptr m_Instance;
+
 	void ApiTimerHandler(void);
 
 	bool AddListener(const String& node, const String& service);

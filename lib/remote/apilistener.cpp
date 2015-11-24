@@ -41,6 +41,7 @@ using namespace icinga;
 REGISTER_TYPE(ApiListener);
 
 boost::signals2::signal<void(bool)> ApiListener::OnMasterChanged;
+ApiListener::Ptr ApiListener::m_Instance;
 
 REGISTER_STATSFUNCTION(ApiListener, &ApiListener::StatsFunc);
 
@@ -103,11 +104,10 @@ void ApiListener::Start(bool runtimeCreated)
 {
 	SyncZoneDirs();
 
-	if (std::distance(ConfigType::GetObjectsByType<ApiListener>().first,
-	    ConfigType::GetObjectsByType<ApiListener>().second) > 1) {
-		Log(LogCritical, "ApiListener", "Only one ApiListener object is allowed.");
-		return;
-	}
+	if (m_Instance)
+		BOOST_THROW_EXCEPTION(ScriptError("Only one ApiListener object is allowed.", GetDebugInfo()));
+
+	m_Instance = this;
 
 	ObjectImpl<ApiListener>::Start(runtimeCreated);
 
@@ -135,10 +135,7 @@ void ApiListener::Start(bool runtimeCreated)
 
 ApiListener::Ptr ApiListener::GetInstance(void)
 {
-	BOOST_FOREACH(const ApiListener::Ptr& listener, ConfigType::GetObjectsByType<ApiListener>())
-		return listener;
-
-	return ApiListener::Ptr();
+	return m_Instance;
 }
 
 boost::shared_ptr<SSL_CTX> ApiListener::GetSSLContext(void) const
