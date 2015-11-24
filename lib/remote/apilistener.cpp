@@ -90,7 +90,9 @@ void ApiListener::OnConfigLoaded(void)
 
 void ApiListener::OnAllConfigLoaded(void)
 {
-	if (!Endpoint::GetByName(GetIdentity()))
+	m_LocalEndpoint = Endpoint::GetByName(GetIdentity());
+
+	if (!m_LocalEndpoint)
 		BOOST_THROW_EXCEPTION(ScriptError("Endpoint object for '" + GetIdentity() + "' is missing.", GetDebugInfo()));
 }
 
@@ -1028,4 +1030,9 @@ std::set<HttpServerConnection::Ptr> ApiListener::GetHttpClients(void) const
 Value ApiListener::HelloAPIHandler(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& params)
 {
 	return Empty;
+}
+
+Endpoint::Ptr ApiListener::GetLocalEndpoint(void) const
+{
+	return m_LocalEndpoint;
 }
