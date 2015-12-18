@@ -18,44 +18,72 @@
  ******************************************************************************/
 
 #include "remote/base64.hpp"
-#include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/binary_from_base64.hpp>
-#include <boost/archive/iterators/insert_linebreaks.hpp>
-#include <boost/archive/iterators/transform_width.hpp>
-#include <boost/archive/iterators/ostream_iterator.hpp>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
 #include <sstream>
 
 using namespace icinga;
 
-const String base64_padding[] = {"", "==", "="};
-
 String Base64::Encode(const String& data)
 {
-	typedef boost::archive::iterators::base64_from_binary <boost::archive::iterators::transform_width<const char *, 6, 8> > base64_encode;
+	BIO *bio64 = BIO_new(BIO_f_base64());
+	BIO *bio = BIO_new(BIO_s_mem());
+	bio = BIO_push(bio64, bio); //ties bio64 into bio
 
-	std::ostringstream msgbuf;
-	std::copy(base64_encode(data.CStr()), base64_encode(data.CStr() + data.GetLength()), std::ostream_iterator<char>(msgbuf));
-	msgbuf << base64_padding[data.GetLength() % 3];
-	return msgbuf.str();
+	BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //No newlines please
+
+	BIO_write(bio, data.CStr(), data.GetLength());
+	BIO_flush(bio);
+
+	BUF_MEM *biobuf;
+	BIO_get_mem_ptr(bio, &biobuf);
+	BIO_set_close(bio, BIO_NOCLOSE); // BIO_free_all now leaves biobuf alone
+	BIO_free_all(bio);
+
+	String ret;
+
+	//There has to be a more elegant way
+	for (;;) {
+		char chbuf[512];
+		int p = BIO_read(bio, chbuf, 511);
+		if (p <= 0)
+			break;
+		chbuf[p] = '\0';
+		ret += String(chbuf);
+	}
+
+	return ret;
+}
+
+static int DecodeLen(const String& data)
+{
+	int dl = data.GetLength();
+
+	if (data[dl - 1] != '=')
+		return dl * 3 / 4;
+	if (data[dl - 2] != '=')
+		return dl * 3 / 4 - 1;
+	return dl * 3 / 4 - 2;
 }
 
 String Base64::Decode(const String& data)
 {
-	typedef boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<const char *>, 8, 6> base64_decode;
+	BIO *bio64 = BIO_new(BIO_f_base64());
 
-	String::SizeType size = data.GetLength();
+	char *inbuf = new char[data.GetLength()];
+	inbuf = const_cast<char*>(data.CStr());
 
-	if (size && data[size - 1] == '=') {
-		--size;
+	BIO *bio = BIO_new_mem_buf(inbuf, data.GetLength());
+	bio = BIO_push(bio64, bio); //ties bio64 into bio
 
-		if (size && data[size - 1] == '=')
-			--size;
-	}
+	BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //No newlines please
 
-	if (size == 0)
-		return String();
+	//TODO: Cool lambda magic
+	char chbuf[DecodeLen(data)];
+	BIO_read(bio, chbuf, data.GetLength());
+	BIO_free_all(bio);
+	delete[] inbuf;
 
-	std::ostringstream msgbuf;
-	std::copy(base64_decode(data.CStr()), base64_decode(data.CStr() + size), std::ostream_iterator<char>(msgbuf));
-	return msgbuf.str();
+	return String(chbuf);
 }
