@@ -73,6 +73,7 @@ void PluginCheckTask::ProcessFinishedHandler(const Checkable::Ptr& checkable, co
 	cr->SetCommand(commandLine);
 	cr->SetOutput(co.first);
 	cr->SetPerformanceData(PluginUtility::SplitPerfdata(co.second));
+	cr->SetPerfdataRaw(co.second);
 	cr->SetState(PluginUtility::ExitStatusToState(pr.ExitStatus));
 	cr->SetExitStatus(pr.ExitStatus);
 	cr->SetExecutionStart(pr.ExecutionStart);

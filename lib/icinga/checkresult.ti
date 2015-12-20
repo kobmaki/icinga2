@@ -73,6 +73,7 @@ class CheckResult
 	[state] String output;
 	[state] Array::Ptr performance_data;
 
+	[state] String perfdata_raw;
 	[state] bool active {
 		default {{{ return true; }}}
 	};

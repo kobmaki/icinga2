@@ -305,6 +305,7 @@ void ExternalCommandProcessor::ProcessHostCheckResult(double time, const std::ve
 	std::pair<String, String> co = PluginUtility::ParseCheckOutput(arguments[2]);
 	result->SetOutput(co.first);
 	result->SetPerformanceData(PluginUtility::SplitPerfdata(co.second));
+	result->SetPerfdataRaw(co.second);
 
 	ServiceState state;
 

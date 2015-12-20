@@ -286,6 +286,9 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 		} else if (macro == "perfdata") {
 			*result = PluginUtility::FormatPerfdata(cr->GetPerformanceData());
 			return true;
+		} else if (macro == "perfdata_raw") {
+		        *result = cr->GetPerfdataRaw();
+		        return true;
 		} else if (macro == "last_check") {
 			*result = Convert::ToString((long)cr->GetScheduleStart());
 			return true;
