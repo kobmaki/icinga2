@@ -135,7 +135,7 @@ Example:
 
 Identifiers may not contain certain characters (e.g. space) or start
 with certain characters (e.g. digits). If you want to use a dictionary
-key that is not a valid identifier you can enclose the key in double
+key that is not a valid identifier, you can enclose the key in double
 quotes.
 
 ### <a id="array"></a> Array
@@ -308,7 +308,7 @@ This is equivalent to writing:
       }
     }
 
-If the `hello` attribute does not already have a value it is automatically initialized to an empty dictionary.
+If the `hello` attribute does not already have a value, it is automatically initialized to an empty dictionary.
 
 ## <a id="template-imports"></a> Template Imports
 
@@ -369,6 +369,7 @@ PidPath             |**Read-write.** Contains the path of the Icinga 2 PID file.
 Vars                |**Read-write.** Contains a dictionary with global custom attributes. Not set by default.
 NodeName            |**Read-write.** Contains the cluster node name. Set to the local hostname by default.
 UseVfork            |**Read-write.** Whether to use vfork(). Only available on *NIX. Defaults to true.
+EventEngine         |**Read-write.** The name of the socket event engine, can be "poll" or "epoll". The epoll interface is only supported on Linux.
 AttachDebugger      |**Read-write.** Whether to attach a debugger when Icinga 2 crashes. Defaults to false.
 RunAsUser           |**Read-write.** Defines the user the Icinga 2 daemon is running as. Used in the `init.conf` configuration file.
 RunAsGroup          |**Read-write.** Defines the group the Icinga 2 daemon is running as. Used in the `init.conf` configuration file.
@@ -413,7 +414,7 @@ ScheduledDowntime | Service     | host, service
 
 Any valid config attribute can be accessed using the `host` and `service`
 variables. For example, `host.address` would return the value of the host's
-"address" attribute - or null if that attribute isn't set.
+"address" attribute -- or null if that attribute isn't set.
 
 More usage examples are documented in the [monitoring basics](3-monitoring-basics.md#using-apply-expressions)
 chapter.
@@ -879,7 +880,7 @@ type objects are made available using global variables which match the type's na
 The type object's `prototype` property can be used to find out which methods a certain type
 supports:
 
-    /* This returns: ["contains","find","len","lower","replace","reverse","split","substr","to_string","upper"] */
+    /* This returns: ["contains","find","len","lower","replace","reverse","split","substr","to_string","trim","upper"] */
     keys(String.prototype)
 
 Additional documentation on type methods is available in the

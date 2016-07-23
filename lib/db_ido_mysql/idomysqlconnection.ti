@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -42,6 +42,12 @@ class IdoMysqlConnection : DbConnection
 	[config] String database {
 		default {{{ return "icinga"; }}}
 	};
+	[config] bool enable_ssl;
+	[config] String ssl_key;
+	[config] String ssl_cert;
+	[config] String ssl_ca;
+	[config] String ssl_capath;
+	[config] String ssl_cipher;
 	[config] String instance_name {
 		default {{{ return "default"; }}}
 	};

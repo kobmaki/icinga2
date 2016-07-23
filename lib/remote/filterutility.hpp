@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -69,7 +69,8 @@ class I2_REMOTE_API FilterUtility
 public:
 	static Type::Ptr TypeFromPluralName(const String& pluralName);
 	static void CheckPermission(const ApiUser::Ptr& user, const String& permission, Expression **filter = NULL);
-	static std::vector<Value> GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query, const ApiUser::Ptr& user);
+	static std::vector<Value> GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query,
+	    const ApiUser::Ptr& user, const String& variableName = String());
 	static bool EvaluateFilter(ScriptFrame& frame, Expression *filter,
 	    const Object::Ptr& target, const String& variableName = String());
 };

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -51,9 +51,9 @@ private:
 
 	void CheckResultHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
 	void NotificationToUserHandler(const Notification::Ptr& notification, const Checkable::Ptr& checkable,
-	    const User::Ptr& user, NotificationType notification_type, CheckResult::Ptr const& cr,
-	    const String& author, const String& comment_text, const String& command_name);
-	String ComposeGelfMessage(const Dictionary::Ptr& fields, const String& source);
+	const User::Ptr& user, NotificationType notification_type, CheckResult::Ptr const& cr,
+	const String& author, const String& comment_text, const String& command_name);
+	String ComposeGelfMessage(const Dictionary::Ptr& fields, const String& source, double ts);
 	void StateChangeHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, StateType type);
 	void SendLogMessage(const String& gelf);
 

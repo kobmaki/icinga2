@@ -2,7 +2,7 @@
 -- pgsql.sql
 -- DB definition for IDO Postgresql
 --
--- Copyright (c) 2009-2015 Icinga Development Team (https://www.icinga.org)
+-- Copyright (c) 2009-2016 Icinga Development Team (https://www.icinga.org/)
 --
 -- --------------------------------------------------------
 
@@ -739,7 +739,7 @@ CREATE TABLE  icinga_hoststatus (
   output TEXT  default '',
   long_output TEXT  default '',
   perfdata TEXT  default '',
-  check_source TEXT  default '',
+  check_source varchar(255) default '',
   current_state INTEGER  default 0,
   has_been_checked INTEGER  default 0,
   should_be_scheduled INTEGER  default 0,
@@ -1226,7 +1226,7 @@ CREATE TABLE  icinga_servicestatus (
   output TEXT  default '',
   long_output TEXT  default '',
   perfdata TEXT  default '',
-  check_source TEXT  default '',
+  check_source varchar(255) default '',
   current_state INTEGER  default 0,
   has_been_checked INTEGER  default 0,
   should_be_scheduled INTEGER  default 0,
@@ -1323,7 +1323,7 @@ CREATE TABLE  icinga_statehistory (
   last_hard_state INTEGER  default '-1',
   output TEXT  default '',
   long_output TEXT  default '',
-  check_source TEXT default '',
+  check_source varchar(255) default '',
   CONSTRAINT PK_statehistory_id PRIMARY KEY (statehistory_id)
 ) ;
 
@@ -1674,9 +1674,29 @@ CREATE INDEX commenthistory_delete_idx ON icinga_commenthistory (instance_id, co
 CREATE INDEX cv_session_del_idx ON icinga_customvariables (session_token);
 CREATE INDEX cvs_session_del_idx ON icinga_customvariablestatus (session_token);
 
+-- #10070
+CREATE INDEX idx_comments_object_id on icinga_comments(object_id);
+CREATE INDEX idx_scheduleddowntime_object_id on icinga_scheduleddowntime(object_id);
+
+-- #10066
+CREATE INDEX idx_endpoints_object_id on icinga_endpoints(endpoint_object_id);
+CREATE INDEX idx_endpointstatus_object_id on icinga_endpointstatus(endpoint_object_id);
+
+CREATE INDEX idx_endpoints_zone_object_id on icinga_endpoints(zone_object_id);
+CREATE INDEX idx_endpointstatus_zone_object_id on icinga_endpointstatus(zone_object_id);
+
+CREATE INDEX idx_zones_object_id on icinga_zones(zone_object_id);
+CREATE INDEX idx_zonestatus_object_id on icinga_zonestatus(zone_object_id);
+
+CREATE INDEX idx_zones_parent_object_id on icinga_zones(parent_zone_object_id);
+CREATE INDEX idx_zonestatus_parent_object_id on icinga_zonestatus(parent_zone_object_id);
+
+-- #12107
+CREATE INDEX idx_statehistory_cleanup on icinga_statehistory(instance_id, state_time);
+
 -- -----------------------------------------
 -- set dbversion
 -- -----------------------------------------
 
-SELECT updatedbversion('1.14.0');
+SELECT updatedbversion('1.14.1');
 

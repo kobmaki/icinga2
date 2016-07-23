@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -263,7 +263,12 @@ String Url::Format(bool print_credentials) const
 				if (!temp.IsEmpty())
 					temp += "&";
 
-				temp += key + "[]=" + Utility::EscapeString(s, ACQUERY, false);
+				temp += key;
+
+				if (kv.second.size() > 1)
+					temp += "[]";
+
+				temp += "=" + Utility::EscapeString(s, ACQUERY, false);
 			}
 			param += temp;
 		}

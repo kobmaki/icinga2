@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -67,7 +67,7 @@ class Comment : ConfigObject < CommentNameComposer
 
 			if (!newValue.IsEmpty()) {
 				Service::Ptr service = Service::GetByNamePair(GetHostName(), newValue);
-				DependencyGraph::RemoveDependency(this, service.get());
+				DependencyGraph::AddDependency(this, service.get());
 			}
 		}}}
 		navigate {{{
@@ -79,7 +79,7 @@ class Comment : ConfigObject < CommentNameComposer
 		}}}
 	};
 
-	[config] double entry_time {
+	[config] Timestamp entry_time {
 		default {{{ return Utility::GetTime(); }}}
 	};
 	[config, enum] CommentType entry_type {
@@ -87,8 +87,8 @@ class Comment : ConfigObject < CommentNameComposer
 	};
 	[config, required] String author;
 	[config, required] String text;
-	[config] double expire_time;
-	int legacy_id;
+	[config] Timestamp expire_time;
+	[state] int legacy_id;
 };
 
 }

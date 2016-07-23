@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,12 +29,10 @@ using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/config/files", ConfigFilesHandler);
 
-bool ConfigFilesHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response)
+bool ConfigFilesHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
 {
 	if (request.RequestMethod != "GET")
 		return false;
-
-	Dictionary::Ptr params = HttpUtility::FetchRequestParameters(request);
 
 	const std::vector<String>& urlPath = request.RequestUrl->GetPath();
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,6 +32,9 @@ class ApiListener : ConfigObject
 	[config, required] String key_path;
 	[config, required] String ca_path;
 	[config] String crl_path;
+	[config] String cipher_list {
+		default {{{ return "ALL:!LOW:!WEAK:!MEDIUM:!EXP:!NULL"; }}}
+	};
 
 	[config] String bind_host;
 	[config] String bind_port {
@@ -43,7 +46,7 @@ class ApiListener : ConfigObject
 
 	[config] String ticket_salt;
 
-	[state, no_user_modify] double log_message_timestamp;
+	[state, no_user_modify] Timestamp log_message_timestamp;
 
 	[no_user_modify] String identity;
 };

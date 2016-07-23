@@ -50,6 +50,7 @@ Configuration Attributes:
   bind\_port                |**Optional.** The port the api listener should be bound to. Defaults to `5665`.
   accept\_config            |**Optional.** Accept zone configuration. Defaults to `false`.
   accept\_commands          |**Optional.** Accept remote commands. Defaults to `false`.
+  cipher\_list		    |**Optional.** Cipher list that is allowed.
 
 ## <a id="objecttype-apiuser"></a> ApiUser
 
@@ -131,7 +132,7 @@ Configuration Attributes:
 ### <a id="objecttype-checkcommand-arguments"></a> CheckCommand Arguments
 
 Command arguments can be defined as key-value-pairs in the `arguments`
-dictionary. If the argument requires additional configuration for example
+dictionary. If the argument requires additional configuration, for example
 a `description` attribute or an optional condition, the value can be defined
 as dictionary specifying additional options.
 
@@ -189,13 +190,19 @@ Argument array `repeat_key = false`:
 
 ## <a id="objecttype-checkcomponent"></a> CheckerComponent
 
-The checker component is responsible for scheduling active checks. There are no configurable options.
+The checker component is responsible for scheduling active checks.
 
 Example:
 
     library "checker"
 
     object CheckerComponent "checker" { }
+
+Configuration Attributes:
+
+  Name                |Description
+  --------------------|----------------
+  concurrent\_checks  |**Optional.** The maximum number of concurrent checks. Defaults to 512.
 
 ## <a id="objecttype-checkresultreader"></a> CheckResultReader
 
@@ -234,7 +241,7 @@ Configuration Attributes:
   Name            |Description
   ----------------|----------------
   host_name       | **Required.** The name of the host this comment belongs to.
-  service_name    | **Optional.** The short name of the service this comment belongs to. If omitted this comment object is treated as host comment.
+  service_name    | **Optional.** The short name of the service this comment belongs to. If omitted, this comment object is treated as host comment.
   author          | **Required.** The author's name.
   text            | **Required.** The comment text.
   entry_time      | **Optional.** The unix timestamp when this comment was added.
@@ -308,9 +315,9 @@ Configuration Attributes:
   Name                  |Description
   ----------------------|----------------
   parent_host_name      |**Required.** The parent host.
-  parent_service_name   |**Optional.** The parent service. If omitted this dependency object is treated as host dependency.
+  parent_service_name   |**Optional.** The parent service. If omitted, this dependency object is treated as host dependency.
   child_host_name       |**Required.** The child host.
-  child_service_name    |**Optional.** The child service. If omitted this dependency object is treated as host dependency.
+  child_service_name    |**Optional.** The child service. If omitted, this dependency object is treated as host dependency.
   disable_checks        |**Optional.** Whether to disable checks when this dependency fails. Defaults to false.
   disable_notifications |**Optional.** Whether to disable notifications when this dependency fails. Defaults to true.
   ignore_soft_states    |**Optional.** Whether to ignore soft states for the reachability calculation. Defaults to true.
@@ -376,7 +383,7 @@ Configuration Attributes:
   Name            |Description
   ----------------|----------------
   host_name       | **Required.** The name of the host this comment belongs to.
-  service_name    | **Optional.** The short name of the service this comment belongs to. If omitted this comment object is treated as host comment.
+  service_name    | **Optional.** The short name of the service this comment belongs to. If omitted, this comment object is treated as host comment.
   author          | **Required.** The author's name.
   comment         | **Required.** The comment text.
   start_time      | **Required.** The start time as unix timestamp.
@@ -405,6 +412,15 @@ Example:
     object Endpoint "icinga2b" {
       host = "192.168.5.46"
       port = 5665
+      log_duration = 1d
+    }
+
+Example (disable replay log):
+
+    object Endpoint "icinga2b" {
+      host = "192.168.5.46"
+      port = 5665
+      log_duration = 0
     }
 
 Configuration Attributes:
@@ -413,8 +429,9 @@ Configuration Attributes:
   ----------------|----------------
   host            |**Optional.** The hostname/IP address of the remote Icinga 2 instance.
   port            |**Optional.** The service name/port of the remote Icinga 2 instance. Defaults to `5665`.
-  log_duration    |**Optional.** Duration for keeping replay logs on connection loss. Defaults to `1d`.
+  log_duration    |**Optional.** Duration for keeping replay logs on connection loss. Defaults to `1d` (86400 seconds). Attribute is specified in seconds. If log_duration is set to 0, replaying logs is disabled. You could also specify the value in human readable format like `10m` for 10 minutes or `1h` for one hour.
 
+Endpoint objects cannot currently be created with the API.
 
 ## <a id="objecttype-eventcommand"></a> EventCommand
 
@@ -563,6 +580,7 @@ Configuration Attributes:
   check\_command  |**Required.** The name of the check command.
   max\_check\_attempts|**Optional.** The number of times a host is re-checked before changing into a hard state. Defaults to 3.
   check\_period   |**Optional.** The name of a time period which determines when this host should be checked. Not set by default.
+  check\_timeout  |**Optional.** Check command timeout in seconds. Overrides the CheckCommand's `timeout` attribute.
   check\_interval |**Optional.** The check interval (in seconds). This interval is used for checks when the host is in a `HARD` state. Defaults to 5 minutes.
   retry\_interval |**Optional.** The retry interval (in seconds). This interval is used for checks when the host is in a `SOFT` state. Defaults to 1 minute.
   enable\_notifications|**Optional.** Whether notifications are enabled. Defaults to true.
@@ -581,6 +599,9 @@ Configuration Attributes:
   action\_url     |**Optional.** Url for actions for the host (for example, an external graphing tool).
   icon\_image     |**Optional.** Icon image for the host. Used by external interfaces only.
   icon\_image\_alt|**Optional.** Icon image description for the host. Used by external interface only.
+
+The actual check interval might deviate slightly from the configured values due to the fact that Icinga tries
+to evenly distribute all checks over a certain period of time, i.e. to avoid load spikes.
 
 > **Best Practice**
 >
@@ -603,6 +624,7 @@ Runtime Attributes:
   last\_in\_downtime        | Boolean       | Whether the host was in a downtime when the last check occurred.
   acknowledgement           | Number        | The acknowledgement type (0 = NONE, 1 = NORMAL, 2 = STICKY).
   acknowledgement_expiry    | Number        | When the acknowledgement expires (as a UNIX timestamp; 0 = no expiry).
+  downtime\_depth           | Number        | Whether the host has one or more active downtimes.
   flapping_last_change      | Number        | When the last flapping change occurred (as a UNIX timestamp).
   flapping                  | Boolean       | Whether the host is flapping between states.
   state                     | Number        | The current state (0 = UP, 1 = DOWN).
@@ -638,7 +660,7 @@ Configuration Attributes:
 
 The IcingaApplication object is required to start Icinga 2.
 The object name must be `app`. If the object configuration
-is missing Icinga 2 will automatically create an IcingaApplication
+is missing, Icinga 2 will automatically create an IcingaApplication
 object.
 
 Example:
@@ -673,16 +695,11 @@ Example:
       user = "icinga"
       password = "icinga"
       database = "icinga"
-      table_prefix = "icinga_"
-      instance_name = "icinga2"
-      instance_description = "icinga2 instance"
 
       cleanup = {
         downtimehistory_age = 48h
-        logentries_age = 31d
+        contactnotifications_age = 31d
       }
-
-      categories = DbCatConfig | DbCatState
     }
 
 Configuration Attributes:
@@ -695,13 +712,19 @@ Configuration Attributes:
   user            |**Optional.** MySQL database user with read/write permission to the icinga database. Defaults to "icinga".
   password        |**Optional.** MySQL database user's password. Defaults to "icinga".
   database        |**Optional.** MySQL database name. Defaults to "icinga".
+  enable\_ssl     |**Optional.** Use SSL. Defaults to false. Change to `true` in case you want to use any of the SSL options.
+  ssl\_key        |**Optional.** MySQL SSL client key file path.
+  ssl\_cert       |**Optional.** MySQL SSL certificate file path.
+  ssl\_ca         |**Optional.** MySQL SSL certificate authority certificate file path.
+  ssl\_capath     |**Optional.** MySQL SSL trusted SSL CA certificates in PEM format directory path.
+  ssl\_cipher     |**Optional.** MySQL SSL list of allowed ciphers.
   table\_prefix   |**Optional.** MySQL database table prefix. Defaults to "icinga\_".
   instance\_name  |**Optional.** Unique identifier for the local Icinga 2 instance. Defaults to "default".
   instance\_description|**Optional.** Description for the Icinga 2 instance.
   enable_ha       |**Optional.** Enable the high availability functionality. Only valid in a [cluster setup](13-distributed-monitoring-ha.md#high-availability-db-ido). Defaults to "true".
   failover_timeout | **Optional.** Set the failover timeout in a [HA cluster](13-distributed-monitoring-ha.md#high-availability-db-ido). Must not be lower than 60s. Defaults to "60s".
   cleanup         |**Optional.** Dictionary with items for historical table cleanup.
-  categories      |**Optional.** The types of information that should be written to the database.
+  categories      |**Optional.** Array of information types that should be written to the database.
 
 Cleanup Items:
 
@@ -736,18 +759,23 @@ Data Categories:
   DbCatExternalCommand | External commands      | Icinga Web 2
   DbCatFlapping        | Flap detection data    | Icinga Web 2
   DbCatCheck           | Check results          | --
-  DbCatLog             | Log messages           | Icinga Web 2
+  DbCatLog             | Log messages           | --
   DbCatNotification    | Notifications          | Icinga Web 2
   DbCatProgramStatus   | Program status data    | Icinga Web 2
   DbCatRetention       | Retention data         | Icinga Web 2
   DbCatStateHistory    | Historical state data  | Icinga Web 2
 
-Multiple categories can be combined using the `|` operator. In addition to
-the category flags listed above the `DbCatEverything` flag may be used as
-a shortcut for listing all flags.
+In addition to the category flags listed above the `DbCatEverything`
+flag may be used as a shortcut for listing all flags.
+
+> **Note**
+>
+> The previous way of defining the `categories` attribute e.g.
+> `DbCatProgramStatus | DbCatState` was deprecated in 2.5 and will
+> be removed in future versions.
 
 External interfaces like Icinga Web 2 require everything except `DbCatCheck`
-which is the default value if `categories` is not set.
+and `DbCatLog` which is the default value if `categories` is not set.
 
 ## <a id="objecttype-idopgsqlconnection"></a> IdoPgSqlConnection
 
@@ -757,22 +785,17 @@ Example:
 
     library "db_ido_pgsql"
 
-    object IdoMysqlConnection "pgsql-ido" {
+    object IdoPgsqlConnection "pgsql-ido" {
       host = "127.0.0.1"
       port = 5432
       user = "icinga"
       password = "icinga"
       database = "icinga"
-      table_prefix = "icinga_"
-      instance_name = "icinga2"
-      instance_description = "icinga2 instance"
 
       cleanup = {
         downtimehistory_age = 48h
-        logentries_age = 31d
+        contactnotifications_age = 31d
       }
-
-      categories = DbCatConfig | DbCatState
     }
 
 Configuration Attributes:
@@ -790,7 +813,7 @@ Configuration Attributes:
   enable_ha       |**Optional.** Enable the high availability functionality. Only valid in a [cluster setup](13-distributed-monitoring-ha.md#high-availability-db-ido). Defaults to "true".
   failover_timeout | **Optional.** Set the failover timeout in a [HA cluster](13-distributed-monitoring-ha.md#high-availability-db-ido). Must not be lower than 60s. Defaults to "60s".
   cleanup         |**Optional.** Dictionary with items for historical table cleanup.
-  categories      |**Optional.** The types of information that should be written to the database.
+  categories      |**Optional.** Array of information types that should be written to the database.
 
 Cleanup Items:
 
@@ -825,19 +848,118 @@ Data Categories:
   DbCatExternalCommand | External commands      | Icinga Web 2
   DbCatFlapping        | Flap detection data    | Icinga Web 2
   DbCatCheck           | Check results          | --
-  DbCatLog             | Log messages           | Icinga Web 2
+  DbCatLog             | Log messages           | --
   DbCatNotification    | Notifications          | Icinga Web 2
   DbCatProgramStatus   | Program status data    | Icinga Web 2
   DbCatRetention       | Retention data         | Icinga Web 2
   DbCatStateHistory    | Historical state data  | Icinga Web 2
 
-Multiple categories can be combined using the `|` operator. In addition to
-the category flags listed above the `DbCatEverything` flag may be used as
-a shortcut for listing all flags.
+In addition to the category flags listed above the `DbCatEverything`
+flag may be used as a shortcut for listing all flags.
+
+> **Note**
+>
+> The previous way of defining the `categories` attribute e.g.
+> `DbCatProgramStatus | DbCatState` was deprecated in 2.5 and will
+> be removed in future versions.
 
 External interfaces like Icinga Web 2 require everything except `DbCatCheck`
-which is the default value if `categories` is not set.
+and `DbCatLog` which is the default value if `categories` is not set.
 
+
+## <a id="objecttype-influxdbwriter"></a> InfluxdbWriter
+
+Writes check result metrics and performance data to a defined InfluxDB host.
+
+Example:
+
+    library "perfdata"
+
+    object InfluxdbWriter "influxdb" {
+      host = "127.0.0.1"
+      port = 8086
+      database = "icinga2"
+      host_template = {
+        measurement = "$host.check_command$"
+        tags = {
+          hostname = "$host.name$"
+        }
+      }
+      service_template = {
+        measurement = "$service.check_command$"
+        tags = {
+          hostname = "$host.name$"
+          service = "$service.name$"
+        }
+      }
+    }
+
+Measurement names and tags are fully configurable by the end user. The InfluxdbWriter
+object will automatically add a `metric` tag to each data point. This correlates to the
+perfdata label. Fields (value, warn, crit, min, max) are created from data if available
+and the configuration allows it.  If a value associated with a tag is not able to be
+resolved, it will be dropped and not sent to the target host.
+
+The database is assumed to exist so this object will make no attempt to create it currently.
+
+Configuration Attributes:
+
+  Name                   |Description
+  -----------------------|---------------------------------------------------------------------------------------------------------
+  host                   | **Required.** InfluxDB host address. Defaults to `127.0.0.1`.
+  port                   | **Required.** InfluxDB HTTP port. Defaults to `8086`.
+  database               | **Required.** InfluxDB database name. Defaults to `icinga2`.
+  username               | **Optional.** InfluxDB user name. Defaults to `none`.
+  password               | **Optional.** InfluxDB user password.  Defaults to `none`.
+  ssl_enable             | **Optional.** Whether to use a TLS stream.  Defaults to `false`.
+  ssl_ca_cert            | **Optional.** CA certificate to validate the remote host.
+  ssl_cert               | **Optional.** Host certificate to present to the remote host for mutual verification.
+  ssl_key                | **Optional.** Host key to accompany the ssl_cert
+  host_template          | **Required.** Host template to define the InfluxDB line protocol.
+  service_template       | **Required.** Service template to define the influxDB line protocol.
+  enable_send_thresholds | **Optional.** Whether to send warn, crit, min & max tagged data.
+  enable_send_metadata   | **Optional.** Whether to send check metadata e.g. states, execution time, latency etc.
+  flush_interval         | **Optional.** How long to buffer data points before transfering to InfluxDB. Defaults to `10s`.
+  flush_threshold        | **Optional.** How many data points to buffer before forcing a transfer to InfluxDB.  Defaults to `1024`.
+
+### <a id="objecttype-influxdbwriter-instance-tags"></a> Instance Tagging
+
+Consider the following service check:
+
+    apply Service "disk" for (disk => attributes in host.vars.disks) {
+      import "generic-service"
+      check_command = "disk"
+      display_name = "Disk " + disk
+      vars.disk_partitions = disk
+      assign where host.vars.disks
+    }
+
+This is a typical pattern for checking individual disks, NICs, SSL certificates etc associated
+with a host.  What would be useful is to have the data points tagged with the specific instance
+for that check.  This would allow you to query time series data for a check on a host and for a
+specific instance e.g. /dev/sda.  To do this quite simply add the instance to the service variables:
+
+    apply Service "disk" for (disk => attributes in host.vars.disks) {
+      ...
+      vars.instance = disk
+      ...
+    }
+
+Then modify your writer configuration to add this tag to your data points if the instance variable
+is associated with the service:
+
+    object InfluxdbWriter "influxdb" {
+      ...
+      service_template = {
+        measurement = "$service.check_command$"
+        tags = {
+          hostname = "$host.name$"
+          service = "$service.name$"
+          instance = "$service.vars.instance$"
+        }
+      }
+      ...
+    }
 
 ## <a id="objecttype-livestatuslistener"></a> LiveStatusListener
 
@@ -906,7 +1028,7 @@ Configuration Attributes:
   Name                      | Description
   --------------------------|----------------
   host_name                 | **Required.** The name of the host this notification belongs to.
-  service_name              | **Optional.** The short name of the service this notification belongs to. If omitted this notification object is treated as host notification.
+  service_name              | **Optional.** The short name of the service this notification belongs to. If omitted, this notification object is treated as host notification.
   vars                      | **Optional.** A dictionary containing custom attributes that are specific to this notification object.
   users                     | **Optional.** A list of user names who should be notified.
   user_groups               | **Optional.** A list of user group names who should be notified.
@@ -1009,7 +1131,7 @@ Configuration Attributes:
 
   Name            |Description
   ----------------|----------------
-  enable\_ha      |**Optional.** Enable the high availability functionality. Only valid in a [cluster setup](13-distributed-monitoring-ha.md#high-availability-notifications). Defaults to "true".
+  enable\_ha      |**Optional.** Enable the high availability functionality. Only valid in a [cluster setup](13-distributed-monitoring-ha.md#high-availability-notifications). Disabling this currently only affects reminder notifications. Defaults to "true".
 
 ## <a id="objecttype-opentsdbwriter"></a> OpenTsdbWriter
 
@@ -1102,7 +1224,7 @@ Configuration Attributes:
   Name            |Description
   ----------------|----------------
   host_name       |**Required.** The name of the host this scheduled downtime belongs to.
-  service_name    |**Optional.** The short name of the service this scheduled downtime belongs to. If omitted this downtime object is treated as host downtime.
+  service_name    |**Optional.** The short name of the service this scheduled downtime belongs to. If omitted, this downtime object is treated as host downtime.
   author          |**Required.** The author of the downtime.
   comment         |**Required.** A comment for the downtime.
   fixed           |**Optional.** Whether this is a fixed downtime. Defaults to true.
@@ -1158,6 +1280,7 @@ Configuration Attributes:
   check\_command  |**Required.** The name of the check command.
   max\_check\_attempts|**Optional.** The number of times a service is re-checked before changing into a hard state. Defaults to 3.
   check\_period   |**Optional.** The name of a time period which determines when this service should be checked. Not set by default.
+  check\_timeout  |**Optional.** Check command timeout in seconds. Overrides the CheckCommand's `timeout` attribute.
   check\_interval |**Optional.** The check interval (in seconds). This interval is used for checks when the service is in a `HARD` state. Defaults to 5 minutes.
   retry\_interval |**Optional.** The retry interval (in seconds). This interval is used for checks when the service is in a `SOFT` state. Defaults to 1 minute.
   enable\_notifications|**Optional.** Whether notifications are enabled. Defaults to true.
@@ -1180,6 +1303,9 @@ Configuration Attributes:
 Service objects have composite names, i.e. their names are based on the host_name attribute and the name you specified. This means
 you can define more than one object with the same (short) name as long as the `host_name` attribute has a different value.
 
+The actual check interval might deviate slightly from the configured values due to the fact that Icinga tries
+to evenly distribute all checks over a certain period of time, i.e. to avoid load spikes.
+
 Runtime Attributes:
 
   Name                      | Type          | Description
@@ -1196,6 +1322,7 @@ Runtime Attributes:
   last\_in\_downtime        | Boolean       | Whether the service was in a downtime when the last check occurred.
   acknowledgement           | Number        | The acknowledgement type (0 = NONE, 1 = NORMAL, 2 = STICKY).
   acknowledgement_expiry    | Number        | When the acknowledgement expires (as a UNIX timestamp; 0 = no expiry).
+  downtime\_depth           | Number        | Whether the service has one or more active downtimes.
   flapping_last_change      | Number        | When the last flapping change occurred (as a UNIX timestamp).
   flapping                  | Boolean       | Whether the host is flapping between states.
   state                     | Number        | The current state (0 = OK, 1 = WARNING, 2 = CRITICAL, 3 = UNKNOWN).
@@ -1322,6 +1449,9 @@ Configuration Attributes:
   display_name    |**Optional.** A short description of the time period.
   update          |**Required.** The "update" script method takes care of updating the internal representation of the time period. In virtually all cases you should import the "legacy-timeperiod" template to take care of this setting.
   ranges          |**Required.** A dictionary containing information which days and durations apply to this timeperiod.
+  prefer_includes |**Optional.** Boolean whether to prefer timeperiods `includes` or `excludes`. Default to true.
+  excludes        |**Optional.** An array of timeperiods, which should exclude from your timerange.
+  includes        |**Optional.** An array of timeperiods, which should include into your timerange
 
 The `/etc/icinga2/conf.d/timeperiods.conf` file is usually used to define
 timeperiods including this one.
@@ -1436,11 +1566,11 @@ Configuration Attributes:
 
   Name            |Description
   ----------------|----------------
-  endpoints       |**Optional.** Dictionary with endpoints located in this zone.
+  endpoints       |**Optional.** Array of endpoint names located in this zone.
   parent          |**Optional.** The name of the parent zone.
   global          |**Optional.** Whether configuration files for this zone should be synced to all endpoints. Defaults to false.
 
-
+Zone objects cannot currently be created with the API.
 
 # <a id="value-types"></a> Value Types
 

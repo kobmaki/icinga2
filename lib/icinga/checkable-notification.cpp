@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,11 +29,11 @@
 using namespace icinga;
 
 boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
-    const NotificationType&, const CheckResult::Ptr&, const String&, const String&)> Checkable::OnNotificationSentToAllUsers;
-boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
-    const NotificationType&, const CheckResult::Ptr&, const String&, const String&)> Checkable::OnNotificationSendStart;
+    const NotificationType&, const CheckResult::Ptr&, const String&, const String&,
+    const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToAllUsers;
 boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const User::Ptr&,
-    const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&)> Checkable::OnNotificationSentToUser;
+    const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
+    const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToUser;
 
 void Checkable::ResetNotificationNumbers(void)
 {
@@ -73,7 +73,8 @@ void Checkable::SendNotifications(NotificationType type, const CheckResult::Ptr&
 
 	BOOST_FOREACH(const Notification::Ptr& notification, notifications) {
 		try {
-			notification->BeginExecuteNotification(type, cr, force, author, text);
+			if (!notification->IsPaused())
+				notification->BeginExecuteNotification(type, cr, force, author, text);
 		} catch (const std::exception& ex) {
 			Log(LogWarning, "Checkable")
 			    << "Exception occured during notification for service '"

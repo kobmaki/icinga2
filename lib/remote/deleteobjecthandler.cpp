@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,7 +32,7 @@ using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/objects", DeleteObjectHandler);
 
-bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response)
+bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
 {
 	if (request.RequestUrl->GetPath().size() < 3 || request.RequestUrl->GetPath().size() > 4)
 		return false;
@@ -51,8 +51,6 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	qd.Types.insert(type->GetName());
 	qd.Permission = "objects/delete/" + type->GetName();
 
-	Dictionary::Ptr params = HttpUtility::FetchRequestParameters(request);
-
 	params->Set("type", type->GetName());
 
 	if (request.RequestUrl->GetPath().size() >= 4) {
@@ -61,11 +59,22 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 		params->Set(attr, request.RequestUrl->GetPath()[3]);
 	}
 
-	std::vector<Value> objs = FilterUtility::GetFilterTargets(qd, params, user);
+	std::vector<Value> objs;
+
+	try {
+		objs = FilterUtility::GetFilterTargets(qd, params, user);
+	} catch (const std::exception& ex) {
+		HttpUtility::SendJsonError(response, 404,
+		    "No objects found.",
+		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		return true;
+	}
 
 	bool cascade = HttpUtility::GetLastParameter(params, "cascade");
 
 	Array::Ptr results = new Array();
+
+	bool success = true;
 
 	BOOST_FOREACH(const ConfigObject::Ptr& obj, objs) {
 		Dictionary::Ptr result1 = new Dictionary();
@@ -79,6 +88,7 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 			result1->Set("code", 500);
 			result1->Set("status", "Object could not be deleted.");
 			result1->Set("errors", errors);
+			success = false;
 		} else {
 			result1->Set("code", 200);
 			result1->Set("status", "Object was deleted.");
@@ -88,7 +98,11 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	Dictionary::Ptr result = new Dictionary();
 	result->Set("results", results);
 
-	response.SetStatus(200, "OK");
+	if (!success)
+		response.SetStatus(500, "One or more objects could not be deleted");
+	else
+		response.SetStatus(200, "OK");
+
 	HttpUtility::SendJsonBody(response, result);
 
 	return true;

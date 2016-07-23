@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -49,42 +49,39 @@ public:
 		Value value;
 		if (frame.Locals && frame.Locals->Get(name, &value))
 			return value;
-		else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && HasField(frame.Self, name))
+		else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(name))
 			return GetField(frame.Self, name, frame.Sandboxed, debugInfo);
 		else
 			return ScriptGlobal::Get(name);
 	}
 
-	static inline Value CopyConstructorCall(const Type::Ptr& type, const Value& value, const DebugInfo& debugInfo = DebugInfo())
+	static inline Value ConstructorCall(const Type::Ptr& type, const std::vector<Value>& args, const DebugInfo& debugInfo = DebugInfo())
 	{
-		if (type->GetName() == "String")
-			return Convert::ToString(value);
-		else if (type->GetName() == "Number")
-			return Convert::ToDouble(value);
-		else if (type->GetName() == "Boolean")
-			return Convert::ToBool(value);
-		else if (!value.IsEmpty() && !type->IsAssignableFrom(value.GetReflectionType()))
-			BOOST_THROW_EXCEPTION(ScriptError("Invalid cast: Tried to cast object of type '" + value.GetReflectionType()->GetName() + "' to type '" + type->GetName() + "'", debugInfo));
+		if (type->GetName() == "String") {
+			if (args.empty())
+				return "";
+			else if (args.size() == 1)
+				return Convert::ToString(args[0]);
+			else
+				BOOST_THROW_EXCEPTION(ScriptError("Too many arguments for constructor."));
+		} else if (type->GetName() == "Number") {
+			if (args.empty())
+				return 0;
+			else if (args.size() == 1)
+				return Convert::ToDouble(args[0]);
+			else
+				BOOST_THROW_EXCEPTION(ScriptError("Too many arguments for constructor."));
+		} else if (type->GetName() == "Boolean") {
+			if (args.empty())
+				return 0;
+			else if (args.size() == 1)
+				return Convert::ToBool(args[0]);
+			else
+				BOOST_THROW_EXCEPTION(ScriptError("Too many arguments for constructor."));
+		} else if (args.size() == 1 && type->IsAssignableFrom(args[0].GetReflectionType()))
+			return args[0];
 		else
-			return value;
-	}
-
-	static inline Value ConstructorCall(const Type::Ptr& type, const DebugInfo& debugInfo = DebugInfo())
-	{
-		if (type->GetName() == "String")
-			return "";
-		else if (type->GetName() == "Number")
-			return 0;
-		else if (type->GetName() == "Boolean")
-			return false;
-		else {
-			Object::Ptr object = type->Instantiate();
-
-			if (!object)
-				BOOST_THROW_EXCEPTION(ScriptError("Failed to instantiate object of type '" + type->GetName() + "'", debugInfo));
-
-			return object;
-		}
+			return type->Instantiate(args);
 	}
 
 	static inline Value FunctionCall(ScriptFrame& frame, const Value& self, const Function::Ptr& func, const std::vector<Value>& arguments)
@@ -194,97 +191,17 @@ public:
 		return Empty;
 	}
 
-	static inline bool HasField(const Object::Ptr& context, const String& field)
-	{
-		Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(context);
-
-		if (dict)
-			return dict->Contains(field);
-		else {
-			Type::Ptr type = context->GetReflectionType();
-
-			if (!type)
-				return false;
-
-			return type->GetFieldId(field) != -1;
-		}
-	}
-
-	static inline Value GetPrototypeField(const Value& context, const String& field, bool not_found_error = true, const DebugInfo& debugInfo = DebugInfo())
-	{
-		Type::Ptr ctype = context.GetReflectionType();
-		Type::Ptr type = ctype;
-
-		do {
-			Object::Ptr object = type->GetPrototype();
-
-			if (object && HasField(object, field))
-				return GetField(object, field, false, debugInfo);
-
-			type = type->GetBaseType();
-		} while (type);
-
-		if (not_found_error)
-			BOOST_THROW_EXCEPTION(ScriptError("Invalid field access (for value of type '" + ctype->GetName() + "'): '" + field + "'", debugInfo));
-		else
-			return Empty;
-	}
-
 	static inline Value GetField(const Value& context, const String& field, bool sandboxed = false, const DebugInfo& debugInfo = DebugInfo())
 	{
-		if (context.IsEmpty() && !context.IsString())
+		if (unlikely(context.IsEmpty() && !context.IsString()))
 			return Empty;
 
-		if (!context.IsObject())
+		if (unlikely(!context.IsObject()))
 			return GetPrototypeField(context, field, true, debugInfo);
 
 		Object::Ptr object = context;
 
-		Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(object);
-
-		if (dict) {
-			Value value;
-			if (dict->Get(field, &value))
-				return value;
-			else
-				return GetPrototypeField(context, field, false, debugInfo);
-		}
-
-		Array::Ptr arr = dynamic_pointer_cast<Array>(object);
-
-		if (arr) {
-			int index;
-
-			try {
-				index = Convert::ToLong(field);
-			} catch (...) {
-				return GetPrototypeField(context, field, true, debugInfo);
-			}
-
-			if (index < 0 || index >= arr->GetLength())
-				BOOST_THROW_EXCEPTION(ScriptError("Array index '" + Convert::ToString(index) + "' is out of bounds.", debugInfo));
-
-			return arr->Get(index);
-		}
-
-		Type::Ptr type = object->GetReflectionType();
-
-		if (!type)
-			return Empty;
-
-		int fid = type->GetFieldId(field);
-
-		if (fid == -1)
-			return GetPrototypeField(context, field, true, debugInfo);
-
-		if (sandboxed) {
-			Field fieldInfo = type->GetFieldInfo(fid);
-
-			if (fieldInfo.Attributes & FANoUserView)
-				BOOST_THROW_EXCEPTION(ScriptError("Accessing the field '" + field + "' for type '" + type->GetName() + "' is not allowed in sandbox mode."));
-		}
-
-		return object->GetField(fid);
+		return object->GetFieldByName(field, sandboxed, debugInfo);
 	}
 
 	static inline void SetField(const Object::Ptr& context, const String& field, const Value& value, const DebugInfo& debugInfo = DebugInfo())
@@ -292,44 +209,7 @@ public:
 		if (!context)
 			BOOST_THROW_EXCEPTION(ScriptError("Cannot set field '" + field + "' on a value that is not an object.", debugInfo));
 
-		Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(context);
-
-		if (dict) {
-			dict->Set(field, value);
-			return;
-		}
-
-		Array::Ptr arr = dynamic_pointer_cast<Array>(context);
-
-		if (arr) {
-			int index = Convert::ToLong(field);
-			if (index >= arr->GetLength())
-				arr->Resize(index + 1);
-			arr->Set(index, value);
-			return;
-		}
-
-		Type::Ptr type = context->GetReflectionType();
-
-		if (!type)
-			BOOST_THROW_EXCEPTION(ScriptError("Cannot set field on object.", debugInfo));
-
-		int fid = type->GetFieldId(field);
-
-		if (fid == -1)
-			BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' does not exist.", debugInfo));
-
-		try {
-			context->SetField(fid, value);
-		} catch (const boost::bad_lexical_cast&) {
-			Field fieldInfo = type->GetFieldInfo(fid);
-			Type::Ptr ftype = Type::GetByName(fieldInfo.TypeName);
-			BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' cannot be set to value of type '" + value.GetTypeName() + "', expected '" + ftype->GetName() + "'", debugInfo));
-		} catch (const std::bad_cast&) {
-			Field fieldInfo = type->GetFieldInfo(fid);
-			Type::Ptr ftype = Type::GetByName(fieldInfo.TypeName);
-			BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' cannot be set to value of type '" + value.GetTypeName() + "', expected '" + ftype->GetName() + "'", debugInfo));
-		}
+		return context->SetFieldByName(field, value, debugInfo);
 	}
 
 private:

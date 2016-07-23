@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -156,7 +156,6 @@ String Logger::SeverityToString(LogSeverity severity)
 		case LogCritical:
 			return "critical";
 		default:
-			Log(LogCritical, "Logger", "Invalid severity.");
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid severity."));
 	}
 }
@@ -178,11 +177,8 @@ LogSeverity Logger::StringToSeverity(const String& severity)
 		return LogWarning;
 	else if (severity == "critical")
 		return LogCritical;
-	else {
-		Log(LogCritical, "Logger")
-		    << "Invalid severity: '" << severity << "'.";
+	else
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid severity: " + severity));
-	}
 }
 
 void Logger::DisableConsoleLog(void)
@@ -218,4 +214,15 @@ void Logger::DisableTimestamp(bool disable)
 bool Logger::IsTimestampEnabled(void)
 {
 	return m_TimestampEnabled;
+}
+
+void Logger::ValidateSeverity(const String& value, const ValidationUtils& utils)
+{
+	ObjectImpl<Logger>::ValidateSeverity(value, utils);
+
+	try {
+		StringToSeverity(value);
+	} catch (...) {
+		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("severity"), "Invalid severity specified: " + value));
+	}
 }

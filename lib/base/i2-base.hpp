@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -90,5 +90,14 @@
 #else /* I2_BASE_BUILD */
 #	define I2_BASE_API I2_IMPORT
 #endif /* I2_BASE_BUILD */
+
+#if defined(__GNUC__)
+#	define likely(x) __builtin_expect(!!(x), 1)
+#	define unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#	define likely(x) (x)
+#	define unlikely(x) (x)
+#endif
+
 
 #endif /* I2BASE_H */

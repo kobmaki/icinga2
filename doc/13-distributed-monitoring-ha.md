@@ -12,7 +12,7 @@ You can combine these scenarios into a global setup fitting your requirements.
 Each instance got their own event scheduler, and does not depend on a centralized master
 coordinating and distributing the events. In case of a cluster failure, all nodes
 continue to run independently. Be alarmed when your cluster fails and a Split-Brain-scenario
-is in effect - all alive instances continue to do their job, and history will begin to differ.
+is in effect -- all alive instances continue to do their job, and history will begin to differ.
 
 
 ## <a id="cluster-requirements"></a> Cluster Requirements
@@ -37,7 +37,7 @@ Get pen and paper or a drawing board and design your nodes and zones!
 * All nodes (endpoints) in a cluster zone provide high availability functionality and trust each other.
 * Cluster zones can be built in a Top-Down-design where the child trusts the parent.
 
-Decide whether to use the built-in [configuration syncronization](13-distributed-monitoring-ha.md#cluster-zone-config-sync) or use an external tool (Puppet, Ansible, Chef, Salt, etc) to manage the configuration deployment.
+Decide whether to use the built-in [configuration syncronization](13-distributed-monitoring-ha.md#cluster-zone-config-sync) or use an external tool (Puppet, Ansible, Chef, Salt, etc.) to manage the configuration deployment.
 
 
 > **Tip**
@@ -50,18 +50,14 @@ Decide whether to use the built-in [configuration syncronization](13-distributed
 Icinga 2 provides [CLI commands](8-cli-commands.md#cli-command-pki) assisting with CA
 and node certificate creation for your Icinga 2 distributed setup.
 
-> **Tip**
->
-> You can also use the master and client setup wizards to install the cluster nodes
-> using CSR-Autosigning.
->
-> The manual steps are helpful if you want to use your own and/or existing CA (for example
-> Puppet CA).
+You can also use the master and client setup wizards to install the cluster nodes
+using CSR-Autosigning.
 
-> **Note**
->
-> You're free to use your own method to generated a valid ca and signed client
-> certificates.
+The manual steps are helpful if you want to use your own and/or existing CA (for example
+Puppet CA).
+
+You're free to use your own method to generated a valid ca and signed client
+certificates.
 
 The first step is the creation of the certificate authority (CA) by running the
 following command:
@@ -94,7 +90,7 @@ the host's FQDN):
 * &lt;fqdn-nodename&gt;.crt
 * &lt;fqdn-nodename&gt;.key
 
-If you're planning to use your existing CA and certificates please note that you *must not*
+If you're planning to use your existing CA and certificates, please note that you *must not*
 use wildcard certificates. The common name (CN) is mandatory for the cluster communication and
 therefore must be unique for each connecting instance.
 
@@ -200,7 +196,7 @@ You can simply enable the `api` feature using
 Edit `/etc/icinga2/features-enabled/api.conf` if you require the configuration
 synchronisation enabled for this node. Set the `accept_config` attribute to `true`.
 
-If you want to use this node as [remote client for command execution](11-icinga2-client.md#icinga2-client-configuration-command-bridge)
+If you want to use this node as [remote client for command execution](11-icinga2-client.md#icinga2-client-configuration-command-bridge),
 set the `accept_commands` attribute to `true`.
 
 > **Note**
@@ -247,7 +243,7 @@ define the zone `config-ha-master` where the `icinga2a` and `icinga2b` endpoints
 are located. The `check-satellite` zone consists of `icinga2c` only, but more nodes could
 be added.
 
-The `config-ha-master` zone acts as High-Availability setup - the Icinga 2 instances elect
+The `config-ha-master` zone acts as High-Availability setup -- the Icinga 2 instances elect
 one instance running a check, notification or feature (DB IDO), for example `icinga2a`. In case of
 failure of the `icinga2a` instance, `icinga2b` will take over automatically.
 
@@ -304,7 +300,7 @@ These zone packages are then distributed to all nodes in the same zone, and
 to their respective target zone instances.
 
 Each configured zone must exist with the same directory name. The parent zone
-syncs the configuration to the child zones, if allowed using the `accept_config`
+syncs the configuration to the child zones if allowed using the `accept_config`
 attribute of the [ApiListener](13-distributed-monitoring-ha.md#configure-apilistener-object) object.
 
 Config on node `icinga2a`:
@@ -339,7 +335,7 @@ Config on node `icinga2b`:
     /etc/icinga2/zones.d
       EMPTY_IF_CONFIG_SYNC_ENABLED
 
-If the local configuration is newer than the received update Icinga 2 will skip the synchronisation
+If the local configuration is newer than the received update, Icinga 2 will skip the synchronisation
 process.
 
 > **Note**
@@ -350,13 +346,13 @@ process.
 
 ### <a id="zone-global-config-templates"></a> Global Configuration Zone for Templates
 
-If your zone configuration setup shares the same templates, groups, commands, timeperiods, etc.
+If your zone configuration setup shares the same templates, groups, commands, timeperiods, etc.,
 you would have to duplicate quite a lot of configuration objects making the merged configuration
 on your configuration master unique.
 
 > ** Note **
 >
-> Only put templates, groups, etc into this zone. DO NOT add checkable objects such as
+> Only put templates, groups, etc. into this zone. DO NOT add checkable objects such as
 > hosts or services here. If they are checked by all instances globally, this will lead
 > into duplicated check results and unclear state history. Not easy to troubleshoot too -
 > you have been warned.
@@ -385,7 +381,7 @@ your zone configuration visible to all nodes.
     }
 
 If the remote node does not have this zone configured, it will ignore the configuration
-update, if it accepts synchronized configuration.
+update if it accepts synchronized configuration.
 
 If you do not require any global configuration, skip this setting.
 
@@ -469,7 +465,7 @@ The configuration tree could look like this:
     
     7 directories, 13 files
 
-If you prefer a different naming schema for directories or files names, go for it. If you
+If you prefer a different naming schema for directories or file names, go for it. If you
 are unsure about the best method, join the [support channels](1-about.md#support) and discuss
 with the community.
 
@@ -556,7 +552,7 @@ feature enabled, but not `notification` or `ido-mysql` features).
 >
 > There's a [Vagrant demo setup](https://github.com/Icinga/icinga-vagrant/tree/master/icinga2x-cluster)
 > available featuring a two node cluster showcasing several aspects (config sync,
-> remote command execution, etc).
+> remote command execution, etc.).
 
 ### <a id="cluster-scenarios-master-satellite-clients"></a> Cluster with Master, Satellites and Remote Clients
 
@@ -580,11 +576,11 @@ You'll need to think about the following:
 ### <a id="cluster-scenarios-security"></a> Security in Cluster Scenarios
 
 While there are certain capabilities to ensure the safe communication between all
-nodes (firewalls, policies, software hardening, etc) the Icinga 2 cluster also provides
+nodes (firewalls, policies, software hardening, etc.) the Icinga 2 cluster also provides
 additional security itself:
 
 * [SSL certificates](13-distributed-monitoring-ha.md#manual-certificate-generation) are mandatory for cluster communication.
-* Child zones only receive event updates (check results, commands, etc) for their configured updates.
+* Child zones only receive event updates (check results, commands, etc.) for their configured updates.
 * Zones cannot influence/interfere other zones. Each checked object is assigned to only one zone.
 * All nodes in a zone trust each other.
 * [Configuration sync](13-distributed-monitoring-ha.md#zone-config-sync-permissions) is disabled by default.
@@ -609,7 +605,7 @@ to a master instance. Their network connection only works towards the master mas
 (or the master is able to connect, depending on firewall policies) which means
 remote instances won't see each/connect to each other.
 
-All events (check results, downtimes, comments, etc) are synced to the master node,
+All events (check results, downtimes, comments, etc.) are synced to the master node,
 but the remote nodes can still run local features such as a web interface, reporting,
 graphing, etc. in their own specified zone.
 
@@ -683,7 +679,7 @@ check results from the satellite nodes in the zones `berlin` and `vienna`.
 
 ### <a id="cluster-scenarios-load-distribution"></a> Load Distribution
 
-If you are planning to off-load the checks to a defined set of remote workers
+If you are planning to off-load the checks to a defined set of remote workers,
 you can achieve that by:
 
 * Deploying the configuration on all nodes.
@@ -700,7 +696,7 @@ Configuration on the master node:
       master/
       checker/
 
-If you are planning to have some checks executed by a specific set of checker nodes
+If you are planning to have some checks executed by a specific set of checker nodes,
 you have to define additional zones and define these check objects there.
 
 Endpoints:

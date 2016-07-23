@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -242,7 +242,6 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 	String fieldName = tokens[0];
 
 	int fid = type->GetFieldId(fieldName);
-	Field field = type->GetFieldInfo(fid);
 
 	Value currentValue = GetField(fid);
 
@@ -259,7 +258,7 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 		Value current = newValue;
 
 		if (current.IsEmpty())
-			BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot restore non-existing object attribute"));
+			BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot restore non-existent object attribute"));
 
 		String prefix = tokens[0];
 
@@ -273,7 +272,7 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 			prefix += "." + key;
 
 			if (!dict->Contains(key))
-				BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot restore non-existing object attribute"));
+				BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot restore non-existent object attribute"));
 
 			current = dict->Get(key);
 		}
@@ -387,17 +386,18 @@ void ConfigObject::Activate(bool runtimeCreated)
 {
 	CONTEXT("Activating object '" + GetName() + "' of type '" + GetType()->GetName() + "'");
 
-	Start(runtimeCreated);
-
-	ASSERT(GetStartCalled());
-
 	{
 		ObjectLock olock(this);
+
+		Start(runtimeCreated);
+
+		ASSERT(GetStartCalled());
 		ASSERT(!IsActive());
 		SetActive(true, true);
-	}
 
-	SetAuthority(true);
+		if (GetHAMode() == HARunEverywhere)
+			SetAuthority(true);
+	}
 
 	NotifyActive();
 }
@@ -422,11 +422,11 @@ void ConfigObject::Deactivate(bool runtimeRemoved)
 			return;
 
 		SetActive(false, true);
+
+		SetAuthority(false);
+
+		Stop(runtimeRemoved);
 	}
-
-	SetAuthority(false);
-
-	Stop(runtimeRemoved);
 
 	ASSERT(GetStopCalled());
 
@@ -465,6 +465,8 @@ void ConfigObject::Resume(void)
 
 void ConfigObject::SetAuthority(bool authority)
 {
+	ObjectLock olock(this);
+
 	if (authority && GetPaused()) {
 		SetResumeCalled(false);
 		Resume();
@@ -483,10 +485,8 @@ void ConfigObject::DumpObjects(const String& filename, int attributeTypes)
 	Log(LogInformation, "ConfigObject")
 	    << "Dumping program state to file '" << filename << "'";
 
-	String tempFilename = filename + ".tmp";
-
 	std::fstream fp;
-	fp.open(tempFilename.CStr(), std::ios_base::out);
+	String tempFilename = Utility::CreateTempFile(filename + ".XXXXXX", 0600, fp);
 
 	if (!fp)
 		BOOST_THROW_EXCEPTION(std::runtime_error("Could not open '" + tempFilename + "' file"));
@@ -574,6 +574,7 @@ void ConfigObject::RestoreObjects(const String& filename, int attributeTypes)
 	unsigned long restored = 0;
 
 	WorkQueue upq(25000, Application::GetConcurrency());
+	upq.SetName("ConfigObject::RestoreObjects");
 
 	String message;
 	StreamReadContext src;

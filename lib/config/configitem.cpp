@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -44,6 +44,7 @@ using namespace icinga;
 boost::mutex ConfigItem::m_Mutex;
 ConfigItem::TypeMap ConfigItem::m_Items;
 ConfigItem::ItemList ConfigItem::m_UnnamedItems;
+ConfigItem::IgnoredItemList ConfigItem::m_IgnoredItems;
 
 REGISTER_SCRIPTFUNCTION(__run_with_activation_context, &ConfigItem::RunWithActivationContext);
 
@@ -168,12 +169,13 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 
 	/* Make sure the type is valid. */
 	Type::Ptr type = Type::GetByName(GetType());
-	ASSERT(type && ConfigObject::TypeInstance->IsAssignableFrom(type));
+	if (!type || !ConfigObject::TypeInstance->IsAssignableFrom(type))
+		BOOST_THROW_EXCEPTION(ScriptError("Type '" + GetType() + "' does not exist.", m_DebugInfo));
 
 	if (IsAbstract())
 		return ConfigObject::Ptr();
 
-	ConfigObject::Ptr dobj = static_pointer_cast<ConfigObject>(type->Instantiate());
+	ConfigObject::Ptr dobj = static_pointer_cast<ConfigObject>(type->Instantiate(std::vector<Value>()));
 
 	dobj->SetDebugInfo(m_DebugInfo);
 	dobj->SetZoneName(m_Zone);
@@ -189,8 +191,13 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 		m_Expression->Evaluate(frame, &debugHints);
 	} catch (const std::exception& ex) {
 		if (m_IgnoreOnError) {
-			Log(LogWarning, "ConfigObject")
+			Log(LogNotice, "ConfigObject")
 			    << "Ignoring config object '" << m_Name << "' of type '" << m_Type << "' due to errors: " << DiagnosticInformation(ex);
+
+			{
+				boost::mutex::scoped_lock lock(m_Mutex);
+				m_IgnoredItems.push_back(m_DebugInfo.Path);
+			}
 
 			return ConfigObject::Ptr();
 		}
@@ -215,6 +222,9 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 	NameComposer *nc = dynamic_cast<NameComposer *>(type.get());
 
 	if (nc) {
+		if (name.IsEmpty())
+			BOOST_THROW_EXCEPTION(ScriptError("Object name must not be empty.", m_DebugInfo));
+
 		name = nc->MakeName(name, dobj);
 
 		if (name.IsEmpty())
@@ -226,12 +236,39 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 
 	dobj->SetName(name);
 
+	Dictionary::Ptr dhint = debugHints.ToDictionary();
+
+	try {
+		DefaultValidationUtils utils;
+		dobj->Validate(FAConfig, utils);
+	} catch (ValidationError& ex) {
+		if (m_IgnoreOnError) {
+			Log(LogNotice, "ConfigObject")
+			    << "Ignoring config object '" << m_Name << "' of type '" << m_Type << "' due to errors: " << DiagnosticInformation(ex);
+
+			{
+				boost::mutex::scoped_lock lock(m_Mutex);
+				m_IgnoredItems.push_back(m_DebugInfo.Path);
+			}
+
+			return ConfigObject::Ptr();
+		}
+
+		ex.SetDebugHint(dhint);
+		throw;
+	}
+
 	try {
 		dobj->OnConfigLoaded();
 	} catch (const std::exception& ex) {
 		if (m_IgnoreOnError) {
-			Log(LogWarning, "ConfigObject")
+			Log(LogNotice, "ConfigObject")
 			    << "Ignoring config object '" << m_Name << "' of type '" << m_Type << "' due to errors: " << DiagnosticInformation(ex);
+
+			{
+				boost::mutex::scoped_lock lock(m_Mutex);
+				m_IgnoredItems.push_back(m_DebugInfo.Path);
+			}
 
 			return ConfigObject::Ptr();
 		}
@@ -244,8 +281,6 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 	persistentItem->Set("type", GetType());
 	persistentItem->Set("name", GetName());
 	persistentItem->Set("properties", Serialize(dobj, FAConfig));
-
-	Dictionary::Ptr dhint = debugHints.ToDictionary();
 	persistentItem->Set("debug_hints", dhint);
 
 	Array::Ptr di = new Array();
@@ -255,21 +290,6 @@ ConfigObject::Ptr ConfigItem::Commit(bool discard)
 	di->Add(m_DebugInfo.LastLine);
 	di->Add(m_DebugInfo.LastColumn);
 	persistentItem->Set("debug_info", di);
-
-	try {
-		DefaultValidationUtils utils;
-		dobj->Validate(FAConfig, utils);
-	} catch (ValidationError& ex) {
-		if (m_IgnoreOnError) {
-			Log(LogWarning, "ConfigObject")
-			    << "Ignoring config object '" << m_Name << "' of type '" << m_Type << "' due to errors: " << DiagnosticInformation(ex);
-
-			return ConfigObject::Ptr();
-		}
-
-		ex.SetDebugHint(dhint);
-		throw;
-	}
 
 	ConfigCompilerContext::GetInstance()->WriteObject(persistentItem);
 	persistentItem.reset();
@@ -358,10 +378,15 @@ void ConfigItem::OnAllConfigLoadedHelper(void)
 		m_Object->OnAllConfigLoaded();
 	} catch (const std::exception& ex) {
 		if (m_IgnoreOnError) {
-			Log(LogWarning, "ConfigObject")
+			Log(LogNotice, "ConfigObject")
 			    << "Ignoring config object '" << m_Name << "' of type '" << m_Type << "' due to errors: " << DiagnosticInformation(ex);
 
 			Unregister();
+
+			{
+				boost::mutex::scoped_lock lock(m_Mutex);
+				m_IgnoredItems.push_back(m_DebugInfo.Path);
+			}
 
 			return;
 		}
@@ -509,7 +534,7 @@ bool ConfigItem::CommitNewItems(const ActivationContext::Ptr& context, WorkQueue
 
 bool ConfigItem::CommitItems(const ActivationContext::Ptr& context, WorkQueue& upq, std::vector<ConfigItem::Ptr>& newItems)
 {
-	Log(LogInformation, "ConfigItem", "Committing config items");
+	Log(LogInformation, "ConfigItem", "Committing config item(s).");
 
 	if (!CommitNewItems(context, upq, newItems)) {
 		upq.ReportExceptions("config");
@@ -520,8 +545,6 @@ bool ConfigItem::CommitItems(const ActivationContext::Ptr& context, WorkQueue& u
 
 		return false;
 	}
-
-	ASSERT(newItems.size() > 0);
 
 	ApplyRule::CheckMatches();
 
@@ -593,12 +616,17 @@ bool ConfigItem::RunWithActivationContext(const Function::Ptr& function)
 {
 	ActivationScope scope;
 
+	if (!function)
+		BOOST_THROW_EXCEPTION(ScriptError("'function' argument must not be null."));
+
 	{
 		ScriptFrame frame;
 		function->Invoke();
 	}
 
 	WorkQueue upq(25000, Application::GetConcurrency());
+	upq.SetName("ConfigItem::RunWithActivationContext");
+
 	std::vector<ConfigItem::Ptr> newItems;
 
 	if (!CommitItems(scope.GetContext(), upq, newItems))
@@ -627,4 +655,26 @@ std::vector<ConfigItem::Ptr> ConfigItem::GetItems(const String& type)
 	}
 
 	return items;
+}
+
+void ConfigItem::RemoveIgnoredItems(const String& allowedConfigPath)
+{
+	boost::mutex::scoped_lock lock(m_Mutex);
+
+	BOOST_FOREACH(const String& path, m_IgnoredItems) {
+		if (path.Find(allowedConfigPath) == String::NPos)
+			continue;
+
+		Log(LogNotice, "ConfigItem")
+		    << "Removing ignored item path '" << path << "'.";
+
+		if (unlink(path.CStr()) < 0) {
+			BOOST_THROW_EXCEPTION(posix_error()
+			    << boost::errinfo_api_function("unlink")
+			    << boost::errinfo_errno(errno)
+			    << boost::errinfo_file_name(path));
+		}
+	}
+
+	m_IgnoredItems.clear();
 }

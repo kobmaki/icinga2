@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,6 +19,7 @@
 
 #include "remote/configobjectutility.hpp"
 #include "remote/configpackageutility.hpp"
+#include "remote/apilistener.hpp"
 #include "config/configcompiler.hpp"
 #include "config/configitem.hpp"
 #include "base/configwriter.hpp"
@@ -111,8 +112,10 @@ bool ConfigObjectUtility::CreateObject(const Type::Ptr& type, const String& full
 	String path = GetObjectConfigPath(type, fullName);
 	Utility::MkDirP(Utility::DirName(path), 0700);
 
-	if (Utility::PathExists(path))
-		BOOST_THROW_EXCEPTION(ScriptError("Configuration file '" + path + "' already exists."));
+	if (Utility::PathExists(path)) {
+		errors->Add("Configuration file '" + path + "' already exists.");
+		return false;
+	}
 
 	std::ofstream fp(path.CStr(), std::ofstream::out | std::ostream::trunc);
 	fp << config;
@@ -147,6 +150,8 @@ bool ConfigObjectUtility::CreateObject(const Type::Ptr& type, const String& full
 
 			return false;
 		}
+
+		ApiListener::UpdateObjectAuthority();
 	} catch (const std::exception& ex) {
 		delete expr;
 

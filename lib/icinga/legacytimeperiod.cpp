@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -144,19 +144,26 @@ void LegacyTimePeriod::ParseTimeSpec(const String& timespec, tm *begin, tm *end,
 		int month = Convert::ToLong(timespec.SubStr(5, 2));
 		int day = Convert::ToLong(timespec.SubStr(8, 2));
 
+		if (month < 1 || month > 12)
+			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid month in time specification: " + timespec));
+		if (day < 1 || day > 31)
+			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid day in time specification: " + timespec));
+
 		if (begin) {
+			*begin = *reference;
 			begin->tm_year = year - 1900;
-			begin->tm_mon = month;
-			begin->tm_mday = day + 1;
+			begin->tm_mon = month - 1;
+			begin->tm_mday = day;
 			begin->tm_hour = 0;
 			begin->tm_min = 0;
 			begin->tm_sec = 0;
 		}
 
 		if (end) {
+			*end = *reference;
 			end->tm_year = year - 1900;
-			end->tm_mon = month;
-			end->tm_mday = day + 1;
+			end->tm_mon = month - 1;
+			end->tm_mday = day;
 			end->tm_hour = 24;
 			end->tm_min = 0;
 			end->tm_sec = 0;
@@ -186,7 +193,7 @@ void LegacyTimePeriod::ParseTimeSpec(const String& timespec, tm *begin, tm *end,
 
 			/* Negative days are relative to the next month. */
 			if (mday < 0) {
-				end->tm_mday--;
+				begin->tm_mday = mday * -1 - 1;
 				begin->tm_mon++;
 			}
 		}
@@ -201,7 +208,7 @@ void LegacyTimePeriod::ParseTimeSpec(const String& timespec, tm *begin, tm *end,
 
 			/* Negative days are relative to the next month. */
 			if (mday < 0) {
-				end->tm_mday--;
+				end->tm_mday = mday * -1 - 1;
 				end->tm_mon++;
 			}
 		}

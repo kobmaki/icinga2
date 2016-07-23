@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -39,12 +39,22 @@ Timer::Ptr DbConnection::m_ProgramStatusTimer;
 boost::once_flag DbConnection::m_OnceFlag = BOOST_ONCE_INIT;
 
 DbConnection::DbConnection(void)
-	: m_QueryStats(15 * 60), m_PendingQueries(0), m_PendingQueriesTimestamp(0)
+	: m_QueryStats(15 * 60), m_PendingQueries(0), m_PendingQueriesTimestamp(0), m_IDCacheValid(false)
 { }
 
 void DbConnection::OnConfigLoaded(void)
 {
 	ConfigObject::OnConfigLoaded();
+
+	Value categories = GetCategories();
+
+	//TODO: Remove 'cat1 | cat2' notation in 2.6
+	if (categories.IsNumber()) {
+		SetCategoryFilter(categories);
+		Log(LogWarning, "DbConnection")
+		    << "Specifying flags using '|' for 'categories' is deprecated. This functionality will be removed in 2.6.0. Please use an array.";
+	} else
+		SetCategoryFilter(FilterArrayToInt(categories, DbQuery::GetCategoryFilterMap(), DbCatEverything));
 
 	if (!GetEnableHa()) {
 		Log(LogDebug, "DbConnection")
@@ -146,7 +156,7 @@ void DbConnection::InitializeDbTimer(void)
 {
 	m_ProgramStatusTimer = new Timer();
 	m_ProgramStatusTimer->SetInterval(10);
-	m_ProgramStatusTimer->OnTimerExpired.connect(boost::bind(&DbConnection::ProgramStatusHandler));
+	m_ProgramStatusTimer->OnTimerExpired.connect(boost::bind(&DbConnection::UpdateProgramStatus));
 	m_ProgramStatusTimer->Start();
 }
 
@@ -163,7 +173,7 @@ void DbConnection::InsertRuntimeVariable(const String& key, const Value& value)
 	DbObject::OnQuery(query);
 }
 
-void DbConnection::ProgramStatusHandler(void)
+void DbConnection::UpdateProgramStatus(void)
 {
 	Log(LogNotice, "DbConnection")
 	     << "Updating programstatus table.";
@@ -206,15 +216,19 @@ void DbConnection::ProgramStatusHandler(void)
 	query2.Priority = PriorityHigh;
 	queries.push_back(query2);
 
+	DbQuery query3;
+	query3.Type = DbQueryNewTransaction;
+	queries.push_back(query3);
+
 	DbObject::OnMultipleQueries(queries);
 
-	DbQuery query3;
-	query3.Table = "runtimevariables";
-	query3.Type = DbQueryDelete;
-	query3.Category = DbCatProgramStatus;
-	query3.WhereCriteria = new Dictionary();
-	query3.WhereCriteria->Set("instance_id", 0);  /* DbConnection class fills in real ID */
-	DbObject::OnQuery(query3);
+	DbQuery query4;
+	query4.Table = "runtimevariables";
+	query4.Type = DbQueryDelete;
+	query4.Category = DbCatProgramStatus;
+	query4.WhereCriteria = new Dictionary();
+	query4.WhereCriteria->Set("instance_id", 0);  /* DbConnection class fills in real ID */
+	DbObject::OnQuery(query4);
 
 	InsertRuntimeVariable("total_services", std::distance(ConfigType::GetObjectsByType<Service>().first, ConfigType::GetObjectsByType<Service>().second));
 	InsertRuntimeVariable("total_scheduled_services", std::distance(ConfigType::GetObjectsByType<Service>().first, ConfigType::GetObjectsByType<Service>().second));
@@ -323,26 +337,6 @@ DbReference DbConnection::GetInsertID(const DbType::Ptr& type, const DbReference
 	return it->second;
 }
 
-void DbConnection::SetNotificationInsertID(const CustomVarObject::Ptr& obj, const DbReference& dbref)
-{
-	if (dbref.IsValid())
-		m_NotificationInsertIDs[obj] = dbref;
-	else
-		m_NotificationInsertIDs.erase(obj);
-}
-
-DbReference DbConnection::GetNotificationInsertID(const CustomVarObject::Ptr& obj) const
-{
-	std::map<CustomVarObject::Ptr, DbReference>::const_iterator it;
-
-	it = m_NotificationInsertIDs.find(obj);
-
-	if (it == m_NotificationInsertIDs.end())
-		return DbReference();
-
-	return it->second;
-}
-
 void DbConnection::SetObjectActive(const DbObject::Ptr& dbobj, bool active)
 {
 	if (active)
@@ -358,9 +352,10 @@ bool DbConnection::GetObjectActive(const DbObject::Ptr& dbobj) const
 
 void DbConnection::ClearIDCache(void)
 {
+	SetIDCacheValid(false);
+
 	m_ObjectIDs.clear();
 	m_InsertIDs.clear();
-	m_NotificationInsertIDs.clear();
 	m_ActiveObjects.clear();
 	m_ConfigUpdates.clear();
 	m_StatusUpdates.clear();
@@ -407,8 +402,12 @@ void DbConnection::UpdateObject(const ConfigObject::Ptr& object)
 			ActivateObject(dbobj);
 			dbobj->SendConfigUpdate();
 			dbobj->SendStatusUpdate();
-		} else if (!active && dbActive)
+		} else if (!active) {
+			/* Deactivate the deleted object no matter
+			 * which state it had in the database.
+			 */
 			DeactivateObject(dbobj);
+		}
 	}
 }
 
@@ -486,4 +485,14 @@ int DbConnection::GetQueryCount(RingBuffer::SizeType span) const
 {
 	boost::mutex::scoped_lock lock(m_StatsMutex);
 	return m_QueryStats.GetValues(span);
+}
+
+bool DbConnection::IsIDCacheValid(void) const
+{
+	return m_IDCacheValid;
+}
+
+void DbConnection::SetIDCacheValid(bool valid)
+{
+	m_IDCacheValid = valid;
 }

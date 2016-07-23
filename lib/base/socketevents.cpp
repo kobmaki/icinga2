@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,171 +20,102 @@
 #include "base/socketevents.hpp"
 #include "base/exception.hpp"
 #include "base/logger.hpp"
+#include "base/application.hpp"
+#include "base/scriptglobal.hpp"
 #include <boost/thread/once.hpp>
 #include <boost/foreach.hpp>
 #include <map>
-
-#ifndef _WIN32
-#	include <poll.h>
-#endif /* _WIN32 */
+#ifdef __linux__
+#	include <sys/epoll.h>
+#endif /* __linux__ */
 
 using namespace icinga;
 
-struct SocketEventDescriptor
-{
-	int Events;
-	SocketEvents *EventInterface;
-	Object *LifesupportObject;
-
-	SocketEventDescriptor(void)
-		: Events(0), EventInterface(NULL), LifesupportObject(NULL)
-	{ }
-};
-
-static boost::thread l_SocketIOThread;
 static boost::once_flag l_SocketIOOnceFlag = BOOST_ONCE_INIT;
-static SOCKET l_SocketIOEventFDs[2];
-static boost::mutex l_SocketIOMutex;
-static boost::condition_variable l_SocketIOCV;
-static bool l_SocketIOFDChanged;
-static std::map<SOCKET, SocketEventDescriptor> l_SocketIOSockets;
+static SocketEventEngine *l_SocketIOEngine;
 
-void SocketEvents::InitializeThread(void)
+int SocketEvents::m_NextID = 0;
+
+void SocketEventEngine::Start(void)
 {
-	Socket::SocketPair(l_SocketIOEventFDs);
+	for (int tid = 0; tid < SOCKET_IOTHREADS; tid++) {
+		Socket::SocketPair(m_EventFDs[tid]);
 
-	Utility::SetNonBlockingSocket(l_SocketIOEventFDs[0]);
-	Utility::SetNonBlockingSocket(l_SocketIOEventFDs[1]);
+		Utility::SetNonBlockingSocket(m_EventFDs[tid][0]);
+		Utility::SetNonBlockingSocket(m_EventFDs[tid][1]);
 
 #ifndef _WIN32
-	Utility::SetCloExec(l_SocketIOEventFDs[0]);
-	Utility::SetCloExec(l_SocketIOEventFDs[1]);
+		Utility::SetCloExec(m_EventFDs[tid][0]);
+		Utility::SetCloExec(m_EventFDs[tid][1]);
 #endif /* _WIN32 */
 
-	SocketEventDescriptor sed;
-	sed.Events = POLLIN;
+		InitializeThread(tid);
 
-	l_SocketIOSockets[l_SocketIOEventFDs[0]] = sed;
-
-	l_SocketIOThread = boost::thread(&SocketEvents::ThreadProc);
-}
-
-void SocketEvents::ThreadProc(void)
-{
-	Utility::SetThreadName("SocketIO");
-
-	for (;;) {
-		pollfd *pfds;
-		int pfdcount;
-
-		typedef std::map<SOCKET, SocketEventDescriptor>::value_type SocketDesc;
-
-		{
-			boost::mutex::scoped_lock lock(l_SocketIOMutex);
-
-			pfdcount = l_SocketIOSockets.size();
-			pfds  = new pollfd[pfdcount];
-
-			int i = 0;
-
-			BOOST_FOREACH(const SocketDesc& desc, l_SocketIOSockets) {
-				pfds[i].fd = desc.first;
-				pfds[i].events = desc.second.Events;
-				pfds[i].revents = 0;
-
-				i++;
-			}
-		}
-
-#ifdef _WIN32
-		(void) WSAPoll(pfds, pfdcount, -1);
-#else /* _WIN32 */
-		(void) poll(pfds, pfdcount, -1);
-#endif /* _WIN32 */
-
-		{
-			boost::mutex::scoped_lock lock(l_SocketIOMutex);
-
-			if (l_SocketIOFDChanged) {
-				l_SocketIOFDChanged = false;
-				l_SocketIOCV.notify_all();
-				delete [] pfds;
-				continue;
-			}
-		}
-
-		for (int i = 0; i < pfdcount; i++) {
-			if ((pfds[i].revents & (POLLIN | POLLOUT | POLLHUP | POLLERR)) == 0)
-				continue;
-
-			if (pfds[i].fd == l_SocketIOEventFDs[0]) {
-				char buffer[512];
-				if (recv(l_SocketIOEventFDs[0], buffer, sizeof(buffer), 0) < 0)
-					Log(LogCritical, "SocketEvents", "Read from event FD failed.");
-
-				continue;
-			}
-
-			SocketEventDescriptor desc;
-			Object::Ptr ltref;
-
-			{
-				boost::mutex::scoped_lock lock(l_SocketIOMutex);
-
-				std::map<SOCKET, SocketEventDescriptor>::const_iterator it = l_SocketIOSockets.find(pfds[i].fd);
-
-				if (it == l_SocketIOSockets.end())
-					continue;
-
-				desc = it->second;
-
-				/* We must hold a ref-counted reference to the event object to keep it alive. */
-				ltref = desc.LifesupportObject;
-				VERIFY(ltref);
-			}
-
-			try {
-				desc.EventInterface->OnEvent(pfds[i].revents);
-			} catch (const std::exception& ex) {
-				Log(LogCritical, "SocketEvents")
-				    << "Exception thrown in socket I/O handler:\n"
-				    << DiagnosticInformation(ex);
-			} catch (...) {
-				Log(LogCritical, "SocketEvents", "Exception of unknown type thrown in socket I/O handler.");
-			}
-		}
-
-		delete [] pfds;
+		m_Threads[tid] = boost::thread(boost::bind(&SocketEventEngine::ThreadProc, this, tid));
 	}
 }
 
-void SocketEvents::WakeUpThread(bool wait)
+void SocketEventEngine::WakeUpThread(int sid, bool wait)
 {
+	int tid = sid % SOCKET_IOTHREADS;
+
+	if (boost::this_thread::get_id() == m_Threads[tid].get_id())
+		return;
+
 	if (wait) {
-		if (boost::this_thread::get_id() != l_SocketIOThread.get_id()) {
-			boost::mutex::scoped_lock lock(l_SocketIOMutex);
+		boost::mutex::scoped_lock lock(m_EventMutex[tid]);
 
-			l_SocketIOFDChanged = true;
+		m_FDChanged[tid] = true;
 
-			while (l_SocketIOFDChanged) {
-				(void) send(l_SocketIOEventFDs[1], "T", 1, 0);
+		while (m_FDChanged[tid]) {
+			(void) send(m_EventFDs[tid][1], "T", 1, 0);
 
-				boost::system_time const timeout = boost::get_system_time() + boost::posix_time::milliseconds(50);
-				l_SocketIOCV.timed_wait(lock, timeout);
-			}
+			boost::system_time const timeout = boost::get_system_time() + boost::posix_time::milliseconds(50);
+			m_CV[tid].timed_wait(lock, timeout);
 		}
 	} else {
-		(void) send(l_SocketIOEventFDs[1], "T", 1, 0);
+		(void) send(m_EventFDs[tid][1], "T", 1, 0);
 	}
+}
+
+void SocketEvents::InitializeEngine(void)
+{
+	String eventEngine = ScriptGlobal::Get("EventEngine", &Empty);
+
+	if (eventEngine.IsEmpty())
+#ifdef __linux__
+		eventEngine = "epoll";
+#else /* __linux__ */
+		eventEngine = "poll";
+#endif /* __linux__ */
+
+	if (eventEngine == "poll")
+		l_SocketIOEngine = new SocketEventEnginePoll();
+#ifdef __linux__
+	else if (eventEngine == "epoll")
+		l_SocketIOEngine = new SocketEventEngineEpoll();
+#endif /* __linux__ */
+	else {
+		Log(LogWarning, "SocketEvents")
+		    << "Invalid event engine selected: " << eventEngine << " - Falling back to 'poll'";
+
+		eventEngine = "poll";
+
+		l_SocketIOEngine = new SocketEventEnginePoll();
+	}
+
+	l_SocketIOEngine->Start();
+
+	ScriptGlobal::Set("EventEngine", eventEngine);
 }
 
 /**
  * Constructor for the SocketEvents class.
  */
 SocketEvents::SocketEvents(const Socket::Ptr& socket, Object *lifesupportObject)
-	: m_FD(socket->GetFD())
+	: m_ID(m_NextID++), m_FD(socket->GetFD()), m_EnginePrivate(NULL)
 {
-	boost::call_once(l_SocketIOOnceFlag, &SocketEvents::InitializeThread);
+	boost::call_once(l_SocketIOOnceFlag, &SocketEvents::InitializeEngine);
 
 	Register(lifesupportObject);
 }
@@ -196,63 +127,28 @@ SocketEvents::~SocketEvents(void)
 
 void SocketEvents::Register(Object *lifesupportObject)
 {
-	boost::mutex::scoped_lock lock(l_SocketIOMutex);
-
-	VERIFY(m_FD != INVALID_SOCKET);
-
-	SocketEventDescriptor desc;
-	desc.Events = 0;
-	desc.EventInterface = this;
-	desc.LifesupportObject = lifesupportObject;
-
-	VERIFY(l_SocketIOSockets.find(m_FD) == l_SocketIOSockets.end());
-
-	l_SocketIOSockets[m_FD] = desc;
-
-	m_Events = true;
-
-	/* There's no need to wake up the I/O thread here. */
+	l_SocketIOEngine->Register(this, lifesupportObject);
 }
 
 void SocketEvents::Unregister(void)
 {
-	{
-		boost::mutex::scoped_lock lock(l_SocketIOMutex);
-
-		if (m_FD == INVALID_SOCKET)
-			return;
-
-		l_SocketIOSockets.erase(m_FD);
-		m_FD = INVALID_SOCKET;
-
-		m_Events = false;
-	}
-
-	WakeUpThread(true);
+	l_SocketIOEngine->Unregister(this);
 }
 
 void SocketEvents::ChangeEvents(int events)
 {
-	{
-		boost::mutex::scoped_lock lock(l_SocketIOMutex);
+	l_SocketIOEngine->ChangeEvents(this, events);
+}
 
-		if (m_FD == INVALID_SOCKET)
-			BOOST_THROW_EXCEPTION(std::runtime_error("Tried to read/write from a closed socket."));
-
-		std::map<SOCKET, SocketEventDescriptor>::iterator it = l_SocketIOSockets.find(m_FD);
-
-		if (it == l_SocketIOSockets.end())
-			return;
-
-		it->second.Events = events;
-	}
-
-	WakeUpThread();
+boost::mutex& SocketEventEngine::GetMutex(int tid)
+{
+	return m_EventMutex[tid];
 }
 
 bool SocketEvents::IsHandlingEvents(void) const
 {
-	boost::mutex::scoped_lock lock(l_SocketIOMutex);
+	int tid = m_ID % SOCKET_IOTHREADS;
+	boost::mutex::scoped_lock lock(l_SocketIOEngine->GetMutex(tid));
 	return m_Events;
 }
 

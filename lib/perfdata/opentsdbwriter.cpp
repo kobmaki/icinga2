@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2014 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -129,6 +129,7 @@ void OpenTsdbWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 	SendMetric(metric + ".state_type", tags, checkable->GetStateType(), ts);
 	SendMetric(metric + ".reachable", tags, checkable->IsReachable(), ts);
 	SendMetric(metric + ".downtime_depth", tags, checkable->GetDowntimeDepth(), ts);
+	SendMetric(metric + ".acknowledgement", tags, checkable->GetAcknowledgement(), ts);
 
 	SendPerfdata(metric, tags, cr, ts);
 
@@ -145,8 +146,8 @@ void OpenTsdbWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 
 	SendMetric(metric + ".current_attempt", tags, checkable->GetCheckAttempt(), ts);
 	SendMetric(metric + ".max_check_attempts", tags, checkable->GetMaxCheckAttempts(), ts);
-	SendMetric(metric + ".latency", tags, Service::CalculateLatency(cr), ts);
-	SendMetric(metric + ".execution_time", tags, Service::CalculateExecutionTime(cr), ts);
+	SendMetric(metric + ".latency", tags, cr->CalculateLatency(), ts);
+	SendMetric(metric + ".execution_time", tags, cr->CalculateExecutionTime(), ts);
 }
 
 void OpenTsdbWriter::SendPerfdata(const String& metric, const std::map<String, String>& tags, const CheckResult::Ptr& cr, double ts)

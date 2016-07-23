@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -129,7 +129,7 @@ Value DowntimesTable::TypeAccessor(const Value& row)
 {
 	Downtime::Ptr downtime = static_cast<Downtime::Ptr>(row);
 	// 1 .. active, 0 .. pending
-	return (downtime->IsActive() ? 1 : 0);
+	return (downtime->IsInEffect() ? 1 : 0);
 }
 
 Value DowntimesTable::IsServiceAccessor(const Value& row)

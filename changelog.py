@@ -1,22 +1,20 @@
 #!/usr/bin/env python
-#/******************************************************************************
-# * Icinga 2                                                                   *
-# * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
-# *                                                                            *
-# * This program is free software; you can redistribute it and/or              *
-# * modify it under the terms of the GNU General Public License                *
-# * as published by the Free Software Foundation; either version 2             *
-# * of the License, or (at your option) any later version.                     *
-# *                                                                            *
-# * This program is distributed in the hope that it will be useful,            *
-# * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
-# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the              *
-# * GNU General Public License for more details.                               *
-# *                                                                            *
-# * You should have received a copy of the GNU General Public License          *
-# * along with this program; if not, write to the Free Software Foundation     *
-# * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.             *
-# ******************************************************************************/
+# Icinga 2
+# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software Foundation
+# Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import urllib2, json, sys, string
 from argparse import ArgumentParser
@@ -45,14 +43,14 @@ def format_header(text, lvl, ftype = ftype):
 def format_logentry(log_entry, args = args, issue_url = ISSUE_URL):
    if args.links:
        if args.html:
-           return "<li> {0} <a href=\"{3}{1}\">{1}</a>: {2}</li>".format(log_entry[0], log_entry[1], log_entry[2], issue_url)
+           return "<li> {0} <a href=\"{4}{1}\">{1}</a> ({2}): {3}</li>".format(log_entry[0], log_entry[1], log_entry[2], log_entry[3],issue_url)
        else:
-           return "* {0} [{1}]({3}{1} \"{0} {1}\"): {2}".format(log_entry[0], log_entry[1], log_entry[2], issue_url)
+           return "* {0} [{1}]({4}{1} \"{0} {1}\") ({2}): {3}".format(log_entry[0], log_entry[1], log_entry[2], log_entry[3], issue_url)
    else:
        if args.html:
-           return "<li>%s %d: %s</li>" % log_entry
+           return "<li>%s %d (%s): %s</li>" % log_entry
        else:
-           return "* %s %d: %s" % log_entry
+           return "* %s %d (%s): %s" % log_entry
 
 def print_category(category, entries):
     if len(entries) > 0:
@@ -137,7 +135,13 @@ while True:
             if ignore_issue:
                 continue
 
-        entry = (issue["tracker"]["name"], issue["id"], issue["subject"].strip())
+        if "category" in issue:
+            category = issue["category"]["name"]
+        else:
+            category = "no category"
+
+        # the order is important for print_category()
+        entry = (issue["tracker"]["name"], issue["id"], category, issue["subject"].strip())
 
 	if issue["tracker"]["name"] == "Feature":
             features.append(entry)

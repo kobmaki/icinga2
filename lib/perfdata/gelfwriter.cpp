@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -89,6 +89,7 @@ void GelfWriter::CheckResultHandler(const Checkable::Ptr& checkable, const Check
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
+	double ts = cr->GetExecutionEnd();
 
 	Dictionary::Ptr fields = new Dictionary();
 
@@ -109,8 +110,8 @@ void GelfWriter::CheckResultHandler(const Checkable::Ptr& checkable, const Check
 	fields->Set("_current_check_attempt", checkable->GetCheckAttempt());
 	fields->Set("_max_check_attempts", checkable->GetMaxCheckAttempts());
 
-	fields->Set("_latency", Service::CalculateLatency(cr));
-	fields->Set("_execution_time", Service::CalculateExecutionTime(cr));
+	fields->Set("_latency", cr->CalculateLatency());
+	fields->Set("_execution_time", cr->CalculateExecutionTime());
 	fields->Set("_reachable",  checkable->IsReachable());
 
 	if (cr) {
@@ -159,7 +160,7 @@ void GelfWriter::CheckResultHandler(const Checkable::Ptr& checkable, const Check
 		}
 	}
 
-	SendLogMessage(ComposeGelfMessage(fields, GetSource()));
+	SendLogMessage(ComposeGelfMessage(fields, GetSource(), ts));
 }
 
 void GelfWriter::NotificationToUserHandler(const Notification::Ptr& notification, const Checkable::Ptr& checkable,
@@ -174,6 +175,7 @@ void GelfWriter::NotificationToUserHandler(const Notification::Ptr& notification
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
+	double ts = cr->GetExecutionEnd();
 
 	String notification_type_str = Notification::NotificationTypeToString(notification_type);
 
@@ -206,7 +208,7 @@ void GelfWriter::NotificationToUserHandler(const Notification::Ptr& notification
 	fields->Set("_notification_type", notification_type_str);
 	fields->Set("_comment", author_comment);
 
-	SendLogMessage(ComposeGelfMessage(fields, GetSource()));
+	SendLogMessage(ComposeGelfMessage(fields, GetSource(), ts));
 }
 
 void GelfWriter::StateChangeHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, StateType type)
@@ -219,6 +221,7 @@ void GelfWriter::StateChangeHandler(const Checkable::Ptr& checkable, const Check
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
+	double ts = cr->GetExecutionEnd();
 
 	Dictionary::Ptr fields = new Dictionary();
 
@@ -244,14 +247,14 @@ void GelfWriter::StateChangeHandler(const Checkable::Ptr& checkable, const Check
 		fields->Set("_check_source", cr->GetCheckSource());
 	}
 
-	SendLogMessage(ComposeGelfMessage(fields, GetSource()));
+	SendLogMessage(ComposeGelfMessage(fields, GetSource(), ts));
 }
 
-String GelfWriter::ComposeGelfMessage(const Dictionary::Ptr& fields, const String& source)
+String GelfWriter::ComposeGelfMessage(const Dictionary::Ptr& fields, const String& source, double ts)
 {
 	fields->Set("version", "1.1");
 	fields->Set("host", source);
-	fields->Set("timestamp", Utility::GetTime());
+	fields->Set("timestamp", ts);
 
 	return JsonEncode(fields);
 }

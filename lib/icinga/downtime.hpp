@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -45,7 +45,7 @@ public:
 
 	intrusive_ptr<Checkable> GetCheckable(void) const;
 
-	bool IsActive(void) const;
+	bool IsInEffect(void) const;
 	bool IsTriggered(void) const;
 	bool IsExpired(void) const;
 
@@ -70,8 +70,8 @@ protected:
 	virtual void Start(bool runtimeCreated) override;
 	virtual void Stop(bool runtimeRemoved) override;
 
-	virtual void ValidateStartTime(double value, const ValidationUtils& utils) override;
-	virtual void ValidateEndTime(double value, const ValidationUtils& utils) override;
+	virtual void ValidateStartTime(const Timestamp& value, const ValidationUtils& utils) override;
+	virtual void ValidateEndTime(const Timestamp& value, const ValidationUtils& utils) override;
 
 private:
 	ObjectImpl<Checkable>::Ptr m_Checkable;

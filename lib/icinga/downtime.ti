@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -54,7 +54,7 @@ class Downtime : ConfigObject < DowntimeNameComposer
 
 			if (!newValue.IsEmpty()) {
 				Service::Ptr service = Service::GetByNamePair(GetHostName(), newValue);
-				DependencyGraph::RemoveDependency(this, service.get());
+				DependencyGraph::AddDependency(this, service.get());
 			}
 		}}}
 		navigate {{{
@@ -66,22 +66,22 @@ class Downtime : ConfigObject < DowntimeNameComposer
 		}}}
 	};
 
-	[state] double entry_time {
+	[config] Timestamp entry_time {
 		default {{{ return Utility::GetTime(); }}}
 	};
 	[config, required] String author;
 	[config, required] String comment;
-	[config] double start_time;
-	[config] double end_time;
-	[state] double trigger_time;
+	[config] Timestamp start_time;
+	[config] Timestamp end_time;
+	[state] Timestamp trigger_time;
 	[config] bool fixed;
-	[config] double duration;
+	[config] Timestamp duration;
 	[config] name(Downtime) triggered_by;
 	[config] String scheduled_by;
 	[state] Array::Ptr triggers {
 		default {{{ return new Array(); }}}
 	};
-	int legacy_id;
+	[state] int legacy_id;
 	[state] bool was_cancelled;
 	[config] String config_owner;
 };

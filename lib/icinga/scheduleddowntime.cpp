@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -106,7 +106,8 @@ void ScheduledDowntime::Start(bool runtimeCreated)
 void ScheduledDowntime::TimerProc(void)
 {
 	BOOST_FOREACH(const ScheduledDowntime::Ptr& sd, ConfigType::GetObjectsByType<ScheduledDowntime>()) {
-		sd->CreateNextDowntime();
+		if (sd->IsActive())
+			sd->CreateNextDowntime();
 	}
 }
 
@@ -129,6 +130,9 @@ std::pair<double, double> ScheduledDowntime::FindNextSegment(void)
 	    << "Finding next scheduled downtime segment for time " << refts;
 
 	Dictionary::Ptr ranges = GetRanges();
+
+	if (!ranges)
+		return std::make_pair(0, 0);
 
 	Array::Ptr segments = new Array();
 

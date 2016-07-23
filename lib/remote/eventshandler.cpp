@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,7 +31,7 @@ using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/events", EventsHandler);
 
-bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response)
+bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
 {
 	if (request.RequestUrl->GetPath().size() != 2)
 		return false;
@@ -43,8 +43,6 @@ bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request
 		HttpUtility::SendJsonError(response, 400, "HTTP/1.0 not supported for event streams.");
 		return true;
 	}
-
-	Dictionary::Ptr params = HttpUtility::FetchRequestParameters(request);
 
 	Array::Ptr types = params->Get("types");
 

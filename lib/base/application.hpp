@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -134,8 +134,14 @@ public:
 	static double GetStartTime(void);
 	static void SetStartTime(double ts);
 
+	static double GetMainTime(void);
+	static void SetMainTime(double ts);
+
 	static bool GetScriptDebuggerEnabled(void);
 	static void SetScriptDebuggerEnabled(bool enabled);
+
+	static double GetLastReloadFailed(void);
+	static void SetLastReloadFailed(double ts);
 
 	static void DisplayInfoMessage(std::ostream& os, bool skipVersion = false);
 
@@ -167,7 +173,9 @@ private:
 	static bool m_Debugging; /**< Whether debugging is enabled. */
 	static LogSeverity m_DebuggingSeverity; /**< Whether debugging severity is set. */
 	static double m_StartTime;
+	static double m_MainTime;
 	static bool m_ScriptDebuggerEnabled;
+	static double m_LastReloadFailed;
 
 #ifndef _WIN32
 	static void SigIntTermHandler(int signum);

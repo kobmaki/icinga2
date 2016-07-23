@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,8 +28,7 @@ using namespace icinga;
 static String NumberToString(void)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
-	double self = vframe->Self;
-	return Convert::ToString(self);
+	return vframe->Self;
 }
 
 Object::Ptr Number::GetPrototype(void)

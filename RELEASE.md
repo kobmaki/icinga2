@@ -7,12 +7,32 @@ Print this document.
 Check the following issue filters:
 
 * [Pending backports](https://dev.icinga.org/projects/i2/issues?query_id=41)
-* [Valid target version](https://dev.icinga.org/projects/i2/issues?query_id=55)
+* [Invalid target version](https://dev.icinga.org/projects/i2/issues?query_id=55)
+
+## Backport Commits
+
+    $ git checkout master
+    $ ./pick.py -V 2.4.9
+
+The script creates a new branch 'auto-merged-2.4.9' which is based on the
+current support branch. It then merges all commits from the 'master' branch which
+reference a ticket for the version that was specified.
+
+If there are any merge commits you will need to manually fix them and continue the
+rebase until no commits are left:
+
+    $ git rebase --continue
+
+After finishing the rebase the branch needs to be merged into the support branch:
+
+    $ git checkout support/2.4
+    $ git merge --ff-only auto-merged-2.4.9
 
 ## Authors
 
 Update the [.mailmap](.mailmap) and [AUTHORS](AUTHORS) files:
 
+    $ git checkout master
     $ git log --use-mailmap | grep ^Author: | cut -f2- -d' ' | sort | uniq > AUTHORS
 
 ## Version
@@ -21,7 +41,7 @@ Update the version number in the following files:
 
 * [icinga2.spec]: Version: (.*)
 * [icinga2.nuspec]: <version>(.*)</version>
-* [tools/chocolateyInstall.ps1]: Icinga2-v(.*).exe
+* [tools/chocolateyInstall.ps1]: Icinga2-v(.*)-{x86,x86_64}.msi
 
 ## Changelog
 
@@ -30,15 +50,15 @@ the changelog.py script. Also generate HTML for the wordpress release announceme
 
 Changelog:
 
-    $ ./changelog.py --version 2.4.0 --project i2
+    $ ./changelog.py -V 2.4.9
 
 Docs:
 
-    $ ./changelog.py --version 2.4.0 --project i2 --links
+    $ ./changelog.py -V 2.4.9 -l
 
 Wordpress:
 
-    $ ./changelog.py --version 2.4.0 --project i2 --html --links
+    $ ./changelog.py -V 2.4.9 -H -l
 
 ## Git Tag
 
@@ -83,16 +103,20 @@ into master and merge the support branch:
 ## Build Server
 
 * Update Git tags for the release jobs.
-
-### Linux
-
 * Build the newly created Git tag for Debian/RHEL/SuSE.
+* Build the newly created Git tag for Windows.
+
+## Release Tests
+
+* Test DB IDO with MySQL and PostgreSQL.
 * Provision the vagrant boxes and test the release packages.
-* Start a new docker container and install/run icinga2
+* Test the [setup wizard](http://packages.icinga.org/windows/) inside a Windows VM.
+
+* Start a new docker container and install/run icinga2.
 
 Example for CentOS7:
 
-    $ sudo docker run -ti centos:latest bash
+    $ docker run -ti centos:latest bash
 
     # yum -y install http://packages.icinga.org/epel/7/release/noarch/icinga-rpm-release-7-1.el7.centos.noarch.rpm
     # yum -y install icinga2
@@ -101,20 +125,30 @@ Example for CentOS7:
     # systemctl start icinga2
     # tail -f /var/log/icinga2/icinga2.log
 
-### Windows
-
-* Build the newly created Git tag for Windows.
-* Test the [setup wizard](http://packages.icinga.org/windows/) inside a Windows VM.
-
 ## GitHub Release
 
 Create a new release for the newly created Git tag.
 https://github.com/Icinga/icinga2/releases
 
+## Chocolatey
+
+Navigate to the git repository on your Windows box which
+already has chocolatey installed. Pull/checkout the release.
+
+Create the nupkg package:
+
+    cpack
+
+Install the created icinga2 package locally:
+
+    choco install icinga2 -version 2.4.9 -fdv "%cd%" -source "'%cd%;https://chocolatey.org/api/v2/'"
+
+Upload the package to [chocolatey](https://chocolatey.org/packages/upload).
+
 ## Online Documentation
 
 SSH into the web box, navigate into `icinga2-latest/module/icinga2`
-and pull the current icinga2 revision to update what's new".
+and pull the current support branch.
 
 ## Announcement
 
@@ -126,4 +160,5 @@ and pull the current icinga2 revision to update what's new".
 # After the release
 
 * Add new minor version
+* Close the released version
 * Update Redmine filters for the next major/minor version

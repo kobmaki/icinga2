@@ -2,7 +2,7 @@
 -- mysql.sql
 -- DB definition for IDO MySQL
 --
--- Copyright (c) 2009-2015 Icinga Development Team (https://www.icinga.org)
+-- Copyright (c) 2009-2016 Icinga Development Team (https://www.icinga.org/)
 --
 -- -- --------------------------------------------------------
 
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS icinga_contactgroups (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   contactgroup_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   PRIMARY KEY  (contactgroup_id),
   UNIQUE KEY instance_id (instance_id,config_type,contactgroup_object_id)
 ) ENGINE=InnoDB  COMMENT='Contactgroup definitions';
@@ -249,7 +249,7 @@ CREATE TABLE IF NOT EXISTS icinga_contacts (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   contact_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   email_address varchar(255) character set latin1  default '',
   pager_address varchar(64) character set latin1  default '',
   host_timeperiod_object_id bigint unsigned default 0,
@@ -606,7 +606,7 @@ CREATE TABLE IF NOT EXISTS icinga_hostgroups (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   hostgroup_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   notes TEXT character set latin1  default NULL,
   notes_url TEXT character set latin1  default NULL,
   action_url TEXT character set latin1  default NULL,
@@ -639,7 +639,7 @@ CREATE TABLE IF NOT EXISTS icinga_hosts (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   host_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   display_name varchar(255) character set latin1 collate latin1_general_cs  default '',
   address varchar(128) character set latin1  default '',
   address6 varchar(128) character set latin1  default '',
@@ -713,7 +713,7 @@ CREATE TABLE IF NOT EXISTS icinga_hoststatus (
   output TEXT character set latin1  default '',
   long_output TEXT  default '',
   perfdata TEXT character set latin1  default '',
-  check_source TEXT character set latin1  default '',
+  check_source varchar(255) character set latin1  default '',
   current_state smallint default 0,
   has_been_checked smallint default 0,
   should_be_scheduled smallint default 0,
@@ -735,7 +735,7 @@ CREATE TABLE IF NOT EXISTS icinga_hoststatus (
   notifications_enabled smallint default 0,
   problem_has_been_acknowledged smallint default 0,
   acknowledgement_type smallint default 0,
-  current_notification_number smallint default 0,
+  current_notification_number int unsigned default 0,
   passive_checks_enabled smallint default 0,
   active_checks_enabled smallint default 0,
   event_handler_enabled smallint default 0,
@@ -1100,7 +1100,7 @@ CREATE TABLE IF NOT EXISTS icinga_servicegroups (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   servicegroup_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   notes TEXT character set latin1  default NULL,
   notes_url TEXT character set latin1  default NULL,
   action_url TEXT character set latin1  default NULL,
@@ -1200,7 +1200,7 @@ CREATE TABLE IF NOT EXISTS icinga_servicestatus (
   output TEXT character set latin1  default '',
   long_output TEXT  default '',
   perfdata TEXT character set latin1  default '',
-  check_source TEXT character set latin1  default '',
+  check_source varchar(255) character set latin1  default '',
   current_state smallint default 0,
   has_been_checked smallint default 0,
   should_be_scheduled smallint default 0,
@@ -1223,7 +1223,7 @@ CREATE TABLE IF NOT EXISTS icinga_servicestatus (
   notifications_enabled smallint default 0,
   problem_has_been_acknowledged smallint default 0,
   acknowledgement_type smallint default 0,
-  current_notification_number smallint default 0,
+  current_notification_number int unsigned default 0,
   passive_checks_enabled smallint default 0,
   active_checks_enabled smallint default 0,
   event_handler_enabled smallint default 0,
@@ -1336,7 +1336,7 @@ CREATE TABLE IF NOT EXISTS icinga_timeperiods (
   instance_id bigint unsigned default 0,
   config_type smallint default 0,
   timeperiod_object_id bigint unsigned default 0,
-  alias TEXT character set latin1  default '',
+  alias varchar(255) character set latin1  default '',
   PRIMARY KEY  (timeperiod_id),
   UNIQUE KEY instance_id (instance_id,config_type,timeperiod_object_id)
 ) ENGINE=InnoDB  COMMENT='Timeperiod definitions';
@@ -1645,9 +1645,29 @@ CREATE INDEX commenthistory_delete_idx ON icinga_commenthistory (instance_id, co
 CREATE INDEX cv_session_del_idx ON icinga_customvariables (session_token);
 CREATE INDEX cvs_session_del_idx ON icinga_customvariablestatus (session_token);
 
+-- #10070
+CREATE INDEX idx_comments_object_id on icinga_comments(object_id);
+CREATE INDEX idx_scheduleddowntime_object_id on icinga_scheduleddowntime(object_id);
+
+-- #10066
+CREATE INDEX idx_endpoints_object_id on icinga_endpoints(endpoint_object_id);
+CREATE INDEX idx_endpointstatus_object_id on icinga_endpointstatus(endpoint_object_id);
+
+CREATE INDEX idx_endpoints_zone_object_id on icinga_endpoints(zone_object_id);
+CREATE INDEX idx_endpointstatus_zone_object_id on icinga_endpointstatus(zone_object_id);
+
+CREATE INDEX idx_zones_object_id on icinga_zones(zone_object_id);
+CREATE INDEX idx_zonestatus_object_id on icinga_zonestatus(zone_object_id);
+
+CREATE INDEX idx_zones_parent_object_id on icinga_zones(parent_zone_object_id);
+CREATE INDEX idx_zonestatus_parent_object_id on icinga_zonestatus(parent_zone_object_id);
+
+-- #12107
+CREATE INDEX idx_statehistory_cleanup on icinga_statehistory(instance_id, state_time);
+
 -- -----------------------------------------
 -- set dbversion
 -- -----------------------------------------
-INSERT INTO icinga_dbversion (name, version, create_time, modify_time) VALUES ('idoutils', '1.14.0', NOW(), NOW()) ON DUPLICATE KEY UPDATE version='1.14.0', modify_time=NOW();
+INSERT INTO icinga_dbversion (name, version, create_time, modify_time) VALUES ('idoutils', '1.14.1', NOW(), NOW()) ON DUPLICATE KEY UPDATE version='1.14.1', modify_time=NOW();
 
 

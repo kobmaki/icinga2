@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -196,4 +196,24 @@ String Dictionary::ToString(void) const
 	std::ostringstream msgbuf;
 	ConfigWriter::EmitScope(msgbuf, 1, const_cast<Dictionary *>(this));
 	return msgbuf.str();
+}
+
+Value Dictionary::GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const
+{
+	Value value;
+
+	if (Get(field, &value))
+		return value;
+	else
+		return GetPrototypeField(const_cast<Dictionary *>(this), field, false, debugInfo);
+}
+
+void Dictionary::SetFieldByName(const String& field, const Value& value, const DebugInfo& debugInfo)
+{
+	Set(field, value);
+}
+
+bool Dictionary::HasOwnField(const String& field) const
+{
+	return Contains(field);
 }

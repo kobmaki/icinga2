@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,7 +31,7 @@ enum DbValueType
 {
 	DbValueTimestamp,
 	DbValueTimestampNow,
-	DbValueObjectInsertID,
+	DbValueObjectInsertID
 };
 
 /**
@@ -58,7 +58,9 @@ public:
 	static Value ExtractValue(const Value& value);
 
 	DbValueType GetType(void) const;
+
 	Value GetValue(void) const;
+	void SetValue(const Value& value);
 
 private:
 	DbValueType m_Type;

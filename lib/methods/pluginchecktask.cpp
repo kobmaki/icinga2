@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -55,10 +55,15 @@ void PluginCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckRes
 	PluginUtility::ExecuteCommand(commandObj, checkable, checkable->GetLastCheckResult(),
 	    resolvers, resolvedMacros, useResolvedMacros,
 	    boost::bind(&PluginCheckTask::ProcessFinishedHandler, checkable, cr, _1, _2));
+
+	if (!resolvedMacros || useResolvedMacros)
+		Checkable::IncreasePendingChecks();
 }
 
 void PluginCheckTask::ProcessFinishedHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, const Value& commandLine, const ProcessResult& pr)
 {
+	Checkable::DecreasePendingChecks();
+
 	if (pr.ExitStatus > 3) {
 		Process::Arguments parguments = Process::PrepareCommand(commandLine);
 		Log(LogWarning, "PluginCheckTask")

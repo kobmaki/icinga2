@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)
+# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -82,10 +82,7 @@ if(NOT WIN32)
     DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/bash_completion.d
   )
 else()
-  install(
-    FILES icinga2/features-enabled/mainlog.conf
-    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-enabled
-  )
+  install_if_not_exists(icinga2/features-enabled/mainlog.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-enabled)
 endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")

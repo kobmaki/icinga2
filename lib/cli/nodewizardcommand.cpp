@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -127,7 +127,6 @@ int NodeWizardCommand::Run(const boost::program_options::variables_map& vm,
 		    << " [" << Utility::GetFQDN() << "]: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (answer.empty())
 			answer = Utility::GetFQDN();
@@ -151,7 +150,6 @@ wizard_endpoint_loop_start:
 		    << " (CN from your master setup): ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (answer.empty()) {
 			Log(LogWarning, "cli", "Master CN is required! Please retry.");
@@ -182,7 +180,6 @@ wizard_endpoint_loop_start:
 			    << ConsoleColorTag(Console_Normal) << " (Your master's IP address or FQDN): ";
 
 			std::getline(std::cin, answer);
-			boost::algorithm::to_lower(answer);
 
 			if (answer.empty()) {
 				Log(LogWarning, "cli", "Please enter the master's endpoint connection information.");
@@ -200,7 +197,6 @@ wizard_endpoint_loop_start:
 			     << " [" << tmpPort << "]: ";
 
 			std::getline(std::cin, answer);
-			boost::algorithm::to_lower(answer);
 
 			if (!answer.empty())
 				tmpPort = answer;
@@ -230,7 +226,6 @@ wizard_master_host:
 		    << ConsoleColorTag(Console_Normal) << " [" << master_endpoint_name << "]: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (answer.empty() && !master_endpoint_name.IsEmpty())
 			answer = master_endpoint_name;
@@ -245,7 +240,6 @@ wizard_master_host:
 		    << ConsoleColorTag(Console_Normal) << " [" << tmpPort << "]: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (!answer.empty())
 			tmpPort = answer;
@@ -322,7 +316,6 @@ wizard_ticket:
 		    << " (Hint: # icinga2 pki ticket --cn '" << cn << "'): ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (answer.empty())
 			goto wizard_ticket;
@@ -365,7 +358,6 @@ wizard_ticket:
 		    << ConsoleColorTag(Console_Normal) << " []: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		String bind_host = answer;
 		bind_host = bind_host.Trim();
@@ -373,7 +365,6 @@ wizard_ticket:
 		std::cout << "Bind Port []: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		String bind_port = answer;
 		bind_port = bind_port.Trim();
@@ -412,10 +403,8 @@ wizard_ticket:
 		String apipath = FeatureUtility::GetFeaturesAvailablePath() + "/api.conf";
 		NodeUtility::CreateBackupFile(apipath);
 
-		String apipathtmp = apipath + ".tmp";
-
-		std::ofstream fp;
-		fp.open(apipathtmp.CStr(), std::ofstream::out | std::ofstream::trunc);
+		std::fstream fp;
+		String tempApiPath = Utility::CreateTempFile(apipath + ".XXXXXX", 0644, fp);
 
 		fp << "/**\n"
 		    << " * The API listener is used for distributed monitoring setups.\n"
@@ -443,11 +432,11 @@ wizard_ticket:
 		_unlink(apipath.CStr());
 #endif /* _WIN32 */
 
-		if (rename(apipathtmp.CStr(), apipath.CStr()) < 0) {
+		if (rename(tempApiPath.CStr(), apipath.CStr()) < 0) {
 			BOOST_THROW_EXCEPTION(posix_error()
 			    << boost::errinfo_api_function("rename")
 			    << boost::errinfo_errno(errno)
-			    << boost::errinfo_file_name(apipathtmp));
+			    << boost::errinfo_file_name(tempApiPath));
 		}
 
 		/* apilistener config */
@@ -479,7 +468,6 @@ wizard_ticket:
 		    << " (CN) [" << Utility::GetFQDN() << "]: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		if (answer.empty())
 			answer = Utility::GetFQDN();
@@ -520,7 +508,6 @@ wizard_ticket:
 		    << "Bind Host" << ConsoleColorTag(Console_Normal) << " []: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		String bind_host = answer;
 		bind_host = bind_host.Trim();
@@ -529,7 +516,6 @@ wizard_ticket:
 		    << "Bind Port" << ConsoleColorTag(Console_Normal) << " []: ";
 
 		std::getline(std::cin, answer);
-		boost::algorithm::to_lower(answer);
 
 		String bind_port = answer;
 		bind_port = bind_port.Trim();
@@ -538,10 +524,9 @@ wizard_ticket:
 		String apipath = FeatureUtility::GetFeaturesAvailablePath() + "/api.conf";
 		NodeUtility::CreateBackupFile(apipath);
 
-		String apipathtmp = apipath + ".tmp";
 
-		std::ofstream fp;
-		fp.open(apipathtmp.CStr(), std::ofstream::out | std::ofstream::trunc);
+		std::fstream fp;
+		String tempApiPath = Utility::CreateTempFile(apipath + ".XXXXXX", 0644, fp);
 
 		fp << "/**\n"
 		    << " * The API listener is used for distributed monitoring setups.\n"
@@ -566,11 +551,11 @@ wizard_ticket:
 		_unlink(apipath.CStr());
 #endif /* _WIN32 */
 
-		if (rename(apipathtmp.CStr(), apipath.CStr()) < 0) {
+		if (rename(tempApiPath.CStr(), apipath.CStr()) < 0) {
 			BOOST_THROW_EXCEPTION(posix_error()
 			    << boost::errinfo_api_function("rename")
 			    << boost::errinfo_errno(errno)
-			    << boost::errinfo_file_name(apipathtmp));
+			    << boost::errinfo_file_name(tempApiPath));
 		}
 
 		/* update constants.conf with NodeName = CN + TicketSalt = random value */

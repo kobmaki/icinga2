@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,6 +32,7 @@ namespace icinga
 static bool l_SSLInitialized = false;
 static boost::mutex *l_Mutexes;
 
+#ifdef CRYPTO_LOCK
 static void OpenSSLLockingCallback(int mode, int type, const char *, int)
 {
 	if (mode & CRYPTO_LOCK)
@@ -48,6 +49,7 @@ static unsigned long OpenSSLIDCallback(void)
 	return (unsigned long)pthread_self();
 #endif /* _WIN32 */
 }
+#endif /* CRYPTO_LOCK */
 
 /**
  * Initializes the OpenSSL library.
@@ -62,9 +64,11 @@ void InitializeOpenSSL(void)
 
 	SSL_COMP_get_compression_methods();
 
+#ifdef CRYPTO_LOCK
 	l_Mutexes = new boost::mutex[CRYPTO_num_locks()];
 	CRYPTO_set_locking_callback(&OpenSSLLockingCallback);
 	CRYPTO_set_id_callback(&OpenSSLIDCallback);
+#endif /* CRYPTO_LOCK */
 
 	l_SSLInitialized = true;
 }
@@ -83,7 +87,15 @@ boost::shared_ptr<SSL_CTX> MakeSSLContext(const String& pubkey, const String& pr
 
 	InitializeOpenSSL();
 
-	boost::shared_ptr<SSL_CTX> sslContext = boost::shared_ptr<SSL_CTX>(SSL_CTX_new(TLSv1_method()), SSL_CTX_free);
+	boost::shared_ptr<SSL_CTX> sslContext = boost::shared_ptr<SSL_CTX>(SSL_CTX_new(SSLv23_method()), SSL_CTX_free);
+
+	long flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_CIPHER_SERVER_PREFERENCE;
+
+#ifdef SSL_OP_NO_COMPRESSION
+	flags |= SSL_OP_NO_COMPRESSION;
+#endif /* SSL_OP_NO_COMPRESSION */
+
+	SSL_CTX_set_options(sslContext.get(), flags);
 
 	SSL_CTX_set_mode(sslContext.get(), SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
 	SSL_CTX_set_session_id_context(sslContext.get(), (const unsigned char *)"Icinga 2", 8);
@@ -147,6 +159,29 @@ boost::shared_ptr<SSL_CTX> MakeSSLContext(const String& pubkey, const String& pr
 }
 
 /**
+ * Set the cipher list to the specified SSL context.
+ * @param context The ssl context.
+ * @param cipherList The ciper list.
+ **/
+void SetCipherListToSSLContext(const boost::shared_ptr<SSL_CTX>& context, const String& cipherList)
+{
+	char errbuf[256];
+
+	if (SSL_CTX_set_cipher_list(context.get(), cipherList.CStr()) == 0) {
+		Log(LogCritical, "SSL")
+		    << "Cipher list '"
+		    << cipherList
+		    << "' does not specify any usable ciphers: "
+		    << ERR_peek_error() << ", \""
+		    << ERR_error_string(ERR_peek_error(), errbuf) << "\"";
+
+		BOOST_THROW_EXCEPTION(openssl_error()
+		    << boost::errinfo_api_function("SSL_CTX_set_cipher_list")
+		    << errinfo_openssl_error(ERR_peek_error()));
+	}
+}
+
+/**
  * Loads a CRL and appends its certificates to the specified SSL context.
  *
  * @param context The SSL context.
@@ -183,19 +218,12 @@ void AddCRLToSSLContext(const boost::shared_ptr<SSL_CTX>& context, const String&
 	X509_VERIFY_PARAM_free(param);
 }
 
-/**
- * Retrieves the common name for an X509 certificate.
- *
- * @param certificate The X509 certificate.
- * @returns The common name.
- */
-String GetCertificateCN(const boost::shared_ptr<X509>& certificate)
+static String GetX509NameCN(X509_NAME *name)
 {
 	char errbuf[120];
 	char buffer[256];
 
-	int rc = X509_NAME_get_text_by_NID(X509_get_subject_name(certificate.get()),
-	    NID_commonName, buffer, sizeof(buffer));
+	int rc = X509_NAME_get_text_by_NID(name, NID_commonName, buffer, sizeof(buffer));
 
 	if (rc == -1) {
 		Log(LogCritical, "SSL")
@@ -206,6 +234,17 @@ String GetCertificateCN(const boost::shared_ptr<X509>& certificate)
 	}
 
 	return buffer;
+}
+
+/**
+ * Retrieves the common name for an X509 certificate.
+ *
+ * @param certificate The X509 certificate.
+ * @returns The common name.
+ */
+String GetCertificateCN(const boost::shared_ptr<X509>& certificate)
+{
+	return GetX509NameCN(X509_get_subject_name(certificate.get()));
 }
 
 /**
@@ -408,7 +447,6 @@ boost::shared_ptr<X509> CreateCert(EVP_PKEY *pubkey, X509_NAME *subject, X509_NA
 
 	ASN1_INTEGER_set(X509_get_serialNumber(cert), serial);
 
-	X509_EXTENSION *ext;
 	X509V3_CTX ctx;
 	X509V3_set_ctx_nodb(&ctx);
 	X509V3_set_ctx(&ctx, cert, cert, NULL, NULL, 0);
@@ -420,12 +458,23 @@ boost::shared_ptr<X509> CreateCert(EVP_PKEY *pubkey, X509_NAME *subject, X509_NA
 	else
 		attr = "critical,CA:FALSE";
 
-	ext = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints, const_cast<char *>(attr));
+	X509_EXTENSION *basicConstraintsExt = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints, const_cast<char *>(attr));
 
-	if (ext)
-		X509_add_ext(cert, ext, -1);
+	if (basicConstraintsExt) {
+		X509_add_ext(cert, basicConstraintsExt, -1);
+		X509_EXTENSION_free(basicConstraintsExt);
+	}
 
-	X509_EXTENSION_free(ext);
+	String cn = GetX509NameCN(subject);
+
+	if (!cn.Contains(" ") && cn.Contains(".")) {
+		String san = "DNS:" + cn;
+		X509_EXTENSION *subjectAltNameExt = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_alt_name, const_cast<char *>(san.CStr()));
+		if (subjectAltNameExt) {
+			X509_add_ext(cert, subjectAltNameExt, -1);
+			X509_EXTENSION_free(subjectAltNameExt);
+		}
+	}
 
 	X509_sign(cert, cakey, EVP_sha256());
 
@@ -561,6 +610,7 @@ String RandomString(int length)
 		sprintf(output + 2 * i, "%02x", bytes[i]);
 
 	String result = output;
+	delete [] bytes;
 	delete [] output;
 
 	return result;

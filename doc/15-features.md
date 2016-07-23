@@ -38,14 +38,14 @@ the Icinga 2 cluster.
 The following example query checks the health of the current Icinga 2 instance
 writing its current status to the DB IDO backend table `icinga_programstatus`
 every 10 seconds. By default it checks 60 seconds into the past which is a reasonable
-amount of time - adjust it for your requirements. If the condition is not met,
+amount of time -- adjust it for your requirements. If the condition is not met,
 the query returns an empty result.
 
 > **Tip**
 >
 > Use [check plugins](14-addons-plugins.md#plugins) to monitor the backend.
 
-Replace the `default` string with your instance name, if different.
+Replace the `default` string with your instance name if different.
 
 Example for MySQL:
 
@@ -215,6 +215,7 @@ By enabling `enable_send_metadata` Icinga 2 automatically adds the following met
 
     <prefix>.metadata.current_attempt
     <prefix>.metadata.downtime_depth
+    <prefix>.metadata.acknowledgement
     <prefix>.metadata.execution_time
     <prefix>.metadata.latency
     <prefix>.metadata.max_check_attempts
@@ -230,6 +231,7 @@ Metadata metric overview:
   max_check_attempts | maximum check attempts until the hard state is reached
   reachable          | checked object is reachable
   downtime_depth     | number of downtimes this object is in
+  acknowledgement    | whether the object is acknowledged or not
   execution_time     | check execution time
   latency            | check latency
   state              | current state of the checked object
@@ -294,6 +296,7 @@ internal check statistic data to Graphite:
   max_check_attempts | maximum check attempts until the hard state is reached
   reachable          | checked object is reachable
   downtime_depth     | number of downtimes this object is in
+  acknowledgement    | whether the object is acknowledged or not
   execution_time     | check execution time
   latency            | check latency
   state              | current state of the checked object
@@ -310,6 +313,20 @@ Cache. Please make sure that the order is correct because the first match wins.
     # intervals like PNP4Nagios uses them per default
     pattern = ^icinga\.
     retentions = 1m:2d,5m:10d,30m:90d,360m:4y
+
+### <a id="influxdb-writer"></a> InfluxDB Writer
+
+Once there are new metrics available, Icinga 2 will directly write them to the
+defined InfluxDB HTTP API.
+
+You can enable the feature using
+
+    # icinga2 feature enable influxdb
+
+By default the [InfluxdbWriter](6-object-types.md#objecttype-influxdbwriter) feature
+expects the InfluxDB daemon to listen at `127.0.0.1` on port `8086`.
+
+More configuration details can be found [here](6-object-types.md#objecttype-influxdbwriter).
 
 ### <a id="gelfwriter"></a> GELF Writer
 
@@ -373,6 +390,7 @@ internal check statistic data to OpenTSDB:
   max_check_attempts | maximum check attempts until the hard state is reached
   reachable          | checked object is reachable
   downtime_depth     | number of downtimes this object is in
+  acknowledgement    | whether the object is acknowledged or not
   execution_time     | check execution time
   latency            | check latency
   state              | current state of the checked object
@@ -607,7 +625,7 @@ Icinga 1.x Classic UI requires this data set as part of its backend.
 
 > **Note**
 >
-> If you are not using any web interface or addon which uses these files
+> If you are not using any web interface or addon which uses these files,
 > you can safely disable this feature.
 
 

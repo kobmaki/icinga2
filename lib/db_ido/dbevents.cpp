@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -51,7 +51,7 @@ void DbEvents::StaticInitialize(void)
 	Checkable::OnAcknowledgementSet.connect(boost::bind(&DbEvents::AddAcknowledgement, _1, _4));
 	Checkable::OnAcknowledgementCleared.connect(boost::bind(&DbEvents::RemoveAcknowledgement, _1));
 
-	Checkable::OnNextCheckChanged.connect(boost::bind(&DbEvents::NextCheckChangedHandler, _1));
+	Checkable::OnNextCheckUpdated.connect(boost::bind(&DbEvents::NextCheckUpdatedHandler, _1));
 	Checkable::OnFlappingChanged.connect(boost::bind(&DbEvents::FlappingChangedHandler, _1));
 	Checkable::OnNotificationSentToAllUsers.connect(boost::bind(&DbEvents::LastNotificationChangedHandler, _1, _2));
 
@@ -89,7 +89,7 @@ void DbEvents::StaticInitialize(void)
 }
 
 /* check events */
-void DbEvents::NextCheckChangedHandler(const Checkable::Ptr& checkable)
+void DbEvents::NextCheckUpdatedHandler(const Checkable::Ptr& checkable)
 {
 	Host::Ptr host;
 	Service::Ptr service;
@@ -303,10 +303,10 @@ void DbEvents::AddComments(const Checkable::Ptr& checkable)
 {
 	std::set<Comment::Ptr> comments = checkable->GetComments();
 
-	if (comments.empty())
-		return;
-
 	std::vector<DbQuery> queries;
+
+	/* Ensure to delete all comments and then insert any or none.
+	 * We must purge obsolete comments in the database at all cost. */
 
 	DbQuery query1;
 	query1.Table = "comments";
@@ -403,19 +403,21 @@ void DbEvents::RemoveCommentInternal(std::vector<DbQuery>& queries, const Commen
 {
 	Checkable::Ptr checkable = comment->GetCheckable();
 
+	unsigned long entry_time = static_cast<long>(comment->GetEntryTime());
+
 	/* Status */
 	DbQuery query1;
 	query1.Table = "comments";
 	query1.Type = DbQueryDelete;
 	query1.Category = DbCatComment;
 	query1.WhereCriteria = new Dictionary();
-	query1.WhereCriteria->Set("object_id", checkable);
 	query1.WhereCriteria->Set("internal_comment_id", comment->GetLegacyId());
+	query1.WhereCriteria->Set("object_id", checkable);
+	query1.WhereCriteria->Set("comment_time", DbValue::FromTimestamp(entry_time));
+	query1.WhereCriteria->Set("instance_id", 0); /* DbConnection class fills in real ID */
 	queries.push_back(query1);
 
 	/* History - update deletion time for service/host */
-	unsigned long entry_time = static_cast<long>(comment->GetEntryTime());
-
 	double now = Utility::GetTime();
 	std::pair<unsigned long, unsigned long> time_bag = CompatUtility::ConvertTimestamp(now);
 
@@ -442,8 +444,8 @@ void DbEvents::AddDowntimes(const Checkable::Ptr& checkable)
 {
 	std::set<Downtime::Ptr> downtimes = checkable->GetDowntimes();
 
-	if (downtimes.empty())
-		return;
+	/* Ensure to delete all downtimes and then insert any or none.
+	 * We must purge obsolete downtimes in the database at all cost. */
 
 	std::vector<DbQuery> queries;
 
@@ -505,8 +507,9 @@ void DbEvents::AddDowntimeInternal(std::vector<DbQuery>& queries, const Downtime
 	fields1->Set("duration", downtime->GetDuration());
 	fields1->Set("scheduled_start_time", DbValue::FromTimestamp(downtime->GetStartTime()));
 	fields1->Set("scheduled_end_time", DbValue::FromTimestamp(downtime->GetEndTime()));
-	fields1->Set("was_started", 0);
-	fields1->Set("is_in_effect", 0);
+	fields1->Set("was_started", ((downtime->GetStartTime() <= Utility::GetTime()) ? 1 : 0));
+	fields1->Set("is_in_effect", (downtime->IsInEffect() ? 1 : 0));
+	fields1->Set("trigger_time", DbValue::FromTimestamp(downtime->GetTriggerTime()));
 	fields1->Set("instance_id", 0); /* DbConnection class fills in real ID */
 
 	String node = IcingaApplication::GetInstance()->GetNodeName();
@@ -527,6 +530,39 @@ void DbEvents::AddDowntimeInternal(std::vector<DbQuery>& queries, const Downtime
 	query1.Fields = fields1;
 
 	queries.push_back(query1);
+
+	/* host/service status */
+	if (!historical) {
+		Host::Ptr host;
+		Service::Ptr service;
+		tie(host, service) = GetHostService(checkable);
+
+		DbQuery query2;
+		if (service)
+			query2.Table = "servicestatus";
+		else
+			query2.Table = "hoststatus";
+
+		query2.Type = DbQueryUpdate;
+		query2.Category = DbCatState;
+		query2.StatusUpdate = true;
+		query2.Object = DbObject::GetOrCreateByObject(checkable);
+
+		Dictionary::Ptr fields2 = new Dictionary();
+		fields2->Set("scheduled_downtime_depth", checkable->GetDowntimeDepth());
+
+		query2.Fields = fields2;
+
+		query2.WhereCriteria = new Dictionary();
+		if (service)
+			query2.WhereCriteria->Set("service_object_id", service);
+		else
+			query2.WhereCriteria->Set("host_object_id", host);
+
+		query2.WhereCriteria->Set("instance_id", 0); /* DbConnection class fills in real ID */
+
+		queries.push_back(query2);
+	}
 }
 
 void DbEvents::RemoveDowntime(const Downtime::Ptr& downtime)
@@ -548,6 +584,7 @@ void DbEvents::RemoveDowntimeInternal(std::vector<DbQuery>& queries, const Downt
 	query1.WhereCriteria = new Dictionary();
 	query1.WhereCriteria->Set("object_id", checkable);
 	query1.WhereCriteria->Set("internal_downtime_id", downtime->GetLegacyId());
+	query1.WhereCriteria->Set("entry_time", DbValue::FromTimestamp(downtime->GetEntryTime()));
 	query1.WhereCriteria->Set("instance_id", 0); /* DbConnection class fills in real ID */
 	queries.push_back(query1);
 
@@ -564,6 +601,7 @@ void DbEvents::RemoveDowntimeInternal(std::vector<DbQuery>& queries, const Downt
 	fields3->Set("was_cancelled", downtime->GetWasCancelled() ? 1 : 0);
 	fields3->Set("actual_end_time", DbValue::FromTimestamp(time_bag.first));
 	fields3->Set("actual_end_time_usec", time_bag.second);
+	fields3->Set("is_in_effect", 0);
 	query3.Fields = fields3;
 
 	query3.WhereCriteria = new Dictionary();
@@ -623,7 +661,7 @@ void DbEvents::TriggerDowntime(const Downtime::Ptr& downtime)
 	fields1->Set("was_started", 1);
 	fields1->Set("actual_start_time", DbValue::FromTimestamp(time_bag.first));
 	fields1->Set("actual_start_time_usec", time_bag.second);
-	fields1->Set("is_in_effect", 1);
+	fields1->Set("is_in_effect", (downtime->IsInEffect() ? 1 : 0));
 	fields1->Set("trigger_time", DbValue::FromTimestamp(downtime->GetTriggerTime()));
 	fields1->Set("instance_id", 0); /* DbConnection class fills in real ID */
 
@@ -798,8 +836,7 @@ void DbEvents::AddNotificationHistory(const Notification::Ptr& notification, con
 	query1.Table = "notifications";
 	query1.Type = DbQueryInsert;
 	query1.Category = DbCatNotification;
-	/* store the object ptr for caching the insert id for this object */
-	query1.NotificationObject = notification;
+	query1.NotificationInsertID = new DbValue(DbValueObjectInsertID, -1);
 
 	Host::Ptr host;
 	Service::Ptr service;
@@ -833,15 +870,16 @@ void DbEvents::AddNotificationHistory(const Notification::Ptr& notification, con
 	query1.Fields = fields1;
 	DbObject::OnQuery(query1);
 
-	DbQuery query2;
-	query2.Table = "contactnotifications";
-	query2.Type = DbQueryInsert;
-	query2.Category = DbCatNotification;
+	std::vector<DbQuery> queries;
 
-	/* filtered users */
 	BOOST_FOREACH(const User::Ptr& user, users) {
 		Log(LogDebug, "DbEvents")
 		    << "add contact notification history for service '" << checkable->GetName() << "' and user '" << user->GetName() << "'.";
+
+		DbQuery query2;
+		query2.Table = "contactnotifications";
+		query2.Type = DbQueryInsert;
+		query2.Category = DbCatNotification;
 
 		Dictionary::Ptr fields2 = new Dictionary();
 		fields2->Set("contact_object_id", user);
@@ -850,12 +888,14 @@ void DbEvents::AddNotificationHistory(const Notification::Ptr& notification, con
 		fields2->Set("end_time", DbValue::FromTimestamp(time_bag.first));
 		fields2->Set("end_time_usec", time_bag.second);
 
-		fields2->Set("notification_id", notification); /* DbConnection class fills in real ID from notification insert id cache */
+		fields2->Set("notification_id", query1.NotificationInsertID);
 		fields2->Set("instance_id", 0); /* DbConnection class fills in real ID */
 
 		query2.Fields = fields2;
-		DbObject::OnQuery(query2);
+		queries.push_back(query2);
 	}
+
+	DbObject::OnMultipleQueries(queries);
 }
 
 /* statehistory */
@@ -1354,7 +1394,7 @@ void DbEvents::AddCheckableCheckHistory(const Checkable::Ptr& checkable, const C
 	double end = cr->GetExecutionEnd();
 	std::pair<unsigned long, unsigned long> time_bag_end = CompatUtility::ConvertTimestamp(end);
 
-	double execution_time = Service::CalculateExecutionTime(cr);
+	double execution_time = cr->CalculateExecutionTime();
 
 	fields1->Set("start_time", DbValue::FromTimestamp(time_bag_start.first));
 	fields1->Set("start_time_usec", time_bag_start.second);
@@ -1364,7 +1404,7 @@ void DbEvents::AddCheckableCheckHistory(const Checkable::Ptr& checkable, const C
 	fields1->Set("command_args", Empty);
 	fields1->Set("command_line", CompatUtility::GetCommandLine(checkable->GetCheckCommand()));
 	fields1->Set("execution_time", Convert::ToString(execution_time));
-	fields1->Set("latency", Convert::ToString(Service::CalculateLatency(cr)));
+	fields1->Set("latency", Convert::ToString(cr->CalculateLatency()));
 	fields1->Set("return_code", cr->GetExitStatus());
 	fields1->Set("output", CompatUtility::GetCheckResultOutput(cr));
 	fields1->Set("long_output", CompatUtility::GetCheckResultLongOutput(cr));

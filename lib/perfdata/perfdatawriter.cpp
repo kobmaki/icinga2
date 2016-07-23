@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -123,8 +123,15 @@ void PerfdataWriter::RotateFile(std::ofstream& output, const String& temp_path, 
 	if (output.good()) {
 		output.close();
 
-		String finalFile = perfdata_path + "." + Convert::ToString((long)Utility::GetTime());
-		(void) rename(temp_path.CStr(), finalFile.CStr());
+		if (Utility::PathExists(temp_path)) {
+			String finalFile = perfdata_path + "." + Convert::ToString((long)Utility::GetTime());
+			if (rename(temp_path.CStr(), finalFile.CStr()) < 0) {
+				BOOST_THROW_EXCEPTION(posix_error()
+				    << boost::errinfo_api_function("rename")
+				    << boost::errinfo_errno(errno)
+				    << boost::errinfo_file_name(temp_path));
+			}
+		}
 	}
 
 	output.open(temp_path.CStr());

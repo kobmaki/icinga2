@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)
+# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@ if(MSVC)
   )
 
   install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/windows-setup-agent/bin/\${CMAKE_INSTALL_CONFIG_NAME}/Icinga2SetupAgent.exe
+    FILES ${CMAKE_CURRENT_SOURCE_DIR}/windows-setup-agent/bin/\${CMAKE_INSTALL_CONFIG_NAME}/Icinga2SetupAgent.exe ${CMAKE_CURRENT_SOURCE_DIR}/windows-setup-agent/bin/\${CMAKE_INSTALL_CONFIG_NAME}/Icinga2SetupAgent.exe.config
     DESTINATION ${CMAKE_INSTALL_SBINDIR}
   )
 endif()

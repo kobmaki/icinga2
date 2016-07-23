@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -175,6 +175,17 @@ void TcpSocket::Connect(const String& node, const String& service)
 			func = "socket";
 
 			continue;
+		}
+
+		const int optTrue = 1;
+		if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char *>(&optTrue), sizeof(optTrue)) != 0) {
+#ifdef _WIN32
+			error = WSAGetLastError();
+#else /* _WIN32 */
+			error = errno;
+#endif /* _WIN32 */
+			Log(LogWarning, "TcpSocket")
+			    << "setsockopt() unable to enable TCP keep-alives with error code " << rc;
 		}
 
 		rc = connect(fd, info->ai_addr, info->ai_addrlen);

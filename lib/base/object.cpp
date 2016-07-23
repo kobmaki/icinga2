@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,16 +22,27 @@
 #include "base/dictionary.hpp"
 #include "base/primitivetype.hpp"
 #include "base/utility.hpp"
+#include "base/timer.hpp"
+#include "base/logger.hpp"
+#include "base/exception.hpp"
+#include <boost/foreach.hpp>
+#include <boost/lexical_cast.hpp>
 
 using namespace icinga;
 
 DEFINE_TYPE_INSTANCE(Object);
 
+#ifdef I2_LEAK_DEBUG
+static boost::mutex l_ObjectCountLock;
+static std::map<String, int> l_ObjectCounts;
+static Timer::Ptr l_ObjectCountTimer;
+#endif /* I2_LEAK_DEBUG */
+
 /**
  * Default constructor for the Object class.
  */
 Object::Object(void)
-	: m_References(0)
+	: m_References(0), m_Mutex(0)
 #ifdef I2_DEBUG
 	, m_LockOwner(0)
 #endif /* I2_DEBUG */
@@ -41,7 +52,9 @@ Object::Object(void)
  * Destructor for the Object class.
  */
 Object::~Object(void)
-{ }
+{
+	delete reinterpret_cast<boost::recursive_mutex *>(m_Mutex);
+}
 
 /**
  * Returns a string representation for the object.
@@ -87,6 +100,63 @@ Value Object::GetField(int id) const
 		BOOST_THROW_EXCEPTION(std::runtime_error("Invalid field ID."));
 }
 
+bool Object::HasOwnField(const String& field) const
+{
+	Type::Ptr type = GetReflectionType();
+
+	if (!type)
+		return false;
+
+	return type->GetFieldId(field) != -1;
+}
+
+Value Object::GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const
+{
+	Type::Ptr type = GetReflectionType();
+
+	if (!type)
+		return Empty;
+
+	int fid = type->GetFieldId(field);
+
+	if (fid == -1)
+		return GetPrototypeField(const_cast<Object *>(this), field, true, debugInfo);
+
+	if (sandboxed) {
+		Field fieldInfo = type->GetFieldInfo(fid);
+
+		if (fieldInfo.Attributes & FANoUserView)
+			BOOST_THROW_EXCEPTION(ScriptError("Accessing the field '" + field + "' for type '" + type->GetName() + "' is not allowed in sandbox mode.", debugInfo));
+	}
+
+	return GetField(fid);
+}
+
+void Object::SetFieldByName(const String& field, const Value& value, const DebugInfo& debugInfo)
+{
+	Type::Ptr type = GetReflectionType();
+
+	if (!type)
+		BOOST_THROW_EXCEPTION(ScriptError("Cannot set field on object.", debugInfo));
+
+	int fid = type->GetFieldId(field);
+
+	if (fid == -1)
+		BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' does not exist.", debugInfo));
+
+	try {
+		SetField(fid, value);
+	} catch (const boost::bad_lexical_cast&) {
+		Field fieldInfo = type->GetFieldInfo(fid);
+		Type::Ptr ftype = Type::GetByName(fieldInfo.TypeName);
+		BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' cannot be set to value of type '" + value.GetTypeName() + "', expected '" + ftype->GetName() + "'", debugInfo));
+	} catch (const std::bad_cast&) {
+		Field fieldInfo = type->GetFieldInfo(fid);
+		Type::Ptr ftype = Type::GetByName(fieldInfo.TypeName);
+		BOOST_THROW_EXCEPTION(ScriptError("Attribute '" + field + "' cannot be set to value of type '" + value.GetTypeName() + "', expected '" + ftype->GetName() + "'", debugInfo));
+	}
+}
+
 void Object::Validate(int types, const ValidationUtils& utils)
 {
 	/* Nothing to do here. */
@@ -116,4 +186,66 @@ Type::Ptr Object::GetReflectionType(void) const
 {
 	return Object::TypeInstance;
 }
+
+Value icinga::GetPrototypeField(const Value& context, const String& field, bool not_found_error, const DebugInfo& debugInfo)
+{
+	Type::Ptr ctype = context.GetReflectionType();
+	Type::Ptr type = ctype;
+
+	do {
+		Object::Ptr object = type->GetPrototype();
+
+		if (object && object->HasOwnField(field))
+			return object->GetFieldByName(field, false, debugInfo);
+
+		type = type->GetBaseType();
+	} while (type);
+
+	if (not_found_error)
+		BOOST_THROW_EXCEPTION(ScriptError("Invalid field access (for value of type '" + ctype->GetName() + "'): '" + field + "'", debugInfo));
+	else
+		return Empty;
+}
+
+#ifdef I2_LEAK_DEBUG
+void icinga::TypeAddObject(Object *object)
+{
+	boost::mutex::scoped_lock lock(l_ObjectCountLock);
+	String typeName = Utility::GetTypeName(typeid(*object));
+	l_ObjectCounts[typeName]++;
+}
+
+void icinga::TypeRemoveObject(Object *object)
+{
+	boost::mutex::scoped_lock lock(l_ObjectCountLock);
+	String typeName = Utility::GetTypeName(typeid(*object));
+	l_ObjectCounts[typeName]--;
+}
+
+static void TypeInfoTimerHandler(void)
+{
+	boost::mutex::scoped_lock lock(l_ObjectCountLock);
+
+	typedef std::map<String, int>::value_type kv_pair;
+	BOOST_FOREACH(kv_pair& kv, l_ObjectCounts) {
+		if (kv.second == 0)
+			continue;
+
+		Log(LogInformation, "TypeInfo")
+		    << kv.second << " " << kv.first << " objects";
+
+		kv.second = 0;
+	}
+}
+
+static void StartTypeInfoTimer(void)
+{
+	l_ObjectCountTimer = new Timer();
+	l_ObjectCountTimer->SetInterval(10);
+	l_ObjectCountTimer->OnTimerExpired.connect(boost::bind(TypeInfoTimerHandler));
+	l_ObjectCountTimer->Start();
+}
+
+INITIALIZE_ONCE(StartTypeInfoTimer);
+#endif /* I2_LEAK_DEBUG */
 

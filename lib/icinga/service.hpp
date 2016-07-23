@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -45,6 +45,7 @@ public:
 
 	virtual bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
 
+	virtual bool IsStateOK(ServiceState state) override;
 	virtual void SaveLastState(ServiceState state, double timestamp) override;
 
 	static ServiceState StateFromString(const String& state);

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,6 +20,7 @@
 #include "remote/httphandler.hpp"
 #include "remote/httputility.hpp"
 #include "base/singleton.hpp"
+#include "base/exception.hpp"
 #include <boost/algorithm/string/join.hpp>
 
 using namespace icinga;
@@ -94,13 +95,23 @@ void HttpHandler::ProcessRequest(const ApiUser::Ptr& user, HttpRequest& request,
 
 	std::reverse(handlers.begin(), handlers.end());
 
+	Dictionary::Ptr params;
+
+	try {
+		params = HttpUtility::FetchRequestParameters(request);
+	} catch (const std::exception& ex) {
+		HttpUtility::SendJsonError(response, 400, "Invalid request body: " + DiagnosticInformation(ex, false));
+		return;
+	}
+
 	bool processed = false;
 	BOOST_FOREACH(const HttpHandler::Ptr& handler, handlers) {
-		if (handler->HandleRequest(user, request, response)) {
+		if (handler->HandleRequest(user, request, response, params)) {
 			processed = true;
 			break;
 		}
 	}
+
 	if (!processed) {
 		String path = boost::algorithm::join(request.RequestUrl->GetPath(), "/");
 		HttpUtility::SendJsonError(response, 404, "The requested path '" + path +

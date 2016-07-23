@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,8 +34,8 @@ class Endpoint : ConfigObject
 		default {{{ return 86400; }}}
 	};
 
-	[state] double local_log_position;
-	[state] double remote_log_position;
+	[state] Timestamp local_log_position;
+	[state] Timestamp remote_log_position;
 
 	[no_user_modify] bool connecting;
 	[no_user_modify] bool syncing;

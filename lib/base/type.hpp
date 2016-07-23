@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -86,7 +86,7 @@ public:
 
 	String GetPluralName(void) const;
 
-	Object::Ptr Instantiate(void) const;
+	Object::Ptr Instantiate(const std::vector<Value>& args) const;
 
 	bool IsAssignableFrom(const Type::Ptr& other) const;
 

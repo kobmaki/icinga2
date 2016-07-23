@@ -1,7 +1,7 @@
 %{
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -137,6 +137,7 @@ code				{ return T_CODE; }
 load_after			{ return T_LOAD_AFTER; }
 library				{ return T_LIBRARY; }
 abstract			{ yylval->num = TAAbstract; return T_CLASS_ATTRIBUTE; }
+vararg_constructor		{ yylval->num = TAVarArgConstructor; return T_CLASS_ATTRIBUTE; }
 config				{ yylval->num = FAConfig; return T_FIELD_ATTRIBUTE; }
 state				{ yylval->num = FAState; return T_FIELD_ATTRIBUTE; }
 enum				{ yylval->num = FAEnum; return T_FIELD_ATTRIBUTE; }

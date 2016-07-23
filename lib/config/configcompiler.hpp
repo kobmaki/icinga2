@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -62,6 +62,13 @@ struct EItemInfo
 {
 	bool SideEffect;
 	CompilerDebugInfo DebugInfo;
+};
+
+enum FlowControlType
+{
+	FlowControlReturn = 1,
+	FlowControlContinue = 2,
+	FlowControlBreak = 4
 };
 
 struct ZoneFragment
@@ -156,6 +163,7 @@ public:
 	std::stack<String> m_FKVar;
 	std::stack<String> m_FVVar;
 	std::stack<Expression *> m_FTerm;
+	std::stack<int> m_FlowControlInfo;
 };
 
 }

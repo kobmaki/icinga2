@@ -272,7 +272,7 @@ Signature:
     function max(...);
 
 Returns the largest argument. A variable number of arguments can be specified.
-If no arguments are given -Infinity is returned.
+If no arguments are given, -Infinity is returned.
 
 ### <a id="math-min"></a> Math.min
 
@@ -281,7 +281,7 @@ Signature:
     function min(...);
 
 Returns the smallest argument. A variable number of arguments can be specified.
-If no arguments are given +Infinity is returned.
+If no arguments are given, +Infinity is returned.
 
 ### <a id="math-pow"></a> Math.pow
 
@@ -399,7 +399,7 @@ Signature:
     function find(str, start);
 
 Returns the zero-based index at which the string `str` was found in the string. If the string
-was not found -1 is returned. `start` specifies the zero-based index at which `find` should
+was not found, -1 is returned. `start` specifies the zero-based index at which `find` should
 start looking for the string (defaults to 0 when not specified).
 
 Example:
@@ -413,7 +413,7 @@ Signature:
     function contains(str);
 
 Returns `true` if the string `str` was found in the string. If the string
-was not found `false` is returned. Use [find](19-library-reference.md#string-find)
+was not found, `false` is returned. Use [find](19-library-reference.md#string-find)
 for getting the index instead.
 
 Example:
@@ -508,6 +508,14 @@ Signature:
 
 Returns a copy of the string in reverse order.
 
+### <a id="string-trim"></a> String#trim
+
+Signature:
+
+    function trim();
+
+Removes trailing whitespaces and returns the string.
+
 ## <a id="object-type"></a> Object type
 
 This is the base type for all types in the Icinga application.
@@ -522,7 +530,7 @@ Returns a copy of the object. Note that for object elements which are
 reference values (e.g. objects such as arrays or dictionaries) the entire
 object is recursively copied.
 
-## <a id="object-to-string"></a> Object#to_string
+### <a id="object-to-string"></a> Object#to_string
 
 Signature:
 
@@ -536,7 +544,7 @@ Example:
 
     [ 3, true ].to_string() /* Returns "[ 3.000000, true ]" */
 
-## <a id="object-type-field"></a> Object#type
+### <a id="object-type-field"></a> Object#type
 
 Signature:
 
@@ -582,7 +590,7 @@ Signature:
 
     Object prototype;
 
-Returns the prototype object for the type. When an attribute is accessed on an object that doesn't exist the prototype object is checked to see if an attribute with the requested name exists there. If it does that attribute's value is returned.
+Returns the prototype object for the type. When an attribute is accessed on an object that doesn't exist the prototype object is checked to see if an attribute with the requested name exists. If it does, the attribute's value is returned.
 
 The prototype functionality is used to implement methods.
 
@@ -749,6 +757,8 @@ Returns a list of keys for all items that are currently in the dictionary.
 
 ## <a id="scriptfunction-type"></a> Function type
 
+Inherits methods from the [Object type](19-library-reference.md#object-type).
+
 ### <a id="scriptfunction-call"></a> Function#call
 
 Signature:
@@ -789,3 +799,68 @@ Example:
 
 	set_x.callv(dict, args) /* Invokes set_x using `dict` as `this` */
 
+## <a id="datetime-type"></a> DateTime type
+
+Inherits methods from the [Object type](19-library-reference.md#object-type).
+
+### <a id="datetime-ctor"></a> DateTime constructor
+
+Signature:
+
+    function DateTime()
+    function DateTime(unixTimestamp)
+    function DateTime(year, month, day)
+    function DateTime(year, month, day, hours, minutes, seconds)
+
+Constructs a new DateTime object. When no arguments are specified for the constructor a new
+DateTime object representing the current time is created.
+
+Example:
+
+    var d1 = DateTime() /* current time */
+    var d2 = DateTime(2016, 5, 21) /* midnight April 21st, 2016 (local time) */
+
+### <a id="datetime-arithmetic"></a> DateTime arithmetic
+
+Subtracting two DateTime objects yields the interval between them, in seconds.
+
+Example:
+
+    var delta = DateTime() - DateTime(2016, 5, 21) /* seconds since midnight April 21st, 2016 */
+
+Subtracting a number from a DateTime object yields a new DateTime object that is further in the past:
+
+Example:
+
+    var dt = DateTime() - 2 * 60 * 60 /* Current time minus 2 hours */
+
+Adding a number to a DateTime object yields a new DateTime object that is in the future:
+
+Example:
+
+    var dt = DateTime() + 24 * 60 60 /* Current time plus 24 hours */
+
+### <a id="datetime-format"></a> DateTime#format
+
+Signature:
+
+    function format(fmt)
+
+Returns a string representation for the DateTime object using the specified format string.
+The format string may contain format conversion placeholders as specified in strftime(3).
+
+Example:
+
+    var s = DateTime(2016, 4, 21).format("%A") /* Sets s to "Thursday". */
+
+### <a id="datetime-tostring"></a> DateTime#to_string
+
+Signature:
+
+    function to_string()
+
+Returns a string representation for the DateTime object. Uses a suitable default format.
+
+Example:
+
+    var s = DateTime(2016, 4, 21).to_string() /* Sets s to "2016-04-21 00:00:00 +0200". */

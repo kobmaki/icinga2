@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -123,16 +123,19 @@ bool FilterUtility::EvaluateFilter(ScriptFrame& frame, Expression *filter,
 
 		Object::Ptr joinedObj = target->NavigateField(fid);
 
-		vars->Set(field.Name, joinedObj);
+		if (field.NavigationName)
+			vars->Set(field.NavigationName, joinedObj);
+		else
+			vars->Set(field.Name, joinedObj);
 	}
 
 	return Convert::ToBool(filter->Evaluate(frame));
 }
 
 static void FilteredAddTarget(ScriptFrame& permissionFrame, Expression *permissionFilter,
-    ScriptFrame& frame, Expression *ufilter, std::vector<Value>& result, const Object::Ptr& target)
+    ScriptFrame& frame, Expression *ufilter, std::vector<Value>& result, const String& variableName, const Object::Ptr& target)
 {
-	if (FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target) && FilterUtility::EvaluateFilter(frame, ufilter, target))
+	if (FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName) && FilterUtility::EvaluateFilter(frame, ufilter, target, variableName))
 		result.push_back(target);
 }
 
@@ -184,7 +187,7 @@ void FilterUtility::CheckPermission(const ApiUser::Ptr& user, const String& perm
 		BOOST_THROW_EXCEPTION(ScriptError("Missing permission: " + requiredPermission));
 }
 
-std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query, const ApiUser::Ptr& user)
+std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query, const ApiUser::Ptr& user, const String& variableName)
 {
 	std::vector<Value> result;
 
@@ -208,10 +211,13 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 			attr = "name";
 
 		if (query->Contains(attr)) {
-			Object::Ptr target = provider->GetTargetByName(type, HttpUtility::GetLastParameter(query, attr));
+			String name = HttpUtility::GetLastParameter(query, attr);
+			Object::Ptr target = provider->GetTargetByName(type, name);
 
-			if (FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target))
-				result.push_back(target);
+			if (!FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName))
+				BOOST_THROW_EXCEPTION(ScriptError("Access denied to object '" + name + "' of type '" + type + "'"));
+
+			result.push_back(target);
 		}
 
 		attr = provider->GetPluralName(type);
@@ -224,8 +230,10 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 				BOOST_FOREACH(const String& name, names) {
 					Object::Ptr target = provider->GetTargetByName(type, name);
 
-					if (FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target))
-						result.push_back(target);
+					if (!FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName))
+						BOOST_THROW_EXCEPTION(ScriptError("Access denied to object '" + name + "' of type '" + type + "'"));
+
+					result.push_back(target);
 				}
 			}
 		}
@@ -267,7 +275,7 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 		try {
 			provider->FindTargets(type, boost::bind(&FilteredAddTarget,
 			    boost::ref(permissionFrame), permissionFilter,
-			    boost::ref(frame), ufilter, boost::ref(result), _1));
+			    boost::ref(frame), ufilter, boost::ref(result), variableName, _1));
 		} catch (const std::exception& ex) {
 			delete ufilter;
 			throw;

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -66,6 +66,18 @@ public:
 	static Value UpdateRepositoryAPIHandler(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& params);
 
 	static Dictionary::Ptr MakeCheckResultMessage(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
+
+	static void SendNotificationsHandler(const Checkable::Ptr& checkable, NotificationType type,
+	    const CheckResult::Ptr& cr, const String& author, const String& text, const MessageOrigin::Ptr& origin);
+	static Value SendNotificationsAPIHandler(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& params);
+
+	static void NotificationSentUserHandler(const Notification::Ptr& notification, const Checkable::Ptr& checkable, const User::Ptr& user,
+	    NotificationType notificationType, const CheckResult::Ptr& cr, const String& author, const String& commentText, const String& command, const MessageOrigin::Ptr& origin);
+	static Value NotificationSentUserAPIHandler(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& params);
+
+	static void NotificationSentAllUsersHandler(const Notification::Ptr& notification, const Checkable::Ptr& checkable, const std::set<User::Ptr>& users,
+	    NotificationType notificationType, const CheckResult::Ptr& cr, const String& author, const String& commentText, const MessageOrigin::Ptr& origin);
+	static Value NotificationSentAllUsersAPIHandler(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& params);
 };
 
 }

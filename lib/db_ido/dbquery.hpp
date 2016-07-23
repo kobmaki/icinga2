@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,6 +21,7 @@
 #define DBQUERY_H
 
 #include "db_ido/i2-db_ido.hpp"
+#include "db_ido/dbvalue.hpp"
 #include "icinga/customvarobject.hpp"
 #include "base/dictionary.hpp"
 #include "base/configobject.hpp"
@@ -32,28 +33,29 @@ enum DbQueryType
 {
 	DbQueryInsert = 1,
 	DbQueryUpdate = 2,
-	DbQueryDelete = 4
+	DbQueryDelete = 4,
+	DbQueryNewTransaction = 8
 };
 
 enum DbQueryCategory
 {
-	DbCatInvalid = -1,
+	DbCatInvalid = 0, //-1 is required for DbCatEverything
+	DbCatEverything = ~0,
 
-	DbCatConfig = (1 << 0),
-	DbCatState = (1 << 1),
-
-	DbCatAcknowledgement = (1 << 2),
-	DbCatComment = (1 << 3),
-	DbCatDowntime = (1 << 4),
-	DbCatEventHandler = (1 << 5),
-	DbCatExternalCommand = (1 << 6),
-	DbCatFlapping = (1 << 7),
-	DbCatCheck = (1 << 8),
-	DbCatLog = (1 << 9),
-	DbCatNotification = (1 << 10),
-	DbCatProgramStatus = (1 << 11),
-	DbCatRetention = (1 << 12),
-	DbCatStateHistory = (1 << 13)
+	DbCatConfig = 1,
+	DbCatState = 2,
+	DbCatAcknowledgement = 4,
+	DbCatComment = 8,
+	DbCatDowntime = 16,
+	DbCatEventHandler = 32,
+	DbCatExternalCommand = 64,
+	DbCatFlapping = 128,
+	DbCatCheck = 256,
+	DbCatLog = 512,
+	DbCatNotification = 1024,
+	DbCatProgramStatus = 2048,
+	DbCatRetention = 4096,
+	DbCatStateHistory = 8192
 };
 
 class DbObject;
@@ -67,7 +69,7 @@ struct I2_DB_IDO_API DbQuery
 	Dictionary::Ptr Fields;
 	Dictionary::Ptr WhereCriteria;
 	intrusive_ptr<DbObject> Object;
-	intrusive_ptr<CustomVarObject> NotificationObject;
+	DbValue::Ptr NotificationInsertID;
 	bool ConfigUpdate;
 	bool StatusUpdate;
 	WorkQueuePriority Priority;
@@ -77,6 +79,11 @@ struct I2_DB_IDO_API DbQuery
 	DbQuery(void)
 		: Type(0), Category(DbCatInvalid), ConfigUpdate(false), StatusUpdate(false), Priority(PriorityLow)
 	{ }
+
+	static const std::map<String, int>& GetCategoryFilterMap(void);
+
+private:
+	static std::map<String, int> m_CategoryFilterMap;
 };
 
 }

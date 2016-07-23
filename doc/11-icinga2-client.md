@@ -14,16 +14,16 @@ monitoring and high-availability, please continue reading in
 
 > **Tip**
 >
-> Don't panic - there are CLI commands available, including setup wizards for easy installation
+> Don't panic -- there are CLI commands available, including setup wizards for easy installation
 > with SSL certificates.
-> If you prefer to use your own CA (for example Puppet) you can do that as well.
+> If you prefer to use your own CA (for example Puppet), you can do that as well.
 
 
 ## <a id="icinga2-client-scenarios"></a> Client Scenarios
 
 * Clients with [local configuration](11-icinga2-client.md#icinga2-client-configuration-local), sending their inventory to the master
 * Clients as [command execution bridge](11-icinga2-client.md#icinga2-client-configuration-command-bridge) without local configuration
-* Clients receive their configuration from the master ([Cluster config sync](11-icinga2-client.md#icinga2-client-configuration-master-config-sync))
+* Clients receive their configuration from the master using the [cluster config sync](11-icinga2-client.md#icinga2-client-configuration-master-config-sync)
 
 Keep the [naming convention](13-distributed-monitoring-ha.md#cluster-naming-convention) for nodes in mind.
 
@@ -43,7 +43,7 @@ Keep the following hints in mind:
 * You can blacklist remote nodes entirely. They are then ignored on `node update-config`
 on the master.
 * Your remote instance can have local configuration **and** act as remote command execution bridge.
-* You can use the `global` cluster zones to sync check commands, templates, etc to your remote clients.
+* You can use the `global` cluster zones to sync check commands, templates, etc. to your remote clients.
 Be it just for command execution or for helping the local configuration.
 * If your remote clients shouldn't have local configuration, remove `conf.d` inclusion from `icinga2`
 and simply use the cluster configuration sync.
@@ -76,7 +76,7 @@ and zone configuration.
 
 ### <a id="icinga2-client-installation-master-setup"></a> Setup the Master for Remote Clients
 
-If you are planning to use the [remote Icinga 2 clients](11-icinga2-client.md#icinga2-client)
+If you are planning to use the [remote Icinga 2 clients](11-icinga2-client.md#icinga2-client),
 you'll first need to update your master setup.
 
 Your master setup requires the following
@@ -200,7 +200,7 @@ one for you already.
 > and must remain on the master providing the CSR Auto-Signing functionality for security reasons.
 
 The client setup wizard will ask you to generate a valid ticket number using its CN.
-If you already know your remote client's Common Names (CNs) - usually the FQDN - you
+If you already know your remote client's Common Names (CNs) -- usually the FQDN --, you
 can generate all ticket numbers on-demand.
 
 This is also reasonable if you are not capable of installing the remote client, but
@@ -370,6 +370,7 @@ Required information:
 
 * The client common name (CN). Use the FQDN, e.g. `icinga2-node2.localdomain`.
 * The master host and zone name. Pass that to `pki save-cert` as `--host` parameter for example.
+ * Optional: Master endpoint host and port information for the `--endpoint` parameter.
 * The client ticket number generated on the master (`icinga2 pki ticket --cn icinga2-node2.localdomain`)
 
 Generate a new local self-signed certificate.
@@ -408,6 +409,11 @@ the previously stored trusted master certificate.
     --master_host icinga2-node1.localdomain \
     --trustedcert /etc/icinga2/pki/trusted-master.crt
 
+In case the client should connect to the master node, you'll
+need to modify the `--endpoint` parameter using the format `cn,host,port`.
+
+    --endpoint icinga2-node1.localdomain,192.168.56.101,5665
+
 Restart Icinga 2 once complete.
 
     # service icinga2 restart
@@ -418,33 +424,94 @@ Restart Icinga 2 once complete.
 Download the MSI-Installer package from [http://packages.icinga.org/windows/](http://packages.icinga.org/windows/).
 
 Requirements:
+
 * Windows Vista/Server 2008 or higher
 * [Microsoft .NET Framework 2.0](http://www.microsoft.com/de-de/download/details.aspx?id=1639) if not already installed.
 
-The setup wizard will install Icinga 2 and then continue with SSL certificate generation,
-CSR-Autosigning and configuration setup.
+The installer package includes the [NSClient++](http://www.nsclient.org/) so Icinga 2 can
+use its built-in plugins. You can use the [nscp-local commands from the ITL](7-icinga-template-library.md#nscp-plugin-check-commands)
+for these plugins.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_installer_01.png)
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_installer_02.png)
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_installer_03.png)
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_installer_04.png)
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_installer_05.png)
+
+The graphical installer will offer to run the Icinga 2 setup wizard after the installation.
+You can also manually run the Icinga 2 setup wizard from the start menu.
+
+On a fresh installation the setup wizard will guide you through the initial configuration
+as well as the required details for SSL certificate generation using CSR-Autosigning.
 
 You'll need the following configuration details:
 
 * The client common name (CN). Defaults to FQDN.
-* The client's local zone name. Defaults to FQDN.
-* The master endpoint name. Look into your master setup `zones.conf` file for the proper name.
-* The master endpoint connection information. Your master's IP address and port (defaults to 5665)
 * The [request ticket number](11-icinga2-client.md#csr-autosigning-requirements) generated on your master
 for CSR Auto-Signing
-* Bind host/port for the Api feature (optional)
 
-Once install is done, Icinga 2 is automatically started as a Windows service.
+Example on the master:
 
-The Icinga 2 configuration is located inside the installation path and can be edited with
-your favorite editor.
+    icinga2 pki ticket --cn DESKTOP-IHRPO96
+
+Fill in the required information and click `Add` to add a new master connection.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_01.png)
+
+Add the following details:
+
+* The master endpoint name. Look into your master setup `zones.conf` file for the proper name.
+* The master endpoint connection information. Your master's IP address and port (defaults to 5665)
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_02.png)
+
+You can optionally enable the following settings:
+
+* Accept commands from master (client as [command execution bridge](11-icinga2-client.md#icinga2-client-configuration-command-bridge)).
+* Accept config updates from master ([client receiving configuration](11-icinga2-client.md#icinga2-client-scenarios))
+* Install/Update NSClient++
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_03.png)
+
+The next step allows you to verify the CA presented by the master.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_04.png)
+
+If you have chosen to install/update the NSClient++ package, the Icinga 2 setup wizard will ask
+you to do so.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_05.png)
+
+Finish the setup wizard.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_06.png)
+
+Once install and configuration is done, Icinga 2 is automatically started as a Windows service.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_running_service.png)
+
+The Icinga 2 configuration is located inside the `C:\ProgramData\icinga2` directory.
+If you click `Examine Config` in the setup wizard, it will open a new explorer window.
+
+![Icinga 2 Windows Setup](images/icinga2-client/icinga2_windows_setup_wizard_examine_config.png)
+
+The configuration files can be modified with your favorite editor.
 
 Configuration validation is done similar to the linux pendant on the Windows shell:
 
     C:> icinga2.exe daemon -C
 
+**Note**: You have to run this command in a shell with `administrator` permissions.
 
+In case you want to restart the Icinga 2 service, run `services.msc` and restart the
+`icinga2` service. Alternatively you can use the `net {start,stop}` CLI commands.
 
+#### <a id="icinga2-client-installation-client-setup-windows-silent"></a> Silent Windows Client Setup
+
+If you want to install the client silently/unattended, use the `/qn` modifier. The
+installation should not trigger a restart but if you want to be completly sure you can use the `/norestart` modifier.
+
+    C:> msiexec /i C:\Icinga2-v2.4.5-x86.msi /qn /norestart
 
 ## <a id="icinga2-client-configuration-modes"></a> Client Configuration Modes
 
@@ -458,7 +525,7 @@ This is considered as independant satellite using a local scheduler, configurati
 and the possibility to add Icinga 2 features on demand.
 
 There is no difference in the configuration syntax on clients to any other Icinga 2 installation.
-You can also use additional features like notifications directly on the remote client, if you are
+You can also use additional features like notifications directly on the remote client if you are
 required to. Basically everything a single Icinga 2 instance provides by default.
 
 The following convention applies to remote clients:
@@ -521,10 +588,11 @@ After updating the configuration repository, make sure to reload Icinga 2.
     # service icinga2 reload
 
 Using systemd:
+
     # systemctl reload icinga2
 
 
-The `update-config` CLI command will fail, if there are uncommitted changes for the
+The `update-config` CLI command will fail if there are uncommitted changes for the
 configuration repository or if your master is part of a HA setup (see https://dev.icinga.org/issues/8292 for details).
 Please review these changes manually, or clear the commit and try again. This is a
 safety hook to prevent unwanted manual changes to be committed by a updating the
@@ -537,7 +605,7 @@ client discovered objects only.
 
 ### <a id="icinga2-client-configuration-command-bridge"></a> Clients as Command Execution Bridge
 
-Similar to other addons (NRPE, NSClient++, etc) the remote Icinga 2 client will only
+Similar to other addons (NRPE, NSClient++, etc.) the remote Icinga 2 client will only
 execute commands the master instance is sending. There are no local host or service
 objects configured, only the check command definitions must be configured.
 
@@ -566,7 +634,7 @@ Icinga 2 already provides a variety of `CheckCommand` definitions using the Plug
 Check Commands, but you should also modify the local configuration inside `commands.conf`
 for example.
 
-If you're wondering why you need to keep the same command configuration on the master and
+If you're wondering, why you need to keep the same command configuration on the master and
 remote client: Icinga 2 calculates all required runtime macros used as command arguments on
 the master and sends that information to the client.
 In case you want to limit command arguments or handles values in a different manner, you
@@ -676,7 +744,7 @@ rules must only be configured once.
 ### <a id="icinga2-client-configuration-master-config-sync"></a> Clients with Master Config Sync
 
 This is an advanced configuration mode which requires knowledge about the Icinga 2
-cluster configuration and its object relation (Zones, Endpoints, etc) and the way you
+cluster configuration and its object relation (Zones, Endpoints, etc.) and the way you
 will be able to sync the configuration from the master to the remote satellite or client.
 
 Please continue reading in the [distributed monitoring chapter](13-distributed-monitoring-ha.md#distributed-monitoring-high-availability),

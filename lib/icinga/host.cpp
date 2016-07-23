@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -37,6 +37,15 @@ REGISTER_TYPE(Host);
 void Host::OnAllConfigLoaded(void)
 {
 	ObjectImpl<Host>::OnAllConfigLoaded();
+
+	String zoneName = GetZoneName();
+
+	if (!zoneName.IsEmpty()) {
+		Zone::Ptr zone = Zone::GetByName(zoneName);
+
+		if (zone && zone->IsGlobal())
+			BOOST_THROW_EXCEPTION(std::invalid_argument("Host '" + GetName() + "' cannot be put into global zone '" + zone->GetName() + "'."));
+	}
 
 	HostGroup::EvaluateObjectRules(this);
 
@@ -173,6 +182,11 @@ HostState Host::GetLastHardState(void) const
 	return CalculateState(GetLastHardStateRaw());
 }
 
+bool Host::IsStateOK(ServiceState state)
+{
+	return Host::CalculateState(state) == HostUp;
+}
+
 void Host::SaveLastState(ServiceState state, double timestamp)
 {
 	if (state == ServiceOK || state == ServiceWarning)
@@ -223,7 +237,7 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 		*result = StateToString(GetState());
 		return true;
 	} else if (macro == "state_id") {
-		*result = Convert::ToString(GetState());
+		*result = GetState();
 		return true;
 	} else if (macro == "state_type") {
 		*result = StateTypeToString(GetStateType());
@@ -232,19 +246,19 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 		*result = StateToString(GetLastState());
 		return true;
 	} else if (macro == "last_state_id") {
-		*result = Convert::ToString(GetLastState());
+		*result = GetLastState();
 		return true;
 	} else if (macro == "last_state_type") {
 		*result = StateTypeToString(GetLastStateType());
 		return true;
 	} else if (macro == "last_state_change") {
-		*result = Convert::ToString((long)GetLastStateChange());
+		*result = static_cast<long>(GetLastStateChange());
 		return true;
 	} else if (macro == "downtime_depth") {
-		*result = Convert::ToString((long)GetDowntimeDepth());
+		*result = GetDowntimeDepth();
 		return true;
 	} else if (macro == "duration_sec") {
-		*result = Convert::ToString((long)(Utility::GetTime() - GetLastStateChange()));
+		*result = Utility::GetTime() - GetLastStateChange();
 		return true;
 	} else if (macro == "num_services" || macro == "num_services_ok" || macro == "num_services_warning"
 		    || macro == "num_services_unknown" || macro == "num_services_critical") {
@@ -267,7 +281,7 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 				count++;
 			}
 
-			*result = Convert::ToString(count);
+			*result = count;
 			return true;
 	}
 
@@ -275,19 +289,16 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 
 	if (cr) {
 		if (macro == "latency") {
-			*result = Convert::ToString(Service::CalculateLatency(cr));
+			*result = cr->CalculateLatency();
 			return true;
 		} else if (macro == "execution_time") {
-			*result = Convert::ToString(Service::CalculateExecutionTime(cr));
+			*result = cr->CalculateExecutionTime();
 			return true;
 		} else if (macro == "output") {
 			*result = cr->GetOutput();
 			return true;
 		} else if (macro == "perfdata") {
 			*result = PluginUtility::FormatPerfdata(cr->GetPerformanceData());
-			return true;
-		} else if (macro == "last_check") {
-			*result = Convert::ToString((long)cr->GetScheduleStart());
 			return true;
 		} else if (macro == "check_source") {
 			*result = cr->GetCheckSource();

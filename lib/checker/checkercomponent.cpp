@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -121,6 +121,9 @@ void CheckerComponent::CheckThreadProc(void)
 
 		double wait = checkable->GetNextCheck() - Utility::GetTime();
 
+		if (Checkable::GetPendingChecks() >= GetConcurrentChecks())
+			wait = 0.5;
+
 		if (wait > 0) {
 			/* Wait for the next check. */
 			m_CV.timed_wait(lock, boost::posix_time::milliseconds(wait * 1000));
@@ -159,7 +162,8 @@ void CheckerComponent::CheckThreadProc(void)
 
 			if (tp && !tp->IsInside(Utility::GetTime())) {
 				Log(LogNotice, "CheckerComponent")
-				    << "Skipping check for object '" << checkable->GetName() << "': not in check_period";
+				    << "Skipping check for object '" << checkable->GetName()
+				    << "': not in check period '" << tp->GetName() << "'";
 				check = false;
 			}
 		}

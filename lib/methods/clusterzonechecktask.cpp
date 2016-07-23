@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -61,6 +61,15 @@ void ClusterZoneCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const Che
 	String zoneName = MacroProcessor::ResolveMacros("$cluster_zone$", resolvers, checkable->GetLastCheckResult(),
 	    NULL, MacroProcessor::EscapeCallback(), resolvedMacros, useResolvedMacros);
 
+	String missingLagWarning;
+	String missingLagCritical;
+
+	double lagWarning = MacroProcessor::ResolveMacros("$cluster_lag_warning$", resolvers, checkable->GetLastCheckResult(),
+	    &missingLagWarning, MacroProcessor::EscapeCallback(), resolvedMacros, useResolvedMacros);
+
+	double lagCritical = MacroProcessor::ResolveMacros("$cluster_lag_critical$", resolvers, checkable->GetLastCheckResult(),
+	    &missingLagCritical, MacroProcessor::EscapeCallback(), resolvedMacros, useResolvedMacros);
+
 	if (resolvedMacros && !useResolvedMacros)
 		return;
 
@@ -101,8 +110,19 @@ void ClusterZoneCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const Che
 		cr->SetOutput("Zone '" + zoneName + "' is connected. Log lag: " + Utility::FormatDuration(zoneLag));
 	}
 
+	/* Check whether the thresholds have been resolved and compare them */
+	if (missingLagCritical.IsEmpty() && zoneLag > lagCritical) {
+		cr->SetState(ServiceCritical);
+		cr->SetOutput("Zone '" + zoneName + "' is connected. Log lag: " + Utility::FormatDuration(zoneLag)
+		    + " greater than critical threshold: " + Utility::FormatDuration(lagCritical));
+	} else if (missingLagWarning.IsEmpty() && zoneLag > lagWarning) {
+		cr->SetState(ServiceWarning);
+		cr->SetOutput("Zone '" + zoneName + "' is connected. Log lag: " + Utility::FormatDuration(zoneLag)
+		    + " greater than warning threshold: " + Utility::FormatDuration(lagWarning));
+	}
+
 	Array::Ptr perfdata = new Array();
-	perfdata->Add(new PerfdataValue("slave_lag", zoneLag));
+	perfdata->Add(new PerfdataValue("slave_lag", zoneLag, false, "s", lagWarning, lagCritical));
 	cr->SetPerformanceData(perfdata);
 
 	checkable->ProcessCheckResult(cr);

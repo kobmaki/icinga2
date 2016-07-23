@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -89,9 +89,11 @@ public:
 	long GetSchedulingOffset(void);
 	void SetSchedulingOffset(long offset);
 
-	void UpdateNextCheck(void);
+	void UpdateNextCheck(const MessageOrigin::Ptr& origin = MessageOrigin::Ptr());
 
 	bool HasBeenChecked(void) const;
+	virtual bool IsStateOK(ServiceState state) = 0;
+
 	virtual double GetLastCheck(void) const override;
 
 	virtual void SaveLastState(ServiceState state, double timestamp) = 0;
@@ -104,32 +106,25 @@ public:
 
 	Endpoint::Ptr GetCommandEndpoint(void) const;
 
-	bool IsCheckPending(void) const;
-
-	static double CalculateExecutionTime(const CheckResult::Ptr& cr);
-	static double CalculateLatency(const CheckResult::Ptr& cr);
-
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, const MessageOrigin::Ptr&)> OnNewCheckResult;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, StateType, const MessageOrigin::Ptr&)> OnStateChange;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, std::set<Checkable::Ptr>, const MessageOrigin::Ptr&)> OnReachabilityChanged;
 	static boost::signals2::signal<void (const Checkable::Ptr&, NotificationType, const CheckResult::Ptr&,
-	    const String&, const String&)> OnNotificationsRequested;
-	static boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
-	    const NotificationType&, const CheckResult::Ptr&, const String&,
-	    const String&)> OnNotificationSendStart;
+	    const String&, const String&, const MessageOrigin::Ptr&)> OnNotificationsRequested;
 	static boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const User::Ptr&,
-	    const NotificationType&, const CheckResult::Ptr&, const String&,
-	    const String&, const String&)> OnNotificationSentToUser;
+	    const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
+	    const MessageOrigin::Ptr&)> OnNotificationSentToUser;
 	static boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
 	    const NotificationType&, const CheckResult::Ptr&, const String&,
-	    const String&)> OnNotificationSentToAllUsers;
+	    const String&, const MessageOrigin::Ptr&)> OnNotificationSentToAllUsers;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const String&, const String&, AcknowledgementType,
 					     bool, double, const MessageOrigin::Ptr&)> OnAcknowledgementSet;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const MessageOrigin::Ptr&)> OnAcknowledgementCleared;
+	static boost::signals2::signal<void (const Checkable::Ptr&)> OnNextCheckUpdated;
 	static boost::signals2::signal<void (const Checkable::Ptr&)> OnEventCommandExecuted;
 
 	/* Downtimes */
-	int GetDowntimeDepth(void) const;
+	virtual int GetDowntimeDepth(void) const override;
 
 	void RemoveAllDowntimes(void);
 	void TriggerDowntimes(void);
@@ -180,6 +175,10 @@ public:
 
 	virtual void ValidateCheckInterval(double value, const ValidationUtils& utils) override;
 
+	static void IncreasePendingChecks(void);
+	static void DecreasePendingChecks(void);
+	static int GetPendingChecks(void);
+
 protected:
 	virtual void Start(bool runtimeCreated) override;
 
@@ -187,6 +186,9 @@ private:
 	mutable boost::mutex m_CheckableMutex;
 	bool m_CheckRunning;
 	long m_SchedulingOffset;
+
+	static boost::mutex m_StatsMutex;
+	static int m_PendingChecks;
 
 	/* Downtimes */
 	std::set<Downtime::Ptr> m_Downtimes;

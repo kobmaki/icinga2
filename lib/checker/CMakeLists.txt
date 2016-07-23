@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)
+# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -45,10 +45,7 @@ if(NOT WIN32)
   install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_SYSCONFDIR}/icinga2/features-enabled\")")
   install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink ../features-available/checker.conf \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_SYSCONFDIR}/icinga2/features-enabled/checker.conf\")")
 else()
-  install(
-    FILES ${PROJECT_SOURCE_DIR}/etc/icinga2/features-enabled/checker.conf
-    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-enabled
-  )
+  install_if_not_exists(${PROJECT_SOURCE_DIR}/etc/icinga2/features-enabled/checker.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-enabled)
 endif()
 
 install(

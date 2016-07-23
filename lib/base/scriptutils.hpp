@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -52,6 +52,7 @@ public:
 	static void Assert(const Value& arg);
 	static String MsiGetComponentPathShim(const String& component);
 	static Array::Ptr TrackParents(const Object::Ptr& parent);
+	static double Ptr(const Object::Ptr& object);
 
 private:
 	ScriptUtils(void);

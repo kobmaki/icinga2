@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -130,9 +130,6 @@ void DbObject::SendStatusUpdate(void)
 	if (query.Table != "endpointstatus" && query.Table != "zonestatus") {
 		String node = IcingaApplication::GetInstance()->GetNodeName();
 
-		Log(LogDebug, "DbObject")
-		    << "Endpoint node: '" << node << "' status update for '" << GetObject()->GetName() << "'";
-
 		Endpoint::Ptr endpoint = Endpoint::GetByName(node);
 		if (endpoint)
 			query.Fields->Set("endpoint_object_id", endpoint);
@@ -164,9 +161,7 @@ void DbObject::SendVarsConfigUpdate(void)
 	Dictionary::Ptr vars = CompatUtility::GetCustomAttributeConfig(custom_var_object);
 
 	if (vars) {
-		Log(LogDebug, "DbObject")
-		    << "Updating object vars for '" << custom_var_object->GetName() << "'";
-
+		std::vector<DbQuery> queries;
 		ObjectLock olock (vars);
 
 		BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
@@ -202,8 +197,10 @@ void DbObject::SendVarsConfigUpdate(void)
 			query.WhereCriteria->Set("varname", kv.first);
 			query.Object = this;
 
-			OnQuery(query);
+			queries.push_back(query);
 		}
+
+		OnMultipleQueries(queries);
 	}
 }
 
@@ -219,9 +216,7 @@ void DbObject::SendVarsStatusUpdate(void)
 	Dictionary::Ptr vars = CompatUtility::GetCustomAttributeConfig(custom_var_object);
 
 	if (vars) {
-		Log(LogDebug, "DbObject")
-		    << "Updating object vars for '" << custom_var_object->GetName() << "'";
-
+		std::vector<DbQuery> queries;
 		ObjectLock olock (vars);
 
 		BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
@@ -257,8 +252,10 @@ void DbObject::SendVarsStatusUpdate(void)
 			query.WhereCriteria->Set("varname", kv.first);
 			query.Object = this;
 
-			OnQuery(query);
+			queries.push_back(query);
 		}
+
+		OnMultipleQueries(queries);
 	}
 }
 
@@ -343,9 +340,6 @@ void DbObject::StateChangedHandler(const ConfigObject::Ptr& object)
 void DbObject::VarsChangedHandler(const CustomVarObject::Ptr& object)
 {
 	DbObject::Ptr dbobj = GetOrCreateByObject(object);
-
-	Log(LogDebug, "DbObject")
-	    << "Vars changed for object '" << object->GetName() << "'";
 
 	if (!dbobj)
 		return;

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -166,6 +166,7 @@ String Comment::AddComment(const Checkable::Ptr& checkable, CommentType entryTyp
 	attrs->Set("text", text);
 	attrs->Set("expire_time", expireTime);
 	attrs->Set("entry_type", entryType);
+	attrs->Set("entry_time", Utility::GetTime());
 
 	Host::Ptr host;
 	Service::Ptr service;
@@ -174,6 +175,11 @@ String Comment::AddComment(const Checkable::Ptr& checkable, CommentType entryTyp
 	attrs->Set("host_name", host->GetName());
 	if (service)
 		attrs->Set("service_name", service->GetShortName());
+
+	String zone = checkable->GetZoneName();
+
+	if (!zone.IsEmpty())
+		attrs->Set("zone", zone);
 
 	String config = ConfigObjectUtility::CreateObjectConfig(Comment::TypeInstance, fullName, true, Array::Ptr(), attrs);
 
@@ -190,6 +196,9 @@ String Comment::AddComment(const Checkable::Ptr& checkable, CommentType entryTyp
 
 	Comment::Ptr comment = Comment::GetByName(fullName);
 
+	if (!comment)
+		BOOST_THROW_EXCEPTION(std::runtime_error("Could not create comment."));
+
 	Log(LogNotice, "Comment")
 	    << "Added comment '" << comment->GetName() << "'.";
 
@@ -202,8 +211,6 @@ void Comment::RemoveComment(const String& id, const MessageOrigin::Ptr& origin)
 
 	if (!comment)
 		return;
-
-	int legacy_id = comment->GetLegacyId();
 
 	Log(LogNotice, "Comment")
 	    << "Removed comment '" << comment->GetName() << "' from object '" << comment->GetCheckable()->GetName() << "'.";
@@ -241,7 +248,8 @@ void Comment::CommentsExpireTimerHandler(void)
 	}
 
 	BOOST_FOREACH(const Comment::Ptr& comment, comments) {
-		if (comment->IsExpired())
+		/* Only remove comment which are activated after daemon start. */
+		if (comment->IsActive() && comment->IsExpired())
 			RemoveComment(comment->GetName());
 	}
 }

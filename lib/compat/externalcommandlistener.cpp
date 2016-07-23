@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -94,7 +94,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 	}
 
 	for (;;) {
-		int fd = open(commandPath.CStr(), O_RDONLY | O_NONBLOCK);
+		int fd = open(commandPath.CStr(), O_RDWR | O_NONBLOCK);
 
 		if (fd < 0) {
 			Log(LogCritical, "ExternalCommandListener")
@@ -110,9 +110,23 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 			sock->Poll(true, false);
 
 			char buffer[8192];
-			size_t rc = sock->Read(buffer, sizeof(buffer));
-			if (rc <= 0)
+			size_t rc;
+
+			try {
+				rc = sock->Read(buffer, sizeof(buffer));
+			} catch (const std::exception& ex) {
+				/* We have read all data. */
+				if (errno == EAGAIN)
+					continue;
+
+				Log(LogWarning, "ExternalCommandListener")
+				    << "Cannot read from command pipe." << DiagnosticInformation(ex);
 				break;
+			}
+
+			/* Empty pipe (EOF) */
+			if (rc == 0)
+				continue;
 
 			fifo->Write(buffer, rc);
 
@@ -130,7 +144,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 					ExternalCommandProcessor::Execute(command);
 				} catch (const std::exception& ex) {
 					Log(LogWarning, "ExternalCommandListener")
-					    << "External command failed." << DiagnosticInformation(ex);
+					    << "External command failed: " << DiagnosticInformation(ex);
 				}
 			}
 		}

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -61,14 +61,23 @@ ExpressionResult Expression::Evaluate(ScriptFrame& frame, DebugHint *dhint) cons
 			<< "Executing:\n" << msgbuf.str();*/
 #endif /* I2_DEBUG */
 
-		return DoEvaluate(frame, dhint);
+		frame.IncreaseStackDepth();
+		ExpressionResult result = DoEvaluate(frame, dhint);
+		frame.DecreaseStackDepth();
+		return result;
 	} catch (ScriptError& ex) {
+		frame.DecreaseStackDepth();
+
 		ScriptBreakpoint(frame, &ex, GetDebugInfo());
 		throw;
 	} catch (const std::exception& ex) {
+		frame.DecreaseStackDepth();
+
 		BOOST_THROW_EXCEPTION(ScriptError("Error while evaluating expression: " + String(ex.what()), GetDebugInfo())
 		    << boost::errinfo_nested_exception(boost::current_exception()));
 	}
+
+	frame.DecreaseStackDepth();
 }
 
 bool Expression::GetReference(ScriptFrame& frame, bool init_dict, Value *parent, String *index, DebugHint **dhint) const
@@ -113,7 +122,7 @@ ExpressionResult VariableExpression::DoEvaluate(ScriptFrame& frame, DebugHint *d
 
 	if (frame.Locals && frame.Locals->Get(m_Variable, &value))
 		return value;
-	else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && VMOps::HasField(frame.Self, m_Variable))
+	else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(m_Variable))
 		return VMOps::GetField(frame.Self, m_Variable, frame.Sandboxed, m_DebugInfo);
 	else
 		return ScriptGlobal::Get(m_Variable);
@@ -128,7 +137,7 @@ bool VariableExpression::GetReference(ScriptFrame& frame, bool init_dict, Value 
 
 		if (dhint)
 			*dhint = NULL;
-	} else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && VMOps::HasField(frame.Self, m_Variable)) {
+	} else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(m_Variable)) {
 		*parent = frame.Self;
 
 		if (dhint && *dhint)
@@ -415,15 +424,15 @@ ExpressionResult FunctionCallExpression::DoEvaluate(ScriptFrame& frame, DebugHin
 	}
 
 	if (vfunc.IsObjectType<Type>()) {
-		if (m_Args.empty())
-			return VMOps::ConstructorCall(vfunc, m_DebugInfo);
-		else if (m_Args.size() == 1) {
-			ExpressionResult argres = m_Args[0]->Evaluate(frame);
+		std::vector<Value> arguments;
+		BOOST_FOREACH(Expression *arg, m_Args) {
+			ExpressionResult argres = arg->Evaluate(frame);
 			CHECK_RESULT(argres);
 
-			return VMOps::CopyConstructorCall(vfunc, argres.GetValue(), m_DebugInfo);
-		} else
-			BOOST_THROW_EXCEPTION(ScriptError("Too many arguments for constructor.", m_DebugInfo));
+			arguments.push_back(argres.GetValue());
+		}
+
+		return VMOps::ConstructorCall(vfunc, arguments, m_DebugInfo);
 	}
 
 	if (!vfunc.IsObjectType<Function>())

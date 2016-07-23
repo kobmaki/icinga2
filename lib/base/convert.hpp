@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -82,6 +82,10 @@ public:
 
 	static String ToString(const String& val);
 	static String ToString(const Value& val);
+	static String ToString(double val);
+
+	static double ToDateTimeValue(double val);
+	static double ToDateTimeValue(const Value& val);
 
 private:
 	Convert(void);

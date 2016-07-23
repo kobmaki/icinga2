@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -39,8 +39,15 @@ REGISTER_TYPE(IdoMysqlConnection);
 REGISTER_STATSFUNCTION(IdoMysqlConnection, &IdoMysqlConnection::StatsFunc);
 
 IdoMysqlConnection::IdoMysqlConnection(void)
-	: m_QueryQueue(500000)
+	: m_QueryQueue(10000000)
 { }
+
+void IdoMysqlConnection::OnConfigLoaded(void)
+{
+	ObjectImpl<IdoMysqlConnection>::OnConfigLoaded();
+
+	m_QueryQueue.SetName("IdoMysqlConnection, " + GetName());
+}
 
 void IdoMysqlConnection::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata)
 {
@@ -187,7 +194,10 @@ void IdoMysqlConnection::Reconnect(void)
 	ClearIDCache();
 
 	String ihost, isocket_path, iuser, ipasswd, idb;
+	String isslKey, isslCert, isslCa, isslCaPath, isslCipher;
 	const char *host, *socket_path, *user , *passwd, *db;
+	const char *sslKey, *sslCert, *sslCa, *sslCaPath, *sslCipher;
+	bool enableSsl;
 	long port;
 
 	ihost = GetHost();
@@ -196,12 +206,25 @@ void IdoMysqlConnection::Reconnect(void)
 	ipasswd = GetPassword();
 	idb = GetDatabase();
 
+	enableSsl = GetEnableSsl();
+	isslKey = GetSslKey();
+	isslCert = GetSslCert();
+	isslCa = GetSslCa();
+	isslCaPath = GetSslCapath();
+	isslCipher = GetSslCipher();
+
 	host = (!ihost.IsEmpty()) ? ihost.CStr() : NULL;
 	port = GetPort();
 	socket_path = (!isocket_path.IsEmpty()) ? isocket_path.CStr() : NULL;
 	user = (!iuser.IsEmpty()) ? iuser.CStr() : NULL;
 	passwd = (!ipasswd.IsEmpty()) ? ipasswd.CStr() : NULL;
 	db = (!idb.IsEmpty()) ? idb.CStr() : NULL;
+
+	sslKey = (!isslKey.IsEmpty()) ? isslKey.CStr() : NULL;
+	sslCert = (!isslCert.IsEmpty()) ? isslCert.CStr() : NULL;
+	sslCa = (!isslCa.IsEmpty()) ? isslCa.CStr() : NULL;
+	sslCaPath = (!isslCaPath.IsEmpty()) ? isslCaPath.CStr() : NULL;
+	sslCipher = (!isslCipher.IsEmpty()) ? isslCipher.CStr() : NULL;
 
 	/* connection */
 	if (!mysql_init(&m_Connection)) {
@@ -211,10 +234,13 @@ void IdoMysqlConnection::Reconnect(void)
 		BOOST_THROW_EXCEPTION(std::bad_alloc());
 	}
 
+	if (enableSsl)
+		mysql_ssl_set(&m_Connection, sslKey, sslCert, sslCa, sslCaPath, sslCipher);
+
 	if (!mysql_real_connect(&m_Connection, host, user, passwd, db, port, socket_path, CLIENT_FOUND_ROWS | CLIENT_MULTI_STATEMENTS)) {
 		Log(LogCritical, "IdoMysqlConnection")
 		    << "Connection to database '" << db << "' with user '" << user << "' on '" << host << ":" << port
-		    << "' failed: \"" << mysql_error(&m_Connection) << "\"";
+		    << "' " << (enableSsl ? "(SSL enabled) " : "") << "failed: \"" << mysql_error(&m_Connection) << "\"";
 
 		BOOST_THROW_EXCEPTION(std::runtime_error(mysql_error(&m_Connection)));
 	}
@@ -337,6 +363,11 @@ void IdoMysqlConnection::Reconnect(void)
 	/* set session time zone to utc */
 	Query("SET SESSION TIME_ZONE='+00:00'");
 
+	Query("BEGIN");
+
+	/* update programstatus table */
+	UpdateProgramStatus();
+
 	/* record connection */
 	Query("INSERT INTO " + GetTablePrefix() + "conninfo " +
 	    "(instance_id, connect_time, last_checkin_time, agent_name, agent_version, connect_type, data_start_time) VALUES ("
@@ -367,7 +398,7 @@ void IdoMysqlConnection::Reconnect(void)
 			activeDbObjs.push_back(dbobj);
 	}
 
-	Query("BEGIN");
+	SetIDCacheValid(true);
 
 	BOOST_FOREACH(const DbObject::Ptr& dbobj, activeDbObjs) {
 		if (dbobj->GetObject() == NULL) {
@@ -424,6 +455,11 @@ void IdoMysqlConnection::AsyncQuery(const String& query, const boost::function<v
 	aq.Query = query;
 	aq.Callback = callback;
 	m_AsyncQueries.push_back(aq);
+
+	if (m_AsyncQueries.size() > 25000) {
+		FinishAsyncQueries();
+		InternalNewTransaction();
+	}
 }
 
 void IdoMysqlConnection::FinishAsyncQueries(void)
@@ -704,14 +740,6 @@ bool IdoMysqlConnection::FieldToEscapedString(const String& key, const Value& va
 	} else if (key == "session_token") {
 		*result = m_SessionToken;
 		return true;
-	} else if (key == "notification_id") {
-		DbReference ref = GetNotificationInsertID(value);
-
-		if (!ref.IsValid())
-			return false;
-
-		*result = static_cast<long>(ref);
-		return true;
 	}
 
 	Value rawvalue = DbValue::ExtractValue(value);
@@ -723,6 +751,9 @@ bool IdoMysqlConnection::FieldToEscapedString(const String& key, const Value& va
 			*result = 0;
 			return true;
 		}
+
+		if (!IsIDCacheValid())
+			return false;
 
 		DbReference dbrefcol;
 
@@ -752,6 +783,14 @@ bool IdoMysqlConnection::FieldToEscapedString(const String& key, const Value& va
 		*result = Value(msgbuf.str());
 	} else if (DbValue::IsTimestampNow(value)) {
 		*result = "NOW()";
+	} else if (DbValue::IsObjectInsertID(value)) {
+		long id = static_cast<long>(rawvalue);
+
+		if (id <= 0)
+			return false;
+
+		*result = id;
+		return true;
 	} else {
 		Value fvalue;
 
@@ -775,13 +814,17 @@ void IdoMysqlConnection::ExecuteQuery(const DbQuery& query)
 
 void IdoMysqlConnection::ExecuteMultipleQueries(const std::vector<DbQuery>& queries)
 {
-	ASSERT(!queries.empty());
+	if (queries.empty())
+		return;
 
 	m_QueryQueue.Enqueue(boost::bind(&IdoMysqlConnection::InternalExecuteMultipleQueries, this, queries), queries[0].Priority, true);
 }
 
 bool IdoMysqlConnection::CanExecuteQuery(const DbQuery& query)
 {
+	if (query.Object && !IsIDCacheValid())
+		return false;
+
 	if (query.WhereCriteria) {
 		ObjectLock olock(query.WhereCriteria);
 		Value value;
@@ -817,7 +860,7 @@ void IdoMysqlConnection::InternalExecuteMultipleQueries(const std::vector<DbQuer
 		return;
 
 	BOOST_FOREACH(const DbQuery& query, queries) {
-		ASSERT(query.Category != DbCatInvalid);
+		ASSERT(query.Type == DbQueryNewTransaction || query.Category != DbCatInvalid);
 
 		if (!CanExecuteQuery(query)) {
 			m_QueryQueue.Enqueue(boost::bind(&IdoMysqlConnection::InternalExecuteMultipleQueries, this, queries), query.Priority);
@@ -834,10 +877,20 @@ void IdoMysqlConnection::InternalExecuteQuery(const DbQuery& query, DbQueryType 
 {
 	AssertOnWorkQueue();
 
-	if ((query.Category & GetCategories()) == 0)
+	if (!GetConnected())
 		return;
 
-	if (!GetConnected())
+	if (query.Type == DbQueryNewTransaction) {
+		InternalNewTransaction();
+		return;
+	}
+
+	if (!CanExecuteQuery(query)) {
+		m_QueryQueue.Enqueue(boost::bind(&IdoMysqlConnection::InternalExecuteQuery, this, query, typeOverride), query.Priority);
+		return;
+	}
+
+	if (GetCategoryFilter() != DbCatEverything && (query.Category & GetCategoryFilter()) == 0)
 		return;
 
 	if (query.Object && query.Object->GetObject()->GetExtension("agent_check").ToBool())
@@ -969,11 +1022,8 @@ void IdoMysqlConnection::FinishExecuteQuery(const DbQuery& query, int type, bool
 			SetStatusUpdate(query.Object, true);
 	}
 
-	if (type == DbQueryInsert && query.Table == "notifications" && query.NotificationObject) { // FIXME remove hardcoded table name
-		SetNotificationInsertID(query.NotificationObject, GetLastInsertID());
-		Log(LogDebug, "IdoMysqlConnection")
-		    << "saving contactnotification notification_id=" << static_cast<long>(GetLastInsertID());
-	}
+	if (type == DbQueryInsert && query.Table == "notifications" && query.NotificationInsertID)
+		query.NotificationInsertID->SetValue(static_cast<long>(GetLastInsertID()));
 }
 
 void IdoMysqlConnection::CleanUpExecuteQuery(const String& table, const String& time_column, double max_age)

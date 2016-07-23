@@ -22,13 +22,13 @@ the [support overview page](https://support.icinga.org).
 
 ## <a id="contribute"></a> Contribute
 
-There are many ways to contribute to Icinga - whether it be sending patches,
+There are many ways to contribute to Icinga -- whether it be sending patches,
 testing, reporting bugs, or reviewing and updating the documentation. Every
 contribution is appreciated!
 
 Please get in touch with the Icinga team at https://www.icinga.org/community/.
 
-If you want to help update this documentation please read
+If you want to help update this documentation, please read
 [this howto](https://wiki.icinga.org/display/community/Update+the+Icinga+2+documentation).
 
 ### <a id="development-info"></a> Icinga 2 Development
@@ -50,9 +50,311 @@ More details in the [Icinga FAQ](https://www.icinga.org/icinga/faq/).
 
 * [Register](https://accounts.icinga.org/register) an Icinga account.
 * Create a new issue at the [Icinga 2 Development Tracker](https://dev.icinga.org/projects/i2).
-* When reporting a bug, please include the details described in the [Troubleshooting](16-troubleshooting.md#troubleshooting-information-required) chapter (version, configs, logs, etc).
+* When reporting a bug, please include the details described in the [Troubleshooting](16-troubleshooting.md#troubleshooting-information-required) chapter (version, configs, logs, etc.).
 
 ## <a id="whats-new"></a> What's New
+
+### What's New in Version 2.4.10
+
+#### Bugfixes
+
+* Bug [11812](https://dev.icinga.org/issues/11812 "Bug 11812") (Checker): Checker component doesn't execute any checks for command_endpoint
+
+### What's New in Version 2.4.9
+
+#### Changes
+
+This release fixes a number of issues introduced in 2.4.8.
+
+#### Bugfixes
+
+* Bug [11801](https://dev.icinga.org/issues/11801 "Bug 11801") (Perfdata): Error: Function call 'rename' for file '/var/spool/icinga2/tmp/service-perfdata' failed with error code 2, 'No such file or directory'
+* Bug [11804](https://dev.icinga.org/issues/11804 "Bug 11804") (Configuration): Segfault when trying to start 2.4.8
+* Bug [11807](https://dev.icinga.org/issues/11807 "Bug 11807") (Compat): Command Pipe thread 100% CPU Usage
+
+### What's New in Version 2.4.8
+
+#### Changes
+
+* Bugfixes
+* Support for limiting the maximum number of concurrent checks (new configuration option)
+* HA-aware features now wait for connected cluster nodes in the same zone (e.g. DB IDO)
+* The 'icinga' check now alerts on failed reloads
+
+#### Feature
+
+* Feature [8137](https://dev.icinga.org/issues/8137 "Feature 8137") (Checker): Maximum concurrent service checks
+* Feature [9236](https://dev.icinga.org/issues/9236 "Feature 9236") (Perfdata): PerfdataWriter: Better failure handling for file renames across file systems
+* Feature [9997](https://dev.icinga.org/issues/9997 "Feature 9997") (libmethods): "icinga" check should have state WARNING when the last reload failed
+* Feature [10581](https://dev.icinga.org/issues/10581 "Feature 10581") (ITL): Provide icingacli in the ITL
+* Feature [11556](https://dev.icinga.org/issues/11556 "Feature 11556") (libbase): Add support for subjectAltName in SSL certificates
+* Feature [11651](https://dev.icinga.org/issues/11651 "Feature 11651") (CLI): Implement SNI support for the CLI commands
+* Feature [11720](https://dev.icinga.org/issues/11720 "Feature 11720") (ITL): 'disk' CheckCommand: Exclude 'cgroup' and 'tracefs' by default
+* Feature [11748](https://dev.icinga.org/issues/11748 "Feature 11748") (Cluster): Remove unused cluster commands
+* Feature [11765](https://dev.icinga.org/issues/11765 "Feature 11765") (Cluster): Only activate HARunOnce objects once there's a cluster connection
+* Feature [11768](https://dev.icinga.org/issues/11768 "Feature 11768") (Documentation): Add the category to the generated changelog
+
+#### Bugfixes
+
+* Bug [9989](https://dev.icinga.org/issues/9989 "Bug 9989") (Configuration): Service apply without name possible
+* Bug [10426](https://dev.icinga.org/issues/10426 "Bug 10426") (libicinga): Icinga crashes with a segfault on receiving a lot of check results for nonexisting hosts/services
+* Bug [10717](https://dev.icinga.org/issues/10717 "Bug 10717") (Configuration): Comments and downtimes of deleted checkable objects are not deleted
+* Bug [11046](https://dev.icinga.org/issues/11046 "Bug 11046") (Cluster): Icinga2 agent gets stuck after disconnect and won't relay messages
+* Bug [11112](https://dev.icinga.org/issues/11112 "Bug 11112") (Compat): Empty author/text attribute for comment/downtimes external commands causing crash
+* Bug [11147](https://dev.icinga.org/issues/11147 "Bug 11147") (libicinga): "day -X" time specifications are parsed incorrectly
+* Bug [11158](https://dev.icinga.org/issues/11158 "Bug 11158") (libicinga): Crash with empty ScheduledDowntime 'ranges' attribute
+* Bug [11374](https://dev.icinga.org/issues/11374 "Bug 11374") (API): Icinga2 API: deleting service with cascade=1 does not delete dependant notification
+* Bug [11390](https://dev.icinga.org/issues/11390 "Bug 11390") (Compat): Command pipe overloaded: Can't send external Icinga command to the local command file
+* Bug [11396](https://dev.icinga.org/issues/11396 "Bug 11396") (API): inconsistent API /v1/objects/* response for PUT requests
+* Bug [11589](https://dev.icinga.org/issues/11589 "Bug 11589") (libicinga): notification sent out during flexible downtime
+* Bug [11645](https://dev.icinga.org/issues/11645 "Bug 11645") (Documentation): Incorrect chapter headings for Object#to_string and Object#type
+* Bug [11646](https://dev.icinga.org/issues/11646 "Bug 11646") (Configuration): Wrong log severity causes segfault
+* Bug [11686](https://dev.icinga.org/issues/11686 "Bug 11686") (API): Icinga Crash with the workflow Create_Host-> Downtime for the Host ->  Delete Downtime -> Remove Host
+* Bug [11711](https://dev.icinga.org/issues/11711 "Bug 11711") (libicinga): Expired downtimes are not removed
+* Bug [11714](https://dev.icinga.org/issues/11714 "Bug 11714") (libbase): Crash in UnameHelper
+* Bug [11742](https://dev.icinga.org/issues/11742 "Bug 11742") (Documentation): Missing documentation for event commands w/ execution bridge
+* Bug [11757](https://dev.icinga.org/issues/11757 "Bug 11757") (API): API: Missing error handling for invalid JSON request body
+* Bug [11767](https://dev.icinga.org/issues/11767 "Bug 11767") (DB IDO): Ensure that program status updates are immediately updated in DB IDO
+* Bug [11779](https://dev.icinga.org/issues/11779 "Bug 11779") (API): Incorrect variable names for joined fields in filters
+
+### What's New in Version 2.4.7
+
+#### Bugfixes
+
+* Bug [11639](https://dev.icinga.org/issues/11639 "Bug 11639"): Crash in IdoMysqlConnection::ExecuteMultipleQueries
+
+### What's New in Version 2.4.6
+
+#### Feature
+
+* Feature [11638](https://dev.icinga.org/issues/11638 "Feature 11638"): Update RELEASE.md
+
+#### Bugfixes
+
+* Bug [11628](https://dev.icinga.org/issues/11628 "Bug 11628"): Docs: Zone attribute 'endpoints' is an array
+* Bug [11634](https://dev.icinga.org/issues/11634 "Bug 11634"): Icinga 2 fails to build on Ubuntu Xenial
+* Bug [11635](https://dev.icinga.org/issues/11635 "Bug 11635"): Failed assertion in IdoPgsqlConnection::FieldToEscapedString
+
+### What's New in Version 2.4.5
+
+#### Changes
+
+* Windows Installer changed from NSIS to MSI
+* New configuration attribute for hosts and services: check_timeout (overrides the CheckCommand's timeout when set)
+* ITL updates
+* Lots of bugfixes
+
+#### Feature
+
+* Feature [9283](https://dev.icinga.org/issues/9283 "Feature 9283"): Implement support for overriding check command timeout
+* Feature [9618](https://dev.icinga.org/issues/9618 "Feature 9618"): Add Windows setup wizard screenshots
+* Feature [11098](https://dev.icinga.org/issues/11098 "Feature 11098"): Add --method parameter for check_{oracle,mysql,mssql}_health CheckCommands
+* Feature [11194](https://dev.icinga.org/issues/11194 "Feature 11194"): Add --units, --rate and --rate-multiplier support for the snmpv3 check command
+* Feature [11399](https://dev.icinga.org/issues/11399 "Feature 11399"): Update .mailmap for Markus Frosch
+* Feature [11437](https://dev.icinga.org/issues/11437 "Feature 11437"): Add silent install / reference to NSClient++ to documentation
+* Feature [11449](https://dev.icinga.org/issues/11449 "Feature 11449"): Build 64-bit packages for Windows
+* Feature [11473](https://dev.icinga.org/issues/11473 "Feature 11473"): Update NSClient++ to version 0.4.4.19
+* Feature [11474](https://dev.icinga.org/issues/11474 "Feature 11474"): Install 64-bit version of NSClient++ on 64-bit versions of Windows
+* Feature [11585](https://dev.icinga.org/issues/11585 "Feature 11585"): Make sure to update the agent wizard banner
+* Feature [11587](https://dev.icinga.org/issues/11587 "Feature 11587"): Update chocolatey uninstall script for the MSI package
+
+#### Bugfixes
+
+* Bug [9249](https://dev.icinga.org/issues/9249 "Bug 9249"): logrotate fails since the "su" directive was removed
+* Bug [10624](https://dev.icinga.org/issues/10624 "Bug 10624"): Add application manifest for the Windows agent wizard
+* Bug [10843](https://dev.icinga.org/issues/10843 "Bug 10843"): DB IDO: downtime is not in effect after restart
+* Bug [11106](https://dev.icinga.org/issues/11106 "Bug 11106"): Too many assign where filters cause stack overflow
+* Bug [11224](https://dev.icinga.org/issues/11224 "Bug 11224"): Socket Exceptions (Operation not permitted) while reading from API
+* Bug [11227](https://dev.icinga.org/issues/11227 "Bug 11227"): Downtimes and Comments are not synced to child zones
+* Bug [11258](https://dev.icinga.org/issues/11258 "Bug 11258"): Incorrect base URL in the icinga-rpm-release packages for Fedora
+* Bug [11336](https://dev.icinga.org/issues/11336 "Bug 11336"): Use retry_interval instead of check_interval for first OK -> NOT-OK state change
+* Bug [11347](https://dev.icinga.org/issues/11347 "Bug 11347"): Symlink subfolders not followed/considered for config files
+* Bug [11382](https://dev.icinga.org/issues/11382 "Bug 11382"): Downtimes are not always activated/expired on restart
+* Bug [11384](https://dev.icinga.org/issues/11384 "Bug 11384"): Remove dependency for .NET 3.5 from the chocolatey package
+* Bug [11387](https://dev.icinga.org/issues/11387 "Bug 11387"): IDO: historical contact notifications table column notification_id is off-by-one
+* Bug [11402](https://dev.icinga.org/issues/11402 "Bug 11402"): Explain how to use functions for wildcard matches for arrays and/or dictionaries in assign where expressions
+* Bug [11407](https://dev.icinga.org/issues/11407 "Bug 11407"): Docs: Remove the migration script chapter
+* Bug [11434](https://dev.icinga.org/issues/11434 "Bug 11434"): Config validation for Notification objects should check whether the state filters are valid
+* Bug [11435](https://dev.icinga.org/issues/11435 "Bug 11435"): Icinga 2 Windows Agent does not honor install path during upgrade
+* Bug [11438](https://dev.icinga.org/issues/11438 "Bug 11438"): Remove semi-colons in the auto-generated configs
+* Bug [11439](https://dev.icinga.org/issues/11439 "Bug 11439"): Update the CentOS installation documentation
+* Bug [11440](https://dev.icinga.org/issues/11440 "Bug 11440"): Docs: Cluster manual SSL generation formatting is broken
+* Bug [11455](https://dev.icinga.org/issues/11455 "Bug 11455"): ConfigSync broken from 2.4.3. to 2.4.4 under Windows
+* Bug [11462](https://dev.icinga.org/issues/11462 "Bug 11462"): Error compiling icinga2 targeted for x64 on Windows
+* Bug [11475](https://dev.icinga.org/issues/11475 "Bug 11475"): FatalError() returns when called before Application.Run
+* Bug [11482](https://dev.icinga.org/issues/11482 "Bug 11482"): API User gets wrongly authenticated (client_cn and no password)
+* Bug [11484](https://dev.icinga.org/issues/11484 "Bug 11484"): Overwriting global type variables causes crash in ConfigItem::Commit()
+* Bug [11494](https://dev.icinga.org/issues/11494 "Bug 11494"): Update documentation URL for Icinga Web 2
+* Bug [11522](https://dev.icinga.org/issues/11522 "Bug 11522"): Make the socket event engine configurable
+* Bug [11534](https://dev.icinga.org/issues/11534 "Bug 11534"): DowntimesExpireTimerHandler crashes Icinga2 with <unknown function>
+* Bug [11542](https://dev.icinga.org/issues/11542 "Bug 11542"): make install overwrites configuration files
+* Bug [11559](https://dev.icinga.org/issues/11559 "Bug 11559"): Segfault during config validation if host exists, service does not exist any longer and downtime expires
+* Bug [11564](https://dev.icinga.org/issues/11564 "Bug 11564"): Incorrect link in the documentation
+* Bug [11567](https://dev.icinga.org/issues/11567 "Bug 11567"): Navigation attributes are missing in /v1/objects/<type>
+* Bug [11574](https://dev.icinga.org/issues/11574 "Bug 11574"): Package fails to build on *NIX
+* Bug [11577](https://dev.icinga.org/issues/11577 "Bug 11577"): Compiler warning in NotifyActive
+* Bug [11582](https://dev.icinga.org/issues/11582 "Bug 11582"): icinga2 crashes when a command_endpoint is set, but the api feature is not active
+* Bug [11586](https://dev.icinga.org/issues/11586 "Bug 11586"): icinga2-installer.exe doesn't wait until NSIS uninstall.exe exits
+* Bug [11592](https://dev.icinga.org/issues/11592 "Bug 11592"): Remove instance_name from Ido*Connection example
+* Bug [11610](https://dev.icinga.org/issues/11610 "Bug 11610"): Windows installer does not copy "features-enabled" on upgrade
+* Bug [11617](https://dev.icinga.org/issues/11617 "Bug 11617"): Vim Syntax Highlighting does not work with assign where
+
+### What's New in Version 2.4.4
+
+#### Feature
+
+* Feature [10358](https://dev.icinga.org/issues/10358 "Feature 10358"): ITL: Allow to enforce specific SSL versions using the http check command
+* Feature [11205](https://dev.icinga.org/issues/11205 "Feature 11205"): Add "query" option to check_postgres command.
+
+#### Bugfixes
+
+* Bug [9642](https://dev.icinga.org/issues/9642 "Bug 9642"): Flapping notifications are sent for hosts/services which are in a downtime
+* Bug [9969](https://dev.icinga.org/issues/9969 "Bug 9969"): Problem notifications while Flapping is active
+* Bug [10225](https://dev.icinga.org/issues/10225 "Bug 10225"): Host notification type is PROBLEM but should be RECOVERY
+* Bug [10231](https://dev.icinga.org/issues/10231 "Bug 10231"): MkDirP not working on Windows
+* Bug [10766](https://dev.icinga.org/issues/10766 "Bug 10766"): DB IDO: User notification type filters are incorrect
+* Bug [10770](https://dev.icinga.org/issues/10770 "Bug 10770"): Status code 200 even if an object could not be deleted.
+* Bug [10795](https://dev.icinga.org/issues/10795 "Bug 10795"): http check's URI is really just Path
+* Bug [10976](https://dev.icinga.org/issues/10976 "Bug 10976"): Explain how to join hosts/services for /v1/objects/comments
+* Bug [11107](https://dev.icinga.org/issues/11107 "Bug 11107"): ITL: Missing documentation for nwc_health "mode" parameter
+* Bug [11159](https://dev.icinga.org/issues/11159 "Bug 11159"): Common name in node wizard isn't case sensitive
+* Bug [11208](https://dev.icinga.org/issues/11208 "Bug 11208"): CMake does not find MySQL libraries on Windows
+* Bug [11209](https://dev.icinga.org/issues/11209 "Bug 11209"): Wrong log message for trusted cert in node setup command
+* Bug [11240](https://dev.icinga.org/issues/11240 "Bug 11240"): DEL_DOWNTIME_BY_HOST_NAME does not accept optional arguments
+* Bug [11248](https://dev.icinga.org/issues/11248 "Bug 11248"): Active checks are executed even though passive results are submitted
+* Bug [11257](https://dev.icinga.org/issues/11257 "Bug 11257"): Incorrect check interval when passive check results are used
+* Bug [11273](https://dev.icinga.org/issues/11273 "Bug 11273"): Services status updated multiple times within check_interval even though no retry was triggered
+* Bug [11289](https://dev.icinga.org/issues/11289 "Bug 11289"): epoll_ctl might cause oops on Ubuntu trusty
+* Bug [11320](https://dev.icinga.org/issues/11320 "Bug 11320"): Volatile transitions from HARD NOT-OK->NOT-OK do not trigger notifications
+* Bug [11328](https://dev.icinga.org/issues/11328 "Bug 11328"): Typo in API docs
+* Bug [11331](https://dev.icinga.org/issues/11331 "Bug 11331"): Update build requirements for SLES 11 SP4
+* Bug [11349](https://dev.icinga.org/issues/11349 "Bug 11349"): 'icinga2 feature list' fails when all features are disabled
+* Bug [11350](https://dev.icinga.org/issues/11350 "Bug 11350"): Docs: Add API examples for creating services and check commands
+* Bug [11352](https://dev.icinga.org/issues/11352 "Bug 11352"): Segmentation fault during 'icinga2 daemon -C'
+* Bug [11369](https://dev.icinga.org/issues/11369 "Bug 11369"): Chocolatey package is missing uninstall function
+* Bug [11385](https://dev.icinga.org/issues/11385 "Bug 11385"): Update development docs to use 'thread apply all bt full'
+
+### What's New in Version 2.4.3
+
+#### Bugfixes
+
+* Bug [11211](https://dev.icinga.org/issues/11211 "Bug 11211"): Permission problem after running icinga2 node wizard
+* Bug [11212](https://dev.icinga.org/issues/11212 "Bug 11212"): Wrong permissions for files in /var/cache/icinga2/*
+
+### What's New in Version 2.4.2
+
+#### Changes
+
+* ITL
+    * Additional arguments for check_disk
+    * Fix incorrect path for the check_hpasm plugin
+    * New command: check_iostat
+    * Fix incorrect variable names for the check_impi plugin
+* Cluster
+    * Improve cluster performance
+    * Fix connection handling problems (multiple connections for the same endpoint)
+* Performance improvements for the DB IDO modules
+* Lots and lots of various other bugfixes
+* Documentation updates
+
+#### Feature
+
+* Feature [10660](https://dev.icinga.org/issues/10660 "Feature 10660"): Add CMake flag for disabling the unit tests
+* Feature [10777](https://dev.icinga.org/issues/10777 "Feature 10777"): Add check_iostat to ITL
+* Feature [10787](https://dev.icinga.org/issues/10787 "Feature 10787"): Add "-x" parameter in command definition for disk-windows CheckCommand
+* Feature [10807](https://dev.icinga.org/issues/10807 "Feature 10807"): Raise a config error for "Checkable" objects in global zones
+* Feature [10857](https://dev.icinga.org/issues/10857 "Feature 10857"): DB IDO: Add a log message when the connection handling is completed
+* Feature [10860](https://dev.icinga.org/issues/10860 "Feature 10860"): Log DB IDO query queue stats
+* Feature [10880](https://dev.icinga.org/issues/10880 "Feature 10880"): "setting up check plugins" section should be enhanced with package manager examples
+* Feature [10920](https://dev.icinga.org/issues/10920 "Feature 10920"): Add Timeout parameter to snmpv3 check
+* Feature [10947](https://dev.icinga.org/issues/10947 "Feature 10947"): Add example how to use custom functions in attributes
+* Feature [10964](https://dev.icinga.org/issues/10964 "Feature 10964"): Troubleshooting: Explain how to fetch the executed command
+* Feature [10988](https://dev.icinga.org/issues/10988 "Feature 10988"): Support TLSv1.1 and TLSv1.2 for the cluster transport encryption
+* Feature [11037](https://dev.icinga.org/issues/11037 "Feature 11037"): Add String#trim
+* Feature [11138](https://dev.icinga.org/issues/11138 "Feature 11138"): Checkcommand Disk : Option Freespace-ignore-reserved
+
+#### Bugfixes
+
+* Bug [7287](https://dev.icinga.org/issues/7287 "Bug 7287"): Re-checks scheduling w/ retry_interval
+* Bug [8714](https://dev.icinga.org/issues/8714 "Bug 8714"): Add priority queue for disconnect/programstatus update events
+* Bug [8976](https://dev.icinga.org/issues/8976 "Bug 8976"): DB IDO: notification_id for contact notifications is out of range
+* Bug [10226](https://dev.icinga.org/issues/10226 "Bug 10226"): Icinga2 reload timeout results in killing old and new process because of systemd
+* Bug [10449](https://dev.icinga.org/issues/10449 "Bug 10449"): Livestatus log query - filter "class" yields empty results
+* Bug [10458](https://dev.icinga.org/issues/10458 "Bug 10458"): Incorrect SQL command for creating the user of the PostgreSQL DB for the IDO
+* Bug [10460](https://dev.icinga.org/issues/10460 "Bug 10460"): A PgSQL DB for the IDO can't be created w/ UTF8
+* Bug [10497](https://dev.icinga.org/issues/10497 "Bug 10497"): check_memory and check_swap plugins do unit conversion and rounding before percentage calculations resulting in imprecise percentages
+* Bug [10544](https://dev.icinga.org/issues/10544 "Bug 10544"): check_network performance data in invalid format
+* Bug [10554](https://dev.icinga.org/issues/10554 "Bug 10554"): Non-UTF8 characters from plugins causes IDO to fail
+* Bug [10655](https://dev.icinga.org/issues/10655 "Bug 10655"): API queries cause memory leaks
+* Bug [10700](https://dev.icinga.org/issues/10700 "Bug 10700"): Crash in ExternalCommandListener
+* Bug [10711](https://dev.icinga.org/issues/10711 "Bug 10711"): Zone::CanAccessObject is very expensive
+* Bug [10713](https://dev.icinga.org/issues/10713 "Bug 10713"): ApiListener::ReplayLog can block with a lot of clients
+* Bug [10714](https://dev.icinga.org/issues/10714 "Bug 10714"): API is not working on wheezy
+* Bug [10724](https://dev.icinga.org/issues/10724 "Bug 10724"): Remove the local zone name question in node wizard
+* Bug [10728](https://dev.icinga.org/issues/10728 "Bug 10728"): node wizard does not remember user defined port
+* Bug [10736](https://dev.icinga.org/issues/10736 "Bug 10736"): Missing num_hosts_pending in /v1/status/CIB
+* Bug [10739](https://dev.icinga.org/issues/10739 "Bug 10739"): Crash on startup with incorrect directory permissions
+* Bug [10744](https://dev.icinga.org/issues/10744 "Bug 10744"): build of icinga2 with gcc 4.4.7 segfaulting with ido
+* Bug [10745](https://dev.icinga.org/issues/10745 "Bug 10745"): ITL check command possibly mistyped variable names
+* Bug [10748](https://dev.icinga.org/issues/10748 "Bug 10748"): Missing path in mkdir() exceptions
+* Bug [10760](https://dev.icinga.org/issues/10760 "Bug 10760"): Disallow lambda expressions where side-effect-free expressions are not allowed
+* Bug [10765](https://dev.icinga.org/issues/10765 "Bug 10765"): Avoid duplicate config and status updates on startup
+* Bug [10773](https://dev.icinga.org/issues/10773 "Bug 10773"): chcon partial context error in safe-reload prevents reload
+* Bug [10779](https://dev.icinga.org/issues/10779 "Bug 10779"): Wrong postgresql-setup initdb command for RHEL7
+* Bug [10780](https://dev.icinga.org/issues/10780 "Bug 10780"): The hpasm check command is using the PluginDir constant
+* Bug [10784](https://dev.icinga.org/issues/10784 "Bug 10784"): Incorrect information in --version on Linux
+* Bug [10806](https://dev.icinga.org/issues/10806 "Bug 10806"): Missing SUSE repository for monitoring plugins documentation
+* Bug [10817](https://dev.icinga.org/issues/10817 "Bug 10817"): Failed IDO query for icinga_downtimehistory
+* Bug [10818](https://dev.icinga.org/issues/10818 "Bug 10818"): Use NodeName in null and random checks
+* Bug [10819](https://dev.icinga.org/issues/10819 "Bug 10819"): Cluster config sync ignores zones.d from API packages
+* Bug [10824](https://dev.icinga.org/issues/10824 "Bug 10824"): Windows build fails with latest git master
+* Bug [10825](https://dev.icinga.org/issues/10825 "Bug 10825"): Missing documentation for API packages zones.d config sync
+* Bug [10826](https://dev.icinga.org/issues/10826 "Bug 10826"): Build error with older CMake versions on VERSION_LESS compare
+* Bug [10828](https://dev.icinga.org/issues/10828 "Bug 10828"): Relative path in include_zones does not work
+* Bug [10829](https://dev.icinga.org/issues/10829 "Bug 10829"): IDO breaks when writing to icinga_programstatus with latest snapshots
+* Bug [10830](https://dev.icinga.org/issues/10830 "Bug 10830"): Config validation doesn't fail when templates are used as object names
+* Bug [10852](https://dev.icinga.org/issues/10852 "Bug 10852"): Formatting problem in "Advanced Filter" chapter
+* Bug [10855](https://dev.icinga.org/issues/10855 "Bug 10855"): Implement support for re-ordering groups of IDO queries
+* Bug [10862](https://dev.icinga.org/issues/10862 "Bug 10862"): Evaluate if CanExecuteQuery/FieldToEscapedString lead to exceptions on !m_Connected
+* Bug [10867](https://dev.icinga.org/issues/10867 "Bug 10867"): "repository add" cli command writes invalid "type" attribute
+* Bug [10883](https://dev.icinga.org/issues/10883 "Bug 10883"): Icinga2 crashes in IDO when removing a comment
+* Bug [10890](https://dev.icinga.org/issues/10890 "Bug 10890"): Remove superfluous #ifdef
+* Bug [10891](https://dev.icinga.org/issues/10891 "Bug 10891"): is_active in IDO is only re-enabled on "every second" restart
+* Bug [10908](https://dev.icinga.org/issues/10908 "Bug 10908"): Typos in the "troubleshooting" section of the documentation
+* Bug [10923](https://dev.icinga.org/issues/10923 "Bug 10923"): API actions: Decide whether fixed: false is the right default
+* Bug [10931](https://dev.icinga.org/issues/10931 "Bug 10931"): Exception stack trace on icinga2 client when the master reloads the configuration
+* Bug [10932](https://dev.icinga.org/issues/10932 "Bug 10932"): Cluster config sync: Ensure that /var/lib/icinga2/api/zones/* exists
+* Bug [10935](https://dev.icinga.org/issues/10935 "Bug 10935"): Logrotate on systemd distros should use systemctl not service
+* Bug [10948](https://dev.icinga.org/issues/10948 "Bug 10948"): Icinga state file corruption with temporary file creation
+* Bug [10956](https://dev.icinga.org/issues/10956 "Bug 10956"): Compiler warnings in lib/remote/base64.cpp
+* Bug [10959](https://dev.icinga.org/issues/10959 "Bug 10959"): Better explaination for array values in "disk" CheckCommand docs
+* Bug [10963](https://dev.icinga.org/issues/10963 "Bug 10963"): high load and memory consumption on icinga2 agent v2.4.1
+* Bug [10968](https://dev.icinga.org/issues/10968 "Bug 10968"): Race condition when using systemd unit file
+* Bug [10974](https://dev.icinga.org/issues/10974 "Bug 10974"): Modified attributes do not work for the IcingaApplication object w/ external commands
+* Bug [10979](https://dev.icinga.org/issues/10979 "Bug 10979"): Mistake in mongodb command definition (mongodb_replicaset)
+* Bug [10981](https://dev.icinga.org/issues/10981 "Bug 10981"): Incorrect name in AUTHORS
+* Bug [10989](https://dev.icinga.org/issues/10989 "Bug 10989"): Escaped sequences not properly generated with 'node update-config'
+* Bug [10991](https://dev.icinga.org/issues/10991 "Bug 10991"): Stream buffer size is 512 bytes, could be raised
+* Bug [10998](https://dev.icinga.org/issues/10998 "Bug 10998"): Incorrect IdoPgSqlConnection Example in Documentation
+* Bug [11006](https://dev.icinga.org/issues/11006 "Bug 11006"): Segfault in ApiListener::ConfigUpdateObjectAPIHandler
+* Bug [11014](https://dev.icinga.org/issues/11014 "Bug 11014"): Check event duplication with parallel connections involved
+* Bug [11019](https://dev.icinga.org/issues/11019 "Bug 11019"): next_check noise in the IDO
+* Bug [11020](https://dev.icinga.org/issues/11020 "Bug 11020"): Master reloads with agents generate false alarms
+* Bug [11065](https://dev.icinga.org/issues/11065 "Bug 11065"): Deleting an object via API does not disable it in DB IDO
+* Bug [11074](https://dev.icinga.org/issues/11074 "Bug 11074"): Partially missing escaping in doc/7-icinga-template-library.md
+* Bug [11075](https://dev.icinga.org/issues/11075 "Bug 11075"): Outdated link to icingaweb2-module-nagvis
+* Bug [11083](https://dev.icinga.org/issues/11083 "Bug 11083"): Ensure that config sync updates are always sent on reconnect
+* Bug [11085](https://dev.icinga.org/issues/11085 "Bug 11085"): Crash in ConfigItem::RunWithActivationContext
+* Bug [11088](https://dev.icinga.org/issues/11088 "Bug 11088"): API queries on non-existant objects cause exception
+* Bug [11096](https://dev.icinga.org/issues/11096 "Bug 11096"): Windows build fails on InterlockedIncrement type
+* Bug [11103](https://dev.icinga.org/issues/11103 "Bug 11103"): Problem with hostgroup_members table cleanup
+* Bug [11111](https://dev.icinga.org/issues/11111 "Bug 11111"): Clean up unused variables a bit
+* Bug [11118](https://dev.icinga.org/issues/11118 "Bug 11118"): Cluster WQ thread dies after fork()
+* Bug [11122](https://dev.icinga.org/issues/11122 "Bug 11122"): Connections are not cleaned up properly
+* Bug [11132](https://dev.icinga.org/issues/11132 "Bug 11132"): YYYY-MM-DD time specs are parsed incorrectly
+* Bug [11178](https://dev.icinga.org/issues/11178 "Bug 11178"): Documentation: Unescaped pipe character in tables
+* Bug [11179](https://dev.icinga.org/issues/11179 "Bug 11179"): CentOS 5 doesn't support epoll_create1
+* Bug [11204](https://dev.icinga.org/issues/11204 "Bug 11204"): "node setup" tries to chown() files before they're created
 
 ### What's New in Version 2.4.1
 

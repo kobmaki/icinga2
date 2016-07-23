@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,6 +27,8 @@
 
 namespace icinga
 {
+
+typedef double Timestamp;
 
 /**
  * The type of a Value.
@@ -66,6 +68,14 @@ public:
 	{ }
 
 	inline Value(unsigned long value)
+		: m_Value(double(value))
+	{ }
+
+	inline Value(long long value)
+		: m_Value(double(value))
+	{ }
+
+	inline Value(unsigned long long value)
 		: m_Value(double(value))
 	{ }
 
@@ -140,7 +150,7 @@ public:
 		if (!IsObject())
 			BOOST_THROW_EXCEPTION(std::runtime_error("Cannot convert value of type '" + GetTypeName() + "' to an object."));
 
-		Object::Ptr object = boost::get<Object::Ptr>(m_Value);
+		const Object::Ptr& object = boost::get<Object::Ptr>(m_Value);
 
 		ASSERT(object);
 

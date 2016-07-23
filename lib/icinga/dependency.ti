@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -55,7 +55,7 @@ class Dependency : CustomVarObject < DependencyNameComposer
 
 			if (!newValue.IsEmpty()) {
 				Service::Ptr service = Service::GetByNamePair(GetParentHostName(), newValue);
-				DependencyGraph::RemoveDependency(this, service.get());
+				DependencyGraph::AddDependency(this, service.get());
 			}
 		}}}
 		navigate {{{
@@ -82,7 +82,7 @@ class Dependency : CustomVarObject < DependencyNameComposer
 
 			if (!newValue.IsEmpty()) {
 				Service::Ptr service = Service::GetByNamePair(GetParentHostName(), newValue);
-				DependencyGraph::RemoveDependency(this, service.get());
+				DependencyGraph::AddDependency(this, service.get());
 			}
 		}}}
 		navigate {{{
@@ -100,8 +100,8 @@ class Dependency : CustomVarObject < DependencyNameComposer
 		}}}
 	};
 
-	[config] array(double) states;
-	int state_filter_real (StateFilter);
+	[config] array(Value) states;
+	[no_user_view, no_user_modify] int state_filter_real (StateFilter);
 
 	[config] bool ignore_soft_states {
 		default {{{ return true; }}}

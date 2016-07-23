@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -47,6 +47,16 @@ WorkQueue::~WorkQueue(void)
 	m_StatusTimer->Stop(true);
 
 	Join(true);
+}
+
+void WorkQueue::SetName(const String& name)
+{
+	m_Name = name;
+}
+
+String WorkQueue::GetName(void) const
+{
+	return m_Name;
 }
 
 /**
@@ -177,8 +187,14 @@ void WorkQueue::StatusTimerHandler(void)
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
 
-	Log(LogNotice, "WorkQueue")
-	    << "#" << m_ID << " tasks: " << m_Tasks.size();
+	Log log(LogNotice, "WorkQueue");
+
+	log << "#" << m_ID;
+
+	if (!m_Name.IsEmpty())
+		log << " (" << m_Name << ")";
+
+	log << " tasks: " << m_Tasks.size();
 }
 
 void WorkQueue::WorkerThreadProc(void)

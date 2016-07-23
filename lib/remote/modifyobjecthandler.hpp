@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,7 +30,8 @@ class I2_REMOTE_API ModifyObjectHandler : public HttpHandler
 public:
 	DECLARE_PTR_TYPEDEFS(ModifyObjectHandler);
 
-	virtual bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response) override;
+	virtual bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request,
+	    HttpResponse& response, const Dictionary::Ptr& params) override;
 };
 
 }

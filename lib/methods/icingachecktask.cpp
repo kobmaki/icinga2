@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -100,7 +100,14 @@ void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& service, const CheckResul
 	cr->SetOutput("Icinga 2 has been running for " + Utility::FormatDuration(uptime) +
 	    ". Version: " + Application::GetAppVersion());
 	cr->SetPerformanceData(perfdata);
-	cr->SetState(ServiceOK);
+
+	double lastReloadFailed = Application::GetLastReloadFailed();
+
+	if (lastReloadFailed > 0) {
+		cr->SetOutput(cr->GetOutput() + "; Last reload attempt failed at " + Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", lastReloadFailed));
+		cr->SetState(ServiceWarning);
+	} else
+		cr->SetState(ServiceOK);
 
 	service->ProcessCheckResult(cr);
 }

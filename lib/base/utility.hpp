@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -131,7 +131,7 @@ public:
 	static void CopyFile(const String& source, const String& target);
 
 	static Value LoadJsonFile(const String& path);
-	static void SaveJsonFile(const String& path, const Value& value);
+	static void SaveJsonFile(const String& path, int mode, const Value& value);
 
 	static String GetPlatformKernel(void);
 	static String GetPlatformKernelVersion(void);
@@ -141,9 +141,29 @@ public:
 
 	static String ValidateUTF8(const String& input);
 
+	static String CreateTempFile(const String& path, int mode, std::fstream& fp);
+
+#ifdef _WIN32
+	static String GetIcingaInstallPath(void);
+	static String GetIcingaDataPath(void);
+#endif /* _WIN32 */
+
+#ifdef I2_DEBUG
+	static void SetTime(double);
+	static void IncrementTime(double);
+#endif /* I2_DEBUG */
+
 private:
 	Utility(void);
 	static void CollectPaths(const String& path, std::vector<String>& paths);
+
+#ifdef _WIN32
+	static int MksTemp (char *tmpl);
+#endif /* _WIN32 */
+
+#ifdef I2_DEBUG
+	static double m_DebugTime;
+#endif /* I2_DEBUG */
 
 	static boost::thread_specific_ptr<String> m_ThreadName;
 	static boost::thread_specific_ptr<unsigned int> m_RandSeed;

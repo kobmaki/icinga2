@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -65,6 +65,7 @@ REGISTER_SAFE_SCRIPTFUNCTION(escape_shell_arg, &Utility::EscapeShellArg);
 #ifdef _WIN32
 REGISTER_SAFE_SCRIPTFUNCTION(escape_create_process_arg, &Utility::EscapeCreateProcessArg);
 #endif /* _WIN32 */
+REGISTER_SCRIPTFUNCTION(__ptr, &ScriptUtils::Ptr);
 
 String ScriptUtils::CastString(const Value& value)
 {
@@ -317,3 +318,7 @@ Array::Ptr ScriptUtils::TrackParents(const Object::Ptr& child)
 	return Array::FromVector(DependencyGraph::GetParents(child));
 }
 
+double ScriptUtils::Ptr(const Object::Ptr& object)
+{
+	return reinterpret_cast<intptr_t>(object.get());
+}

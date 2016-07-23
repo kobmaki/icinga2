@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -72,6 +72,9 @@ void NotificationComponent::NotificationTimerHandler(void)
 	double now = Utility::GetTime();
 
 	BOOST_FOREACH(const Notification::Ptr& notification, ConfigType::GetObjectsByType<Notification>()) {
+		if (!notification->IsActive())
+			continue;
+
 		Checkable::Ptr checkable = notification->GetCheckable();
 
 		if (checkable->IsPaused() && GetEnableHA())
@@ -128,8 +131,5 @@ void NotificationComponent::NotificationTimerHandler(void)
 void NotificationComponent::SendNotificationsHandler(const Checkable::Ptr& checkable, NotificationType type,
     const CheckResult::Ptr& cr, const String& author, const String& text)
 {
-	if (checkable->IsPaused() && GetEnableHA())
-		return;
-
 	checkable->SendNotifications(type, cr, author, text);
 }

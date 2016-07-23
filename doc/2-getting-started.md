@@ -12,7 +12,7 @@ and distribution you are running.
 
   Distribution            | Repository
   ------------------------|---------------------------
-  Debian                  | [debmon](http://debmon.org/packages/debmon-jessie/icinga2), [Icinga Repository](http://packages.icinga.org/debian/)
+  Debian                  | [debmon](https://debmon.org/packages/debmon-jessie/icinga2), [Icinga Repository](http://packages.icinga.org/debian/)
   Ubuntu                  | [Icinga PPA](https://launchpad.net/~formorer/+archive/ubuntu/icinga), [Icinga Repository](http://packages.icinga.org/ubuntu/)
   RHEL/CentOS             | [Icinga Repository](http://packages.icinga.org/epel/)
   openSUSE                | [Icinga Repository](http://packages.icinga.org/openSUSE/), [Server Monitoring Repository](https://build.opensuse.org/package/show/server:monitoring/icinga2)
@@ -31,7 +31,7 @@ Below is a list with examples for the various distributions.
 
 Debian (debmon):
 
-    # wget -O - http://debmon.org/debmon/repo.key 2>/dev/null | apt-key add -
+    # wget -O - https://debmon.org/debmon/repo.key 2>/dev/null | apt-key add -
     # echo 'deb http://debmon.org/debmon debmon-jessie main' >/etc/apt/sources.list.d/debmon.list
     # apt-get update
 
@@ -40,22 +40,34 @@ Ubuntu (PPA):
     # add-apt-repository ppa:formorer/icinga
     # apt-get update
 
-RHEL/CentOS:
+RHEL/CentOS 7:
 
-    # rpm --import http://packages.icinga.org/icinga.key
-    # curl -o /etc/yum.repos.d/ICINGA-release.repo http://packages.icinga.org/epel/ICINGA-release.repo
-    # yum makecache
+    yum install https://packages.icinga.org/epel/7/release/noarch/icinga-rpm-release-7-1.el7.centos.noarch.rpm
+
+RHEL/CentOS 6:
+
+    yum install https://packages.icinga.org/epel/6/release/noarch/icinga-rpm-release-6-1.el6.noarch.rpm
+
+RHEL/CentOS 5:
+
+     rpm -i http://packages.icinga.org/epel/5/release/noarch/icinga-rpm-release-5-1.el5.centos.noarch.rpm
 
 The packages for RHEL/CentOS depend on other packages which are distributed
 as part of the [EPEL repository](http://fedoraproject.org/wiki/EPEL). Please
 make sure to enable this repository by following
 [these instructions](http://fedoraproject.org/wiki/EPEL#How_can_I_use_these_extra_packages.3F).
 
-Fedora:
+Fedora 23:
 
-    # rpm --import http://packages.icinga.org/icinga.key
-    # curl -o /etc/yum.repos.d/ICINGA-release.repo http://packages.icinga.org/fedora/ICINGA-release.repo
-    # yum makecache
+     dnf install https://packages.icinga.org/fedora/23/release/noarch/icinga-rpm-release-23-1.fc23.noarch.rpm
+
+Fedora 22:
+
+    dnf install https://packages.icinga.org/fedora/22/release/noarch/icinga-rpm-release-22-1.fc22.noarch.rpm
+
+Fedora 21:
+
+    yum install http://packages.icinga.org/fedora/21/release/noarch/icinga-rpm-release-21-1.fc21.noarch.rpm
 
 SLES 11:
 
@@ -165,10 +177,8 @@ Without plugins Icinga 2 does not know how to check external services. The
 an extensive set of plugins which can be used with Icinga 2 to check whether
 services are working properly.
 
-> **Note**
->
-> These plugins are required to make the [example configuration](4-configuring-icinga-2.md#configuring-icinga2-overview)
-> work out-of-the-box.
+These plugins are required to make the [example configuration](4-configuring-icinga-2.md#configuring-icinga2-overview)
+work out-of-the-box.
 
 For your convenience here is a list of package names for some of the more
 popular operating systems/distributions:
@@ -306,45 +316,74 @@ On FreeBSD you need to enable icinga2 in your rc.conf
 ## <a id="configuration-syntax-highlighting"></a> Configuration Syntax Highlighting
 
 Icinga 2 ships configuration examples for syntax highlighting using the `vim` and `nano` editors.
-The RHEL, SUSE and Debian package `icinga2-common` install these files into
-`/usr/share/*/icinga2-common/syntax`. Sources provide these files in `tools/syntax`.
+The RHEL and SUSE package `icinga2-common` installs these files into `/usr/share/doc/icinga2-common-[x.x.x]/syntax`
+(where `[x.x.x]` is the version number, e.g. `2.4.3` or `2.4.4`). Sources provide these files in `tools/syntax`.
+On Debian systems the `icinga2-common` package provides only the Nano configuration file (`/usr/share/nano/icinga2.nanorc`);
+to obtain the Vim configuration, please install the extra package `vim-icinga2`. The files are located in `/usr/share/vim/addons`.
 
 ### <a id="configuration-syntax-highlighting-vim"></a> Configuration Syntax Highlighting using Vim
 
-Create a new local vim configuration storage, if not already existing.
-Edit `vim/ftdetect/icinga2.vim` if your paths to the Icinga 2 configuration
-differ.
+Install the package `vim-icinga2` with your distribution's package manager.
 
-    $ PREFIX=~/.vim
-    $ mkdir -p $PREFIX/{syntax,ftdetect}
-    $ cp vim/syntax/icinga2.vim $PREFIX/syntax/
-    $ cp vim/ftdetect/icinga2.vim $PREFIX/ftdetect/
+Debian/Ubuntu:
+
+    $ apt-get install vim-icinga2 vim-addon-manager
+    $ vim-addon-manager -w install icinga2
+    Info: installing removed addon 'icinga2' to /var/lib/vim/addons
+
+RHEL/CentOS/Fedora:
+
+    $ yum install vim-icinga2
+
+SLES/openSUSE:
+
+    $ zypper install vim-icinga2
+
+Ensure that syntax highlighting is enabled e.g. by editing the user's `vimrc`
+configuration file:
+
+    $ vim ~/.vimrc
+    syntax on
 
 Test it:
 
     $ vim /etc/icinga2/conf.d/templates.conf
 
+![Vim with syntax highlighting](images/getting-started/vim-syntax.png "Vim with Icinga 2 syntax highlighting")
+
+
 ### <a id="configuration-syntax-highlighting-nano"></a> Configuration Syntax Highlighting using Nano
 
-Copy the `/etc/nanorc` sample file to your home directory. Create the `/etc/nano` directory
-and copy the provided `icinga2.nanorc` into it.
+Install the package `nano-icinga2` with your distribution's package manager.
+
+Debian/Ubuntu:
+
+**Note:** The syntax files are installed with the `icinga2-common` package already.
+
+RHEL/CentOS/Fedora:
+
+    $ yum install nano-icinga2
+
+SLES/openSUSE:
+
+    $ zypper install nano-icinga2
+
+Copy the `/etc/nanorc` sample file to your home directory.
 
     $ cp /etc/nanorc ~/.nanorc
 
-    # mkdir -p /etc/nano
-    # cp icinga2.nanorc /etc/nano/
-
-Then include the icinga2.nanorc file in your ~/.nanorc by adding the following line:
+Include the `icinga2.nanorc` file.
 
     $ vim ~/.nanorc
 
     ## Icinga 2
-    include "/etc/nano/icinga2.nanorc"
+    include "/usr/share/nano/icinga2.nanorc"
 
 Test it:
 
     $ nano /etc/icinga2/conf.d/templates.conf
 
+![Nano with syntax highlighting](images/getting-started/nano-syntax.png "Nano with Icinga 2 syntax highlighting")
 
 ## <a id="setting-up-icingaweb2"></a> Setting up Icinga Web 2
 
@@ -430,7 +469,10 @@ Set up a MySQL database for Icinga 2:
     # mysql -u root -p
 
     mysql>  CREATE DATABASE icinga;
-            GRANT SELECT, INSERT, UPDATE, DELETE, DROP, CREATE VIEW, INDEX, EXECUTE ON icinga.* TO 'icinga'@'localhost' IDENTIFIED BY 'icinga';
+    mysql>  GRANT SELECT, INSERT, UPDATE, DELETE, DROP, CREATE VIEW, INDEX, EXECUTE ON icinga.* TO 'icinga'@'localhost' IDENTIFIED BY 'icinga';
+    mysql> quit
+
+![setting up the database on CentOS 7](images/getting-started/mariadb-centos7.png "Setting up the database on CentOS 7")
 
 After creating the database you can import the Icinga 2 IDO schema using the
 following command:
@@ -549,8 +591,6 @@ Locate your pg\_hba.conf (Debian: `/etc/postgresql/*/main/pg_hba.conf`,
 RHEL/SUSE: `/var/lib/pgsql/data/pg_hba.conf`), add the icinga user with md5
 authentication method and restart the postgresql server.
 
-    # vim /var/lib/pgsql/data/pg_hba.conf
-
     # icinga
     local   icinga      icinga                            md5
     host    icinga      icinga      127.0.0.1/32          md5
@@ -571,6 +611,8 @@ schema using the following command:
 
     # export PGPASSWORD=icinga
     # psql -U icinga -d icinga < /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+
+![importing the Icinga 2 IDO schema](images/getting-started/postgr-import-ido.png "Importing the Icinga 2 IDO schema on Debian Jessie")
 
 
 #### <a id="enabling-ido-postgresql"></a> Enabling the IDO PostgreSQL module
@@ -692,17 +734,19 @@ change `icingacmd` to `nagios`.
 The webserver's user is different between distributions so you might have to
 change `www-data` to `wwwrun`, `www`, or `apache`.
 
-Change "www-data" to the user you're using to run queries.
+Change `www-data` to the user you're using to run queries.
 
 You can verify that the user has been successfully added to the `icingacmd`
 group using the `id` command:
 
     $ id <your-webserver-user>
 
+![id command on CentOS 7](images/getting-started/id-apache-centos7.png "Confirm that the webserver's user
+(here: `apache` on a CentOS 7 system) is a member of the group `icingacmd`.")
 
 ### <a id="installing-icingaweb2"></a> Installing Icinga Web 2
 
-Please consult the [installation documentation](https://github.com/Icinga/icingaweb2/blob/master/doc/installation.md)
+Please consult the [installation documentation](https://github.com/Icinga/icingaweb2/blob/master/doc/02-Installation.md)
 for further instructions on how to install Icinga Web 2.
 
 

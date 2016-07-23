@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,8 +29,8 @@
 #include <boost/thread/once.hpp>
 #include <boost/thread/mutex.hpp>
 
-#define IDO_CURRENT_SCHEMA_VERSION "1.14.0"
-#define IDO_COMPAT_SCHEMA_VERSION "1.14.0"
+#define IDO_CURRENT_SCHEMA_VERSION "1.14.1"
+#define IDO_COMPAT_SCHEMA_VERSION "1.14.1"
 
 namespace icinga
 {
@@ -56,9 +56,6 @@ public:
 	void SetInsertID(const DbType::Ptr& type, const DbReference& objid, const DbReference& dbref);
 	DbReference GetInsertID(const DbObject::Ptr& dbobj) const;
 	DbReference GetInsertID(const DbType::Ptr& type, const DbReference& objid) const;
-
-	void SetNotificationInsertID(const CustomVarObject::Ptr& obj, const DbReference& dbref);
-	DbReference GetNotificationInsertID(const CustomVarObject::Ptr& obj) const;
 
 	void SetObjectActive(const DbObject::Ptr& dbobj, bool active);
 	bool GetObjectActive(const DbObject::Ptr& dbobj) const;
@@ -98,10 +95,15 @@ protected:
 
 	void IncreaseQueryCount(void);
 
+	bool IsIDCacheValid(void) const;
+	void SetIDCacheValid(bool valid);
+
+	static void UpdateProgramStatus(void);
+
 private:
+	bool m_IDCacheValid;
 	std::map<DbObject::Ptr, DbReference> m_ObjectIDs;
 	std::map<std::pair<DbType::Ptr, DbReference>, DbReference> m_InsertIDs;
-	std::map<CustomVarObject::Ptr, DbReference> m_NotificationInsertIDs;
 	std::set<DbObject::Ptr> m_ActiveObjects;
 	std::set<DbObject::Ptr> m_ConfigUpdates;
 	std::set<DbObject::Ptr> m_StatusUpdates;
@@ -118,7 +120,6 @@ private:
 	void StatsLoggerTimerHandler(void);
 
 	static void InsertRuntimeVariable(const String& key, const Value& value);
-	static void ProgramStatusHandler(void);
 
 	mutable boost::mutex m_StatsMutex;
 	RingBuffer m_QueryStats;

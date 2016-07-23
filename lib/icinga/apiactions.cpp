@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -104,12 +104,11 @@ Dictionary::Ptr ApiActions::ProcessCheckResult(const ConfigObject::Ptr& object,
 	cr->SetCheckSource(HttpUtility::GetLastParameter(params, "check_source"));
 	cr->SetPerformanceData(params->Get("performance_data"));
 	cr->SetCommand(params->Get("check_command"));
-	checkable->ProcessCheckResult(cr);
 
-	/* Reschedule the next check. The side effect of this is that for as long
-	 * as we receive passive results for a service we won't execute any
-	 * active checks. */
-	checkable->SetNextCheck(Utility::GetTime() + checkable->GetCheckInterval());
+	/* Mark this check result as passive. */
+	cr->SetActive(false);
+
+	checkable->ProcessCheckResult(cr);
 
 	return ApiActions::CreateResult(200, "Successfully processed check result for object '" + checkable->GetName() + "'.");
 }
@@ -133,6 +132,9 @@ Dictionary::Ptr ApiActions::RescheduleCheck(const ConfigObject::Ptr& object,
 
 	checkable->SetNextCheck(nextCheck);
 
+	/* trigger update event for DB IDO */
+	Checkable::OnNextCheckUpdated(checkable);
+
 	return ApiActions::CreateResult(200, "Successfully rescheduled check for object '" + checkable->GetName() + "'.");
 }
 
@@ -154,7 +156,7 @@ Dictionary::Ptr ApiActions::SendCustomNotification(const ConfigObject::Ptr& obje
 		checkable->SetForceNextNotification(true);
 
 	Checkable::OnNotificationsRequested(checkable, NotificationCustom, checkable->GetLastCheckResult(),
-	    HttpUtility::GetLastParameter(params, "author"), HttpUtility::GetLastParameter(params, "comment"));
+	    HttpUtility::GetLastParameter(params, "author"), HttpUtility::GetLastParameter(params, "comment"), MessageOrigin::Ptr());
 
 	return ApiActions::CreateResult(200, "Successfully sent custom notification for object '" + checkable->GetName() + "'.");
 }
@@ -305,7 +307,7 @@ Dictionary::Ptr ApiActions::ScheduleDowntime(const ConfigObject::Ptr& object,
 		return ApiActions::CreateResult(404, "Options 'start_time', 'end_time', 'duration', 'author' and 'comment' are required");
 	}
 
-	bool fixed = false;
+	bool fixed = true;
 	if (params->Contains("fixed"))
 		fixed = HttpUtility::GetLastParameter(params, "fixed");
 

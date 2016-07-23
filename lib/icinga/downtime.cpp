@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -150,7 +150,7 @@ Checkable::Ptr Downtime::GetCheckable(void) const
 	return static_pointer_cast<Checkable>(m_Checkable);
 }
 
-bool Downtime::IsActive(void) const
+bool Downtime::IsInEffect(void) const
 {
 	double now = Utility::GetTime();
 
@@ -166,7 +166,7 @@ bool Downtime::IsActive(void) const
 	if (triggerTime == 0)
 		return false;
 
-	return (triggerTime + GetDuration() < now);
+	return (now < triggerTime + GetDuration());
 }
 
 bool Downtime::IsTriggered(void) const
@@ -214,6 +214,7 @@ String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& auth
 	attrs->Set("triggered_by", triggeredBy);
 	attrs->Set("scheduled_by", scheduledBy);
 	attrs->Set("config_owner", scheduledDowntime);
+	attrs->Set("entry_time", Utility::GetTime());
 
 	Host::Ptr host;
 	Service::Ptr service;
@@ -222,6 +223,11 @@ String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& auth
 	attrs->Set("host_name", host->GetName());
 	if (service)
 		attrs->Set("service_name", service->GetShortName());
+
+	String zone = checkable->GetZoneName();
+
+	if (!zone.IsEmpty())
+		attrs->Set("zone", zone);
 
 	String config = ConfigObjectUtility::CreateObjectConfig(Downtime::TypeInstance, fullName, true, Array::Ptr(), attrs);
 
@@ -246,11 +252,13 @@ String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& auth
 
 	Downtime::Ptr downtime = Downtime::GetByName(fullName);
 
+	if (!downtime)
+		BOOST_THROW_EXCEPTION(std::runtime_error("Could not create downtime."));
+
 	Log(LogNotice, "Downtime")
 	    << "Added downtime '" << downtime->GetName()
 	    << "' between '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", startTime)
 	    << "' and '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", endTime) << "'.";
-
 
 	return fullName;
 }
@@ -289,7 +297,7 @@ void Downtime::RemoveDowntime(const String& id, bool cancelled, bool expired, co
 
 void Downtime::TriggerDowntime(void)
 {
-	if (IsActive() && IsTriggered()) {
+	if (IsInEffect() && IsTriggered()) {
 		Log(LogDebug, "Downtime")
 		    << "Not triggering downtime '" << GetName() << "': already triggered.";
 		return;
@@ -353,12 +361,13 @@ void Downtime::DowntimesExpireTimerHandler(void)
 	}
 
 	BOOST_FOREACH(const Downtime::Ptr& downtime, downtimes) {
-		if (downtime->IsExpired())
+		/* Only remove downtimes which are activated after daemon start. */
+		if (downtime->IsActive() && downtime->IsExpired())
 			RemoveDowntime(downtime->GetName(), false, true);
 	}
 }
 
-void Downtime::ValidateStartTime(double value, const ValidationUtils& utils)
+void Downtime::ValidateStartTime(const Timestamp& value, const ValidationUtils& utils)
 {
 	ObjectImpl<Downtime>::ValidateStartTime(value, utils);
 
@@ -366,7 +375,7 @@ void Downtime::ValidateStartTime(double value, const ValidationUtils& utils)
 		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("start_time"), "Start time must be greater than 0."));
 }
 
-void Downtime::ValidateEndTime(double value, const ValidationUtils& utils)
+void Downtime::ValidateEndTime(const Timestamp& value, const ValidationUtils& utils)
 {
 	ObjectImpl<Downtime>::ValidateEndTime(value, utils);
 

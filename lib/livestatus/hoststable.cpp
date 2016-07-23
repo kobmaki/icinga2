@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -836,7 +836,12 @@ Value HostsTable::LatencyAccessor(const Value& row)
 	if (!host)
 		return Empty;
 
-	return (Service::CalculateLatency(host->GetLastCheckResult()));
+	CheckResult::Ptr cr = host->GetLastCheckResult();
+
+	if (!cr)
+		return Empty;
+
+	return cr->CalculateLatency();
 }
 
 Value HostsTable::ExecutionTimeAccessor(const Value& row)
@@ -846,7 +851,12 @@ Value HostsTable::ExecutionTimeAccessor(const Value& row)
 	if (!host)
 		return Empty;
 
-	return (Service::CalculateExecutionTime(host->GetLastCheckResult()));
+	CheckResult::Ptr cr = host->GetLastCheckResult();
+
+	if (!cr)
+		return Empty;
+
+	return cr->CalculateExecutionTime();
 }
 
 Value HostsTable::PercentStateChangeAccessor(const Value& row)

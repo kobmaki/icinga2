@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,14 +26,13 @@
 
 using namespace icinga;
 
-DbType::DbType(const String& table, long tid, const String& idcolumn, const DbType::ObjectFactory& factory)
-	: m_Table(table), m_TypeID(tid), m_IDColumn(idcolumn), m_ObjectFactory(factory)
+DbType::DbType(const String& name, const String& table, long tid, const String& idcolumn, const DbType::ObjectFactory& factory)
+	: m_Name(name), m_Table(table), m_TypeID(tid), m_IDColumn(idcolumn), m_ObjectFactory(factory)
 { }
 
-std::vector<String> DbType::GetNames(void) const
+String DbType::GetName(void) const
 {
-	boost::mutex::scoped_lock lock(GetStaticMutex());
-	return m_Names;
+	return m_Name;
 }
 
 String DbType::GetTable(void) const
@@ -51,17 +50,23 @@ String DbType::GetIDColumn(void) const
 	return m_IDColumn;
 }
 
-void DbType::RegisterType(const String& name, const DbType::Ptr& type)
+void DbType::RegisterType(const DbType::Ptr& type)
 {
 	boost::mutex::scoped_lock lock(GetStaticMutex());
-	type->m_Names.push_back(name);
-	GetTypes()[name] = type;
+	GetTypes()[type->GetName()] = type;
 }
 
 DbType::Ptr DbType::GetByName(const String& name)
 {
+	String typeName;
+
+	if (name == "CheckCommand" || name == "NotificationCommand" || name == "EventCommand")
+		typeName = "Command";
+	else
+		typeName = name;
+
 	boost::mutex::scoped_lock lock(GetStaticMutex());
-	DbType::TypeMap::const_iterator it = GetTypes().find(name);
+	DbType::TypeMap::const_iterator it = GetTypes().find(typeName);
 
 	if (it == GetTypes().end())
 		return DbType::Ptr();
@@ -92,6 +97,28 @@ DbObject::Ptr DbType::GetOrCreateObjectByName(const String& name1, const String&
 
 	DbObject::Ptr dbobj = m_ObjectFactory(this, name1, name2);
 	m_Objects[std::make_pair(name1, name2)] = dbobj;
+
+	String objName = name1;
+
+	if (!name2.IsEmpty())
+		objName += "!" + name2;
+
+	String objType = m_Name;
+
+	if (m_TypeID == DbObjectTypeCommand) {
+		if (objName.SubStr(0, 6) == "check_") {
+			objType = "CheckCommand";
+			objName = objName.SubStr(6);
+		} else if (objName.SubStr(0, 13) == "notification_") {
+			objType = "NotificationCommand";
+			objName = objName.SubStr(13);
+		} else if (objName.SubStr(0, 6) == "event_") {
+			objType = "EventCommand";
+			objName = objName.SubStr(6);
+		}
+	}
+
+	dbobj->SetObject(ConfigObject::GetObject(objType, objName));
 
 	return dbobj;
 }

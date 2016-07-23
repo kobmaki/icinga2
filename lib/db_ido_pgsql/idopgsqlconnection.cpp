@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -41,8 +41,17 @@ REGISTER_TYPE(IdoPgsqlConnection);
 REGISTER_STATSFUNCTION(IdoPgsqlConnection, &IdoPgsqlConnection::StatsFunc);
 
 IdoPgsqlConnection::IdoPgsqlConnection(void)
-	: m_QueryQueue(500000)
-{ }
+	: m_QueryQueue(1000000)
+{
+	m_QueryQueue.SetName("IdoPgsqlConnection, " + GetName());
+}
+
+void IdoPgsqlConnection::OnConfigLoaded(void)
+{
+	ObjectImpl<IdoPgsqlConnection>::OnConfigLoaded();
+
+	m_QueryQueue.SetName("IdoPgsqlConnection, " + GetName());
+}
 
 void IdoPgsqlConnection::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata)
 {
@@ -324,6 +333,11 @@ void IdoPgsqlConnection::Reconnect(void)
 	Log(LogInformation, "IdoPgsqlConnection")
 	    << "pgSQL IDO instance id: " << static_cast<long>(m_InstanceID) << " (schema version: '" + version + "')";
 
+	Query("BEGIN");
+
+	/* update programstatus table */
+	UpdateProgramStatus();
+
 	/* record connection */
 	Query("INSERT INTO " + GetTablePrefix() + "conninfo " +
 	    "(instance_id, connect_time, last_checkin_time, agent_name, agent_version, connect_type, data_start_time) VALUES ("
@@ -357,7 +371,7 @@ void IdoPgsqlConnection::Reconnect(void)
 			activeDbObjs.push_back(dbobj);
 	}
 
-	Query("BEGIN");
+	SetIDCacheValid(true);
 
 	BOOST_FOREACH(const DbObject::Ptr& dbobj, activeDbObjs) {
 		if (dbobj->GetObject() == NULL) {
@@ -583,14 +597,6 @@ bool IdoPgsqlConnection::FieldToEscapedString(const String& key, const Value& va
 	} else if (key == "session_token") {
 		*result = m_SessionToken;
 		return true;
-	} else if (key == "notification_id") {
-		DbReference ref = GetNotificationInsertID(value);
-
-		if (!ref.IsValid())
-			return false;
-
-		*result = static_cast<long>(ref);
-		return true;
 	}
 
 	Value rawvalue = DbValue::ExtractValue(value);
@@ -603,12 +609,16 @@ bool IdoPgsqlConnection::FieldToEscapedString(const String& key, const Value& va
 			return true;
 		}
 
+		if (!IsIDCacheValid())
+			return false;
+
 		DbReference dbrefcol;
 
 		if (DbValue::IsObjectInsertID(value)) {
 			dbrefcol = GetInsertID(dbobjcol);
 
-			ASSERT(dbrefcol.IsValid());
+			if (!dbrefcol.IsValid())
+				return false;
 		} else {
 			dbrefcol = GetObjectID(dbobjcol);
 
@@ -630,6 +640,14 @@ bool IdoPgsqlConnection::FieldToEscapedString(const String& key, const Value& va
 		*result = Value(msgbuf.str());
 	} else if (DbValue::IsTimestampNow(value)) {
 		*result = "NOW()";
+	} else if (DbValue::IsObjectInsertID(value)) {
+		long id = static_cast<long>(rawvalue);
+
+		if (id <= 0)
+			return false;
+
+		*result = id;
+		return true;
 	} else {
 		Value fvalue;
 
@@ -653,13 +671,17 @@ void IdoPgsqlConnection::ExecuteQuery(const DbQuery& query)
 
 void IdoPgsqlConnection::ExecuteMultipleQueries(const std::vector<DbQuery>& queries)
 {
-	ASSERT(!queries.empty());
+	if (queries.empty())
+		return;
 
 	m_QueryQueue.Enqueue(boost::bind(&IdoPgsqlConnection::InternalExecuteMultipleQueries, this, queries), queries[0].Priority, true);
 }
 
 bool IdoPgsqlConnection::CanExecuteQuery(const DbQuery& query)
 {
+	if (query.Object && !IsIDCacheValid())
+		return false;
+
 	if (query.WhereCriteria) {
 		ObjectLock olock(query.WhereCriteria);
 		Value value;
@@ -695,7 +717,7 @@ void IdoPgsqlConnection::InternalExecuteMultipleQueries(const std::vector<DbQuer
 		return;
 
 	BOOST_FOREACH(const DbQuery& query, queries) {
-		ASSERT(query.Category != DbCatInvalid);
+		ASSERT(query.Type == DbQueryNewTransaction || query.Category != DbCatInvalid);
 
 		if (!CanExecuteQuery(query)) {
 			m_QueryQueue.Enqueue(boost::bind(&IdoPgsqlConnection::InternalExecuteMultipleQueries, this, queries), query.Priority);
@@ -712,10 +734,20 @@ void IdoPgsqlConnection::InternalExecuteQuery(const DbQuery& query, DbQueryType 
 {
 	AssertOnWorkQueue();
 
-	if ((query.Category & GetCategories()) == 0)
+	if (!GetConnected())
 		return;
 
-	if (!GetConnected())
+	if (query.Type == DbQueryNewTransaction) {
+		InternalNewTransaction();
+		return;
+	}
+
+	if (!CanExecuteQuery(query)) {
+		m_QueryQueue.Enqueue(boost::bind(&IdoPgsqlConnection::InternalExecuteQuery, this, query, typeOverride), query.Priority);
+		return;
+	}
+
+	if (GetCategoryFilter() != DbCatEverything && (query.Category & GetCategoryFilter()) == 0)
 		return;
 
 	if (query.Object && query.Object->GetObject()->GetExtension("agent_check").ToBool())
@@ -849,12 +881,9 @@ void IdoPgsqlConnection::InternalExecuteQuery(const DbQuery& query, DbQueryType 
 			SetStatusUpdate(query.Object, true);
 	}
 
-	if (type == DbQueryInsert && query.Table == "notifications" && query.NotificationObject) { // FIXME remove hardcoded table name
-		String idField = "notification_id";
-		DbReference seqval = GetSequenceValue(GetTablePrefix() + query.Table, idField);
-		SetNotificationInsertID(query.NotificationObject, seqval);
-		Log(LogDebug, "IdoPgsqlConnection")
-		    << "saving contactnotification notification_id=" << Convert::ToString(seqval);
+	if (type == DbQueryInsert && query.Table == "notifications" && query.NotificationInsertID) {
+		DbReference seqval = GetSequenceValue(GetTablePrefix() + query.Table, "notification_id");
+		query.NotificationInsertID->SetValue(static_cast<long>(seqval));
 	}
 }
 

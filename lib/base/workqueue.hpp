@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -83,6 +83,9 @@ public:
 	WorkQueue(size_t maxItems = 0, int threadCount = 1);
 	~WorkQueue(void);
 
+	void SetName(const String& name);
+	String GetName(void) const;
+
 	void Enqueue(const boost::function<void (void)>& function, WorkQueuePriority priority = PriorityNormal,
 	    bool allowInterleaved = false);
 	void Join(bool stop = false);
@@ -99,6 +102,7 @@ public:
 
 private:
 	int m_ID;
+	String m_Name;
 	static int m_NextID;
 	int m_ThreadCount;
 	bool m_Spawned;

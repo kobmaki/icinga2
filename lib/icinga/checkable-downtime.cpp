@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -44,7 +44,7 @@ void Checkable::TriggerDowntimes(void)
 bool Checkable::IsInDowntime(void) const
 {
 	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
-		if (downtime->IsActive())
+		if (downtime->IsInEffect())
 			return true;
 	}
 
@@ -56,7 +56,7 @@ int Checkable::GetDowntimeDepth(void) const
 	int downtime_depth = 0;
 
 	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
-		if (downtime->IsActive())
+		if (downtime->IsInEffect())
 			downtime_depth++;
 	}
 

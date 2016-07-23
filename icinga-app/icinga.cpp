@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -125,30 +125,17 @@ int Main(void)
 #ifdef _WIN32
 	bool builtinPaths = true;
 
-	HKEY hKey;
-	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\Icinga Development Team\\ICINGA2", 0,
-	    KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
-		BYTE pvData[MAX_PATH];
-		DWORD cbData = sizeof(pvData)-1;
-		DWORD lType;
-		if (RegQueryValueEx(hKey, NULL, NULL, &lType, pvData, &cbData) == ERROR_SUCCESS && lType == REG_SZ) {
-			pvData[cbData] = '\0';
+	String binaryPrefix = Utility::GetIcingaInstallPath();
+	String dataPrefix = Utility::GetIcingaDataPath();
 
-			String prefix = (char *)pvData;
-			Application::DeclarePrefixDir(prefix);
-			Application::DeclareSysconfDir(prefix + "\\etc");
-			Application::DeclareRunDir(prefix + "\\var\\run");
-			Application::DeclareLocalStateDir(prefix + "\\var");
-			Application::DeclarePkgDataDir(prefix + "\\share\\icinga2");
-			Application::DeclareIncludeConfDir(prefix + "\\share\\icinga2\\include");
-
-			builtinPaths = false;
-		}
-
-		RegCloseKey(hKey);
-	}
-
-	if (builtinPaths) {
+	if (!binaryPrefix.IsEmpty() && !dataPrefix.IsEmpty()) {
+		Application::DeclarePrefixDir(binaryPrefix);
+		Application::DeclareSysconfDir(dataPrefix + "\\etc");
+		Application::DeclareRunDir(dataPrefix + "\\var\\run");
+		Application::DeclareLocalStateDir(dataPrefix + "\\var");
+		Application::DeclarePkgDataDir(binaryPrefix + "\\share\\icinga2");
+		Application::DeclareIncludeConfDir(binaryPrefix + "\\share\\icinga2\\include");
+	} else {
 		Log(LogWarning, "icinga-app", "Registry key could not be read. Falling back to built-in paths.");
 
 #endif /* _WIN32 */
@@ -353,7 +340,7 @@ int Main(void)
 			}
 
 			if (vm.count("version")) {
-				std::cout << "Copyright (c) 2012-2015 Icinga Development Team (https://www.icinga.org)" << std::endl
+				std::cout << "Copyright (c) 2012-2016 Icinga Development Team (https://www.icinga.org/)" << std::endl
 					<< "License GPLv2+: GNU GPL version 2 or later <http://gnu.org/licenses/gpl2.html>" << std::endl
 					<< "This is free software: you are free to change and redistribute it." << std::endl
 					<< "There is NO WARRANTY, to the extent permitted by law.";

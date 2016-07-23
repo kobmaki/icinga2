@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -181,7 +181,7 @@ void StatusDataWriter::DumpDowntimes(std::ostream& fp, const Checkable::Ptr& che
 		      "\t" "triggered_by=" << triggeredByLegacy << "\n"
 		      "\t" "fixed=" << static_cast<long>(downtime->GetFixed()) << "\n"
 		      "\t" "duration=" << static_cast<long>(downtime->GetDuration()) << "\n"
-		      "\t" "is_in_effect=" << (downtime->IsActive() ? 1 : 0) << "\n"
+		      "\t" "is_in_effect=" << (downtime->IsInEffect() ? 1 : 0) << "\n"
 		      "\t" "author=" << downtime->GetAuthor() << "\n"
 		      "\t" "comment=" << downtime->GetComment() << "\n"
 		      "\t" "trigger_time=" << downtime->GetTriggerTime() << "\n"
@@ -335,8 +335,8 @@ void StatusDataWriter::DumpCheckableStatusAttrs(std::ostream& fp, const Checkabl
 	      "\t" "event_handler_enabled=" << CompatUtility::GetCheckableEventHandlerEnabled(checkable) << "\n";
 
 	if (cr) {
-	   fp << "\t" << "check_execution_time=" << Convert::ToString(Service::CalculateExecutionTime(cr)) << "\n"
-		 "\t" "check_latency=" << Convert::ToString(Service::CalculateLatency(cr)) << "\n";
+	   fp << "\t" << "check_execution_time=" << Convert::ToString(cr->CalculateExecutionTime()) << "\n"
+		 "\t" "check_latency=" << Convert::ToString(cr->CalculateLatency()) << "\n";
 	}
 
 	Host::Ptr host;
@@ -536,11 +536,10 @@ void StatusDataWriter::UpdateObjectsCache(void)
 {
 	CONTEXT("Writing objects.cache file");
 
-	String objectspath = GetObjectsPath();
-	String objectspathtmp = objectspath + ".tmp";
+	String objectsPath = GetObjectsPath();
 
-	std::ofstream objectfp;
-	objectfp.open(objectspathtmp.CStr(), std::ofstream::out | std::ofstream::trunc);
+	std::fstream objectfp;
+	String tempObjectsPath = Utility::CreateTempFile(objectsPath + ".XXXXXX", 0644, objectfp);
 
 	objectfp << std::fixed;
 
@@ -760,14 +759,14 @@ void StatusDataWriter::UpdateObjectsCache(void)
 	objectfp.close();
 
 #ifdef _WIN32
-	_unlink(objectspath.CStr());
+	_unlink(objectsPath.CStr());
 #endif /* _WIN32 */
 
-	if (rename(objectspathtmp.CStr(), objectspath.CStr()) < 0) {
+	if (rename(tempObjectsPath.CStr(), objectsPath.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
 		    << boost::errinfo_api_function("rename")
 		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(objectspathtmp));
+		    << boost::errinfo_file_name(tempObjectsPath));
 	}
 }
 
@@ -783,11 +782,10 @@ void StatusDataWriter::StatusTimerHandler(void)
 
 	double start = Utility::GetTime();
 
-	String statuspath = GetStatusPath();
-	String statuspathtmp = statuspath + ".tmp"; /* XXX make this a global definition */
+	String statusPath = GetStatusPath();
 
-	std::ofstream statusfp;
-	statusfp.open(statuspathtmp.CStr(), std::ofstream::out | std::ofstream::trunc);
+	std::fstream statusfp;
+	String tempStatusPath = Utility::CreateTempFile(statusPath + ".XXXXXX", 0644, statusfp);
 
 	statusfp << std::fixed;
 
@@ -843,14 +841,14 @@ void StatusDataWriter::StatusTimerHandler(void)
 	statusfp.close();
 
 #ifdef _WIN32
-	_unlink(statuspath.CStr());
+	_unlink(statusPath.CStr());
 #endif /* _WIN32 */
 
-	if (rename(statuspathtmp.CStr(), statuspath.CStr()) < 0) {
+	if (rename(tempStatusPath.CStr(), statusPath.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
 		    << boost::errinfo_api_function("rename")
 		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(statuspathtmp));
+		    << boost::errinfo_file_name(tempStatusPath));
 	}
 
 	Log(LogNotice, "StatusDataWriter")

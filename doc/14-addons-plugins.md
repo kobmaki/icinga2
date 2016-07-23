@@ -11,7 +11,7 @@ by the monitoring plugins. The data is stored as rrd (round robin database) file
 
 Use your distribution's package manager to install the `pnp4nagios` package.
 
-If you're planning to use it configure it to use the
+If you're planning to use it, configure it to use the
 [bulk mode with npcd and npcdmod](http://docs.pnp4nagios.org/pnp-0.6/modes#bulk_mode_with_npcd_and_npcdmod)
 in combination with Icinga 2's [PerfdataWriter](15-features.md#performance-data). NPCD collects the performance
 data files which Icinga 2 generates.
@@ -27,7 +27,7 @@ Configure npcd to use the performance data created by Icinga 2:
 Set `perfdata_spool_dir = /var/spool/icinga2/perfdata` and restart the `npcd` daemon.
 
 There's also an Icinga Web 2 module for direct PNP graph integration
-available at https://exchange.icinga.org/icinga/PNP4Nagios
+available at [Icinga Exchange](https://exchange.icinga.org/icinga/PNP).
 
 More information on [action_url as attribute](14-addons-plugins.md#addons-graphing-pnp-action-url)
 and [graph template names](14-addons-plugins.md#addons-graphing-pnp-custom-templates).
@@ -41,9 +41,9 @@ and web interfaces.
 
 Graphite consists of 3 software components:
 
-* carbon - a Twisted daemon that listens for time-series data
-* whisper - a simple database library for storing time-series data (similar in design to RRD)
-* graphite webapp - A Django webapp that renders graphs on-demand using Cairo
+* carbon -- a Twisted daemon that listens for time-series data
+* whisper -- a simple database library for storing time-series data (similar in design to RRD)
+* graphite webapp -- a Django webapp that renders graphs on-demand using Cairo
 
 Use the [GraphiteWriter](15-features.md#graphite-carbon-cache-writer) feature
 for sending real-time metrics from Icinga 2 to Graphite.
@@ -59,11 +59,10 @@ A popular alternative frontend for Graphite is for example [Grafana](http://graf
 [InfluxDB](https://influxdb.com) is a time series, metrics, and analytics database.
 It’s written in Go and has no external dependencies.
 
-Use the [GraphiteWriter](15-features.md#graphite-carbon-cache-writer) feature
-for sending real-time metrics from Icinga 2 to InfluxDB. Note: There are [API changes](https://github.com/influxdb/influxdb/issues/2102)
-in InfluxDB 0.9.x.
+Use the [InfluxdbWriter](15-features.md#influxdb-writer) feature
+for sending real-time metrics from Icinga 2 to InfluxDB.
 
-    # icinga2 feature enable graphite
+    # icinga2 feature enable influxdb
 
 A popular frontend for InfluxDB is for example [Grafana](http://grafana.org).
 
@@ -86,7 +85,7 @@ The configuration in nagvis.ini.php should look like this for Livestatus for exa
     backendtype="mklivestatus"
     socket="unix:/var/run/icinga2/cmd/livestatus"
 
-If you are planning an integration into Icinga Web 2, look at [this module](https://github.com/divetoh/icingaweb2-module-nagvis).
+If you are planning an integration into Icinga Web 2, look at [this module](https://github.com/Icinga/icingaweb2-module-nagvis).
 
 ### <a id="addons-visualization-thruk"></a> Thruk
 
@@ -123,16 +122,16 @@ Additionally external services can be [integrated with Icinga 2](https://www.ici
 * [VictorOps](https://www.icinga.org/partners/victorops/)
 * [StackStorm](https://www.icinga.org/partners/stackstorm/)
 
-More information can be found on the [Icinga Website](https://www.icinga.org)
+More information can be found on the [Icinga Website](https://www.icinga.org/)
 and the [Icinga Wiki](https://wiki.icinga.org/display/howtos/Home).
 
 ## <a id="configuration-tools"></a> Configuration Management Tools
 
-If you require your favourite configuration tool to export Icinga 2 configuration, please get in
+If you require your favourite configuration tool to export the Icinga 2 configuration, please get in
 touch with their developers. The Icinga project does not provide a configuration web interface
 yet. Follow the [Icinga Blog](https://www.icinga.org/blog/) for updates on this topic.
 
-If you're looking for puppet manifests, chef cookbooks, ansible recipes, etc - we're happy
+If you're looking for puppet manifests, chef cookbooks, ansible recipes, etc. -- we're happy
 to integrate them upstream, so please get in touch with the [Icinga team](https://www.icinga.org/community/get-involved/).
 
 These tools are currently in development and require feedback and tests:
@@ -297,7 +296,7 @@ Example for services:
       vars.pnp_check_arg1 = "!$nrpe_command$"
     }
 
-If there are warnings about unresolved macros make sure to specify a default value for `vars.pnp_check_arg1` inside the
+If there are warnings about unresolved macros, make sure to specify a default value for `vars.pnp_check_arg1` inside the
 
 In PNP, the custom template for nrpe is then defined in `/etc/pnp4nagios/custom/nrpe.cfg`
 and the additional command arg string will be seen in the xml too for other templates.

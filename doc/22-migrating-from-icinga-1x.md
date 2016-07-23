@@ -6,24 +6,6 @@ The Icinga 2 configuration format introduces plenty of behavioural changes. In
 order to ease migration from Icinga 1.x, this section provides hints and tips
 on your migration requirements.
 
-### <a id="configuration-migration-script"></a> Configuration Migration Script
-
-A standalone configuration migration script is available at
-https://github.com/Icinga/icinga2-migration. All further
-details on the command line parameters are documented there too.
-
-Please note that not each configuration detail, trick or attribute does work.
-Some specific migration steps will be still required to be done manually,
-especially if you want to preserve your existing file layout, or any other
-object specific policies.
-
-> **Note**
->
-> It is highly recommended to review your existing installation, do an inventory
-> of checked objects, thresholds and then design your new configuration layout.
-> Keep in mind that the more dynamic approach using the [apply rules](3-monitoring-basics.md#using-apply)
-> allows you to start over in many scenarios.
-
 ### <a id="manual-config-migration"></a> Manual Config Migration
 
 For a long-term migration of your configuration you should consider re-creating
@@ -267,8 +249,8 @@ Can be written as the following in Icinga 2:
       vars.CVTEST = "service cv value"
     }
 
-If you are just defining `$CVTEST$` in your command definition its value depends on the
-execution scope - the host check command will fetch the host attribute value of `vars.CVTEST`
+If you are just defining `$CVTEST$` in your command definition, its value depends on the
+execution scope -- the host check command will fetch the host attribute value of `vars.CVTEST`
 while the service check command resolves its value to the service attribute attribute `vars.CVTEST`.
 
 > **Note**
@@ -289,7 +271,7 @@ This migration part is explained in the [next chapter](22-migrating-from-icinga-
     }
 
 The `service_notification_options` can be [mapped](22-migrating-from-icinga-1x.md#manual-config-migration-hints-notification-filters)
-into generic `state` and `type` filters, if additional notification filtering is required. `alias` gets
+into generic `state` and `type` filters if additional notification filtering is required. `alias` gets
 renamed to `display_name`.
 
     object User "testconfig-user" {
@@ -487,7 +469,7 @@ filters, this behaviour has changed in Icinga 2. There is no 1:1 migration but g
 the state filter defined in the `execution_failure_criteria` defines the Icinga 2 `state` attribute.
 If the state filter matches, you can define whether to disable checks and notifications or not.
 
-The following example describes service dependencies. If you migrate from Icinga 1.x you will only
+The following example describes service dependencies. If you migrate from Icinga 1.x, you will only
 want to use the classic `Host-to-Host` and `Service-to-Service` dependency relationships.
 
     define service {
@@ -682,9 +664,9 @@ daemon for passing check results between instances.
 
 * If your current setup consists of instances distributing the check load, you should consider
 building a [load distribution](13-distributed-monitoring-ha.md#cluster-scenarios-load-distribution) setup with Icinga 2.
-* If your current setup includes active/passive clustering with external tools like Pacemaker/DRBD
+* If your current setup includes active/passive clustering with external tools like Pacemaker/DRBD,
 consider the [High Availability](13-distributed-monitoring-ha.md#cluster-scenarios-high-availability) setup.
-* If you have build your own custom configuration deployment and check result collecting mechanism
+* If you have build your own custom configuration deployment and check result collecting mechanism,
 you should re-design your setup and re-evaluate your requirements, and how they may be fulfilled
 using the Icinga 2 cluster capabilities.
 
@@ -708,8 +690,8 @@ objects.cfg:
        notifications_enabled    0
     }
 
-Icinga 2 supports objects and (global) variables, but does not make a difference
-if it's the main configuration file, or any included file.
+Icinga 2 supports objects and (global) variables, but does not make a difference 
+between the main configuration file or any other included file.
 
 icinga2.conf:
 
@@ -863,7 +845,7 @@ requires an equal sign (=) between them.
         check_interval = 5m
     }
 
-Please note that the default time value is seconds, if no duration literal
+Please note that the default time value is seconds if no duration literal
 is given. `check_interval = 5` behaves the same as `check_interval = 5s`.
 
 All strings require double quotes in Icinga 2. Therefore a double quote
@@ -935,11 +917,11 @@ and their users.
 ### <a id="differences-1x-2-macros"></a> Macros
 
 Various object attributes and runtime variables can be accessed as macros in
-commands in Icinga 1.x - Icinga 2 supports all required [custom attributes](3-monitoring-basics.md#custom-attributes).
+commands in Icinga 1.x -- Icinga 2 supports all required [custom attributes](3-monitoring-basics.md#custom-attributes).
 
 #### <a id="differences-1x-2-command-arguments"></a> Command Arguments
 
-If you have previously used Icinga 1.x you may already be familiar with
+If you have previously used Icinga 1.x, you may already be familiar with
 user and argument definitions (e.g., `USER1` or `ARG1`). Unlike in Icinga 1.x
 the Icinga 2 custom attributes may have arbitrary names and arguments are no
 longer specified in the `check_command` setting.
@@ -1100,10 +1082,10 @@ Changes to global statistic macros:
 ### <a id="differences-1x-2-external-commands"></a> External Commands
 
 `CHANGE_CUSTOM_CONTACT_VAR` was renamed to `CHANGE_CUSTOM_USER_VAR`.
-`CHANGE_CONTACT_MODATTR` was renamed to `CHANGE_USER_MODATTR`.
 
 The following external commands are not supported:
 
+    CHANGE_*MODATTR
     CHANGE_CONTACT_HOST_NOTIFICATION_TIMEPERIOD
     CHANGE_HOST_NOTIFICATION_TIMEPERIOD
     CHANGE_SVC_NOTIFICATION_TIMEPERIOD
@@ -1149,9 +1131,10 @@ The following external commands are not supported:
 
 ### <a id="differences-1x-2-async-event-execution"></a> Asynchronous Event Execution
 
-Unlike Icinga 1.x, Icinga 2 does not block when it waits for a command
-being executed - be it a check, notification, event handler, performance data writing update, etc.
-That way you'll recognize low to zero (check) latencies with Icinga 2.
+Unlike Icinga 1.x, Icinga 2 does not block when it's waiting for a command
+being executed -- whether if it's a check, a notification, an event
+handler, a performance data writing update, etc. That way you'll
+recognize low to zero (check) latencies with Icinga 2.
 
 ### <a id="differences-1x-2-checks"></a> Checks
 
@@ -1204,7 +1187,7 @@ In Icinga 1.x there were two global options defining a host and service check
 timeout. This was essentially bad when there only was a couple of check plugins
 requiring some command timeouts to be extended.
 
-Icinga 2 allows you to specify the command timeout directly on the command. So
+Icinga 2 allows you to specify the command timeout directly on the command. So,
 if your VMVware check plugin takes 15 minutes, [increase the timeout](6-object-types.md#objecttype-checkcommand)
 accordingly.
 
@@ -1378,7 +1361,7 @@ service check is forced.
 In Nagios / Icinga 1.x a daemon reload does the following:
 
 * receive reload signal SIGHUP
-* stop all events (checks, notifications, etc)
+* stop all events (checks, notifications, etc.)
 * read the configuration from disk and validate all config objects in a single threaded fashion
 * validation NOT ok: stop the daemon (cannot restore old config state)
 * validation ok: start with new objects, dump status.dat / ido

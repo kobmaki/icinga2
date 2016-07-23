@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -67,14 +67,14 @@ String Type::GetPluralName(void) const
 		return name + "s";
 }
 
-Object::Ptr Type::Instantiate(void) const
+Object::Ptr Type::Instantiate(const std::vector<Value>& args) const
 {
 	ObjectFactory factory = GetFactory();
 
 	if (!factory)
 		BOOST_THROW_EXCEPTION(std::runtime_error("Type does not have a factory function."));
 
-	return factory();
+	return factory(args);
 }
 
 bool Type::IsAbstract(void) const

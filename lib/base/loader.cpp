@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -40,7 +40,7 @@ void Loader::LoadExtensionLibrary(const String& library)
 	path = "lib" + library + ".so";
 #endif /* _WIN32 */
 
-	Log(LogInformation, "Utility")
+	Log(LogNotice, "Loader")
 	    << "Loading library '" << path << "'";
 
 #ifdef _WIN32

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -35,6 +35,9 @@ class I2_ICINGA_API CheckResult : public ObjectImpl<CheckResult>
 {
 public:
 	DECLARE_OBJECT(CheckResult);
+
+	double CalculateExecutionTime(void) const;
+	double CalculateLatency(void) const;
 
 	static void StaticInitialize(void);
 };

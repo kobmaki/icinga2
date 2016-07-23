@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -74,6 +74,9 @@ private:
 
 #define REGISTER_PRIMITIVE_TYPE(type, base, prototype)				\
 	REGISTER_PRIMITIVE_TYPE_FACTORY(type, base, prototype, DefaultObjectFactory<type>)
+
+#define REGISTER_PRIMITIVE_TYPE_VA(type, base, prototype)				\
+	REGISTER_PRIMITIVE_TYPE_FACTORY(type, base, prototype, DefaultObjectFactoryVA<type>)
 
 #define REGISTER_PRIMITIVE_TYPE_NOINST(type, base, prototype)			\
 	REGISTER_PRIMITIVE_TYPE_FACTORY(type, base, prototype, NULL)

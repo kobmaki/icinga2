@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -53,12 +53,20 @@
 
 #ifdef _WIN32
 #	include <VersionHelpers.h>
+#	include <windows.h>
+#	include <io.h>
+#	include <msi.h>
+#	include <shlobj.h>
 #endif /*_WIN32*/
 
 using namespace icinga;
 
 boost::thread_specific_ptr<String> Utility::m_ThreadName;
 boost::thread_specific_ptr<unsigned int> Utility::m_RandSeed;
+
+#ifdef I2_DEBUG
+double Utility::m_DebugTime = -1;
+#endif /* I2_DEBUG */
 
 /**
  * Demangles a symbol name.
@@ -328,6 +336,29 @@ void Utility::NullDeleter(void *)
 	/* Nothing to do here. */
 }
 
+#ifdef I2_DEBUG
+/**
+ * (DEBUG / TESTING ONLY) Sets the current system time to a static value,
+ * that will be be retrieved by any component of Icinga, when using GetTime().
+ *
+ * This should be only used for testing purposes, e.g. unit tests and debugging of certain functionalities.
+ */
+void Utility::SetTime(double time)
+{
+	m_DebugTime = time;
+}
+
+/**
+ * (DEBUG / TESTING ONLY) Increases the set debug system time by X seconds.
+ *
+ * This should be only used for testing purposes, e.g. unit tests and debugging of certain functionalities.
+ */
+void Utility::IncrementTime(double diff)
+{
+	m_DebugTime += diff;
+}
+#endif /* I2_DEBUG */
+
 /**
  * Returns the current UNIX timestamp including fractions of seconds.
  *
@@ -335,6 +366,12 @@ void Utility::NullDeleter(void *)
  */
 double Utility::GetTime(void)
 {
+#ifdef I2_DEBUG
+	if (m_DebugTime >= 0) {
+		// (DEBUG / TESTING ONLY) this will return a *STATIC* system time, if the value has been set!
+		return m_DebugTime;
+	}
+#endif /* I2_DEBUG */
 #ifdef _WIN32
 	FILETIME cft;
 	GetSystemTimeAsFileTime(&cft);
@@ -659,7 +696,7 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 
 		struct stat statbuf;
 
-		if (lstat(cpath.CStr(), &statbuf) < 0)
+		if (stat(cpath.CStr(), &statbuf) < 0)
 			continue;
 
 		if (S_ISDIR(statbuf.st_mode))
@@ -698,13 +735,15 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 }
 
 
-void Utility::MkDir(const String& path, int flags)
+void Utility::MkDir(const String& path, int mode)
 {
+
 #ifndef _WIN32
-	if (mkdir(path.CStr(), flags) < 0 && errno != EEXIST) {
+	if (mkdir(path.CStr(), mode) < 0 && errno != EEXIST) {
 #else /*_ WIN32 */
 	if (mkdir(path.CStr()) < 0 && errno != EEXIST) {
 #endif /* _WIN32 */
+
 		BOOST_THROW_EXCEPTION(posix_error()
 		    << boost::errinfo_api_function("mkdir")
 		    << boost::errinfo_errno(errno)
@@ -717,8 +756,16 @@ void Utility::MkDirP(const String& path, int mode)
 	size_t pos = 0;
 
 	while (pos != String::NPos) {
+#ifndef _WIN32
 		pos = path.Find("/", pos + 1);
-		MkDir(path.SubStr(0, pos), mode);
+#else /*_ WIN32 */
+		pos = path.FindFirstOf("/\\", pos + 1);
+#endif /* _WIN32 */
+
+		String spath = path.SubStr(0, pos + 1);
+		struct stat statbuf;
+		if (stat(spath.CStr(), &statbuf) < 0 && errno == ENOENT)
+			MkDir(path.SubStr(0, pos), mode);
 	}
 }
 
@@ -1325,11 +1372,11 @@ Value Utility::LoadJsonFile(const String& path)
 	return JsonDecode(json);
 }
 
-void Utility::SaveJsonFile(const String& path, const Value& value)
+void Utility::SaveJsonFile(const String& path, int mode, const Value& value)
 {
-	String tempPath = path + ".tmp";
+	std::fstream fp;
+	String tempFilename = Utility::CreateTempFile(path + ".XXXXXX", mode, fp);
 
-	std::ofstream fp(tempPath.CStr(), std::ofstream::out | std::ostream::trunc);
 	fp.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 	fp << JsonEncode(value);
 	fp.close();
@@ -1338,11 +1385,11 @@ void Utility::SaveJsonFile(const String& path, const Value& value)
 	_unlink(path.CStr());
 #endif /* _WIN32 */
 
-	if (rename(tempPath.CStr(), path.CStr()) < 0) {
+	if (rename(tempFilename.CStr(), path.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
 		    << boost::errinfo_api_function("rename")
 		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(tempPath));
+		    << boost::errinfo_file_name(tempFilename));
 	}
 }
 
@@ -1421,6 +1468,9 @@ static String UnameHelper(char type)
 
 	FILE *fp = popen(cmd, "r");
 
+	if (!fp)
+		return "Unknown";
+
 	char line[1024];
 	std::ostringstream msgbuf;
 
@@ -1465,6 +1515,39 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 
 	if (platformVersion)
 		*platformVersion = "Unknown";
+
+	/* You have systemd or Ubuntu etc. */
+	std::ifstream release("/etc/os-release");
+	if (release.is_open()) {
+		std::string release_line;
+		while (getline(release, release_line)) {
+			std::string::size_type pos = release_line.find("=");
+
+			if (pos == std::string::npos)
+				continue;
+
+			std::string key = release_line.substr(0, pos);
+			std::string value = release_line.substr(pos + 1);
+
+			std::string::size_type firstQuote = value.find("\"");
+
+			if (firstQuote != std::string::npos)
+				value.erase(0, firstQuote + 1);
+
+			std::string::size_type lastQuote = value.rfind("\"");
+
+			if (lastQuote != std::string::npos)
+				value.erase(lastQuote);
+
+			if (platformName && key == "NAME")
+				*platformName = value;
+
+			if (platformVersion && key == "VERSION")
+				*platformVersion = value;
+		}
+
+		return true;
+	}
 
 	/* You are using a distribution which supports LSB. */
 	FILE *fp = popen("lsb_release -s -i 2>&1", "r");
@@ -1532,28 +1615,7 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 		}
 	}
 
-	/* You have systemd or Ubuntu etc. */
-	std::ifstream release("/etc/os-release");
-	if (release.is_open()) {
-		std::string release_line;
-		while (getline(release, release_line)) {
-			if (platformName) {
-				if (release_line.find("NAME") != std::string::npos) {
-					*platformName = release_line.substr(6, release_line.length() - 7);
-				}
-			}
-
-			if (platformVersion) {
-				if (release_line.find("VERSION") != std::string::npos) {
-					*platformVersion = release_line.substr(8, release_line.length() - 9);
-				}
-			}
-		}
-
-		return true;
-	}
-
-	/* Centos < 7 */
+	/* Centos/RHEL < 7 */
 	release.close();
 	release.open("/etc/redhat-release");
 	if (release.is_open()) {
@@ -1562,11 +1624,12 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 
 		String info = release_line;
 
+		/* example: Red Hat Enterprise Linux Server release 6.7 (Santiago) */
 		if (platformName)
-			*platformName = info.SubStr(0, info.FindFirstOf(" "));
+			*platformName = info.SubStr(0, info.Find("release") - 1);
 
 		if (platformVersion)
-			*platformVersion = info.SubStr(info.FindFirstOf(" ") + 1);
+			*platformVersion = info.SubStr(info.Find("release") + 8);
 
 		return true;
 	}
@@ -1690,3 +1753,179 @@ String Utility::ValidateUTF8(const String& input)
 
 	return output;
 }
+
+String Utility::CreateTempFile(const String& path, int mode, std::fstream& fp)
+{
+	std::vector<char> targetPath(path.Begin(), path.End());
+	targetPath.push_back('\0');
+
+	int fd;
+#ifndef _WIN32
+	fd = mkstemp(&targetPath[0]);
+#else /* _WIN32 */
+	fd = MksTemp(&targetPath[0]);
+#endif /*_WIN32*/
+
+	if (fd < 0) {
+		BOOST_THROW_EXCEPTION(posix_error()
+		    << boost::errinfo_api_function("mkstemp")
+		    << boost::errinfo_errno(errno)
+		    << boost::errinfo_file_name(path));
+	}
+
+	try {
+		fp.open(&targetPath[0], std::ios_base::trunc | std::ios_base::out);
+	} catch (const std::fstream::failure& e) {
+		close(fd);
+		throw;
+	}
+
+	close(fd);
+
+	String resultPath = String(targetPath.begin(), targetPath.end() - 1);
+
+	if (chmod(resultPath.CStr(), mode) < 0) {
+		BOOST_THROW_EXCEPTION(posix_error()
+		    << boost::errinfo_api_function("chmod")
+		    << boost::errinfo_errno(errno)
+		    << boost::errinfo_file_name(resultPath));
+	}
+
+	return resultPath;
+}
+
+#ifdef _WIN32
+/* mkstemp extracted from libc/sysdeps/posix/tempname.c.  Copyright
+   (C) 1991-1999, 2000, 2001, 2006 Free Software Foundation, Inc.
+
+   The GNU C Library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.  */
+
+#define _O_EXCL 0x0400
+#define _O_CREAT 0x0100
+#define _O_RDWR 0x0002
+#define O_EXCL _O_EXCL
+#define O_CREAT	_O_CREAT
+#define O_RDWR _O_RDWR
+
+static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+/* Generate a temporary file name based on TMPL.  TMPL must match the
+   rules for mk[s]temp (i.e. end in "XXXXXX").  The name constructed
+   does not exist at the time of the call to mkstemp.  TMPL is
+   overwritten with the result.  */
+int Utility::MksTemp(char *tmpl)
+{
+	int len;
+	char *XXXXXX;
+	static unsigned long long value;
+	unsigned long long random_time_bits;
+	unsigned int count;
+	int fd = -1;
+	int save_errno = errno;
+
+	/* A lower bound on the number of temporary files to attempt to
+	generate.  The maximum total number of temporary file names that
+	can exist for a given template is 62**6.  It should never be
+	necessary to try all these combinations.  Instead if a reasonable
+	number of names is tried (we define reasonable as 62**3) fail to
+	give the system administrator the chance to remove the problems.  */
+#define ATTEMPTS_MIN (62 * 62 * 62)
+
+	/* The number of times to attempt to generate a temporary file.  To
+	   conform to POSIX, this must be no smaller than TMP_MAX.  */
+#if ATTEMPTS_MIN < TMP_MAX
+	unsigned int attempts = TMP_MAX;
+#else
+	unsigned int attempts = ATTEMPTS_MIN;
+#endif
+
+	len = strlen (tmpl);
+	if (len < 6 || strcmp (&tmpl[len - 6], "XXXXXX")) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* This is where the Xs start.  */
+	XXXXXX = &tmpl[len - 6];
+
+	/* Get some more or less random data.  */
+	{
+		SYSTEMTIME stNow;
+		FILETIME ftNow;
+
+		// get system time
+		GetSystemTime(&stNow);
+		stNow.wMilliseconds = 500;
+		if (!SystemTimeToFileTime(&stNow, &ftNow)) {
+		    errno = -1;
+		    return -1;
+		}
+
+		random_time_bits = (((unsigned long long)ftNow.dwHighDateTime << 32) | (unsigned long long)ftNow.dwLowDateTime);
+	}
+
+	value += random_time_bits ^ (unsigned long long)GetCurrentThreadId();
+
+	for (count = 0; count < attempts; value += 7777, ++count) {
+		unsigned long long v = value;
+
+		/* Fill in the random bits.  */
+		XXXXXX[0] = letters[v % 62];
+		v /= 62;
+		XXXXXX[1] = letters[v % 62];
+		v /= 62;
+		XXXXXX[2] = letters[v % 62];
+		v /= 62;
+		XXXXXX[3] = letters[v % 62];
+		v /= 62;
+		XXXXXX[4] = letters[v % 62];
+		v /= 62;
+		XXXXXX[5] = letters[v % 62];
+
+		fd = open(tmpl, O_RDWR | O_CREAT | O_EXCL, _S_IREAD | _S_IWRITE);
+		if (fd >= 0) {
+			errno = save_errno;
+			return fd;
+		} else if (errno != EEXIST)
+			return -1;
+	}
+
+	/* We got out of the loop because we ran out of combinations to try.  */
+	errno = EEXIST;
+	return -1;
+}
+
+String Utility::GetIcingaInstallPath(void)
+{
+	char szProduct[39];
+
+	for (int i = 0; MsiEnumProducts(i, szProduct) == ERROR_SUCCESS; i++) {
+		char szName[128];
+		DWORD cbName = sizeof(szName);
+		if (MsiGetProductInfo(szProduct, INSTALLPROPERTY_INSTALLEDPRODUCTNAME, szName, &cbName) != ERROR_SUCCESS)
+			continue;
+
+		if (strcmp(szName, "Icinga 2") != 0)
+			continue;
+
+		char szLocation[1024];
+		DWORD cbLocation = sizeof(szLocation);
+		if (MsiGetProductInfo(szProduct, INSTALLPROPERTY_INSTALLLOCATION, szLocation, &cbLocation) == ERROR_SUCCESS)
+			return szLocation;
+	}
+
+	return "";
+}
+
+String Utility::GetIcingaDataPath(void)
+{
+	char path[MAX_PATH];
+	if (!SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path)))
+		return "";
+	return String(path) + "\\icinga2";
+}
+
+#endif /* _WIN32 */

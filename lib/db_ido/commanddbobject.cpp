@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,9 +28,7 @@
 
 using namespace icinga;
 
-REGISTER_DBTYPE(CheckCommand, "command", DbObjectTypeCommand, "object_id", CommandDbObject);
-REGISTER_DBTYPE(EventCommand, "command", DbObjectTypeCommand, "object_id", CommandDbObject);
-REGISTER_DBTYPE(NotificationCommand, "command", DbObjectTypeCommand, "object_id", CommandDbObject);
+REGISTER_DBTYPE(Command, "command", DbObjectTypeCommand, "object_id", CommandDbObject);
 
 CommandDbObject::CommandDbObject(const DbType::Ptr& type, const String& name1, const String& name2)
 	: DbObject(type, name1, name2)

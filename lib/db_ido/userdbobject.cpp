@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -49,16 +49,20 @@ Dictionary::Ptr UserDbObject::GetConfigFields(void) const
 	fields->Set("host_notifications_enabled", user->GetEnableNotifications());
 	fields->Set("service_notifications_enabled", user->GetEnableNotifications());
 	fields->Set("can_submit_commands", 1);
-	fields->Set("notify_service_recovery", (user->GetTypeFilter() & NotificationRecovery) != 0);
-	fields->Set("notify_service_warning", (user->GetStateFilter() & StateFilterWarning) != 0);
-	fields->Set("notify_service_unknown", (user->GetStateFilter() & StateFilterUnknown) != 0);
-	fields->Set("notify_service_critical", (user->GetStateFilter() & StateFilterCritical) != 0);
-	fields->Set("notify_service_flapping", (user->GetTypeFilter() & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
-	fields->Set("notify_service_downtime", (user->GetTypeFilter() & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
-	fields->Set("notify_host_recovery", (user->GetTypeFilter() & NotificationRecovery) != 0);
-	fields->Set("notify_host_down", (user->GetStateFilter() & StateFilterDown) != 0);
-	fields->Set("notify_host_flapping", (user->GetTypeFilter() & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
-	fields->Set("notify_host_downtime", (user->GetTypeFilter() & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
+
+	int typeFilter = user->GetTypeFilter();
+	int stateFilter = user->GetStateFilter();
+
+	fields->Set("notify_service_recovery", (typeFilter & NotificationRecovery) != 0);
+	fields->Set("notify_service_warning", (stateFilter & StateFilterWarning) != 0);
+	fields->Set("notify_service_unknown", (stateFilter & StateFilterUnknown) != 0);
+	fields->Set("notify_service_critical", (stateFilter & StateFilterCritical) != 0);
+	fields->Set("notify_service_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
+	fields->Set("notify_service_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
+	fields->Set("notify_host_recovery", (typeFilter & NotificationRecovery) != 0);
+	fields->Set("notify_host_down", (stateFilter & StateFilterDown) != 0);
+	fields->Set("notify_host_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
+	fields->Set("notify_host_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
 
 	return fields;
 }

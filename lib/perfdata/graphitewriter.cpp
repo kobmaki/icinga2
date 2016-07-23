@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -141,8 +141,9 @@ void GraphiteWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 			SendMetric(prefix_metadata, "state_type", checkable->GetStateType(), ts);
 			SendMetric(prefix_metadata, "reachable", checkable->IsReachable(), ts);
 			SendMetric(prefix_metadata, "downtime_depth", checkable->GetDowntimeDepth(), ts);
-			SendMetric(prefix_metadata, "latency", Service::CalculateLatency(cr), ts);
-			SendMetric(prefix_metadata, "execution_time", Service::CalculateExecutionTime(cr), ts);
+			SendMetric(prefix_metadata, "acknowledgement", checkable->GetAcknowledgement(), ts);
+			SendMetric(prefix_metadata, "latency", cr->CalculateLatency(), ts);
+			SendMetric(prefix_metadata, "execution_time", cr->CalculateExecutionTime(), ts);
 		}
 
 		SendPerfdata(prefix_perfdata, cr, ts);
@@ -160,8 +161,9 @@ void GraphiteWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 		SendMetric(prefix, "state_type", checkable->GetStateType(), ts);
 		SendMetric(prefix, "reachable", checkable->IsReachable(), ts);
 		SendMetric(prefix, "downtime_depth", checkable->GetDowntimeDepth(), ts);
-		SendMetric(prefix, "latency", Service::CalculateLatency(cr), ts);
-		SendMetric(prefix, "execution_time", Service::CalculateExecutionTime(cr), ts);
+		SendMetric(prefix, "acknowledgement", checkable->GetAcknowledgement(), ts);
+		SendMetric(prefix, "latency", cr->CalculateLatency(), ts);
+		SendMetric(prefix, "execution_time", cr->CalculateExecutionTime(), ts);
 		SendPerfdata(prefix, cr, ts);
 	}
 }

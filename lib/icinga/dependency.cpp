@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -77,7 +77,7 @@ void Dependency::OnConfigLoaded(void)
 	else
 		defaultFilter = StateFilterOK | StateFilterWarning;
 
-	SetStateFilter(FilterArrayToInt(GetStates(), defaultFilter));
+	SetStateFilter(FilterArrayToInt(GetStates(), Notification::GetStateFilterMap(), defaultFilter));
 }
 
 void Dependency::OnAllConfigLoaded(void)
@@ -224,7 +224,7 @@ void Dependency::ValidateStates(const Array::Ptr& value, const ValidationUtils& 
 {
 	ObjectImpl<Dependency>::ValidateStates(value, utils);
 
-	int sfilter = FilterArrayToInt(value, 0);
+	int sfilter = FilterArrayToInt(value, Notification::GetStateFilterMap(), 0);
 
 	if (GetParentServiceName().IsEmpty() && (sfilter & ~(StateFilterUp | StateFilterDown)) != 0)
 		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("states"), "State filter is invalid for host dependency."));

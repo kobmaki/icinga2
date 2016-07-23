@@ -1,6 +1,6 @@
 # <a id="advanced-topics"></a> Advanced Topics
 
-This chapter covers a number of advanced topics. If you're new to Icinga you
+This chapter covers a number of advanced topics. If you're new to Icinga, you
 can safely skip over things you're not interested in.
 
 ## <a id="downtimes"></a> Downtimes
@@ -107,7 +107,7 @@ pass the comment id in case of manipulating an existing comment.
 
 ## <a id="acknowledgements"></a> Acknowledgements
 
-If a problem is alerted and notified you may signal the other notification
+If a problem is alerted and notified, you may signal the other notification
 recipients that you are aware of the problem and will handle it.
 
 By sending an acknowledgement to Icinga 2 (using the external command pipe
@@ -127,20 +127,21 @@ current problem should be resolved in the future at a defined time,
 you can define an expiration time when acknowledging the problem.
 
 Icinga 2 will clear the acknowledgement when expired and start to
-re-notify if the problem persists.
+re-notify, if the problem persists.
 
 
 ## <a id="timeperiods"></a> Time Periods
 
-Time Periods define time ranges in Icinga where event actions are
-triggered, for example whether a service check is executed or not within
+[Time Periods](6-object-types.md#objecttype-timeperiod) define
+time ranges in Icinga where event actions are triggered, for
+example whether a service check is executed or not within
 the `check_period` attribute. Or a notification should be sent to
 users or not, filtered by the `period` and `notification_period`
 configuration attributes for `Notification` and `User` objects.
 
 > **Note**
 >
-> If you are familiar with Icinga 1.x - these time period definitions
+> If you are familiar with Icinga 1.x, these time period definitions
 > are called `legacy timeperiods` in Icinga 2.
 >
 > An Icinga 2 legacy timeperiod requires the `ITL` provided template
@@ -160,7 +161,7 @@ The descending order of precedence is as follows:
 * Normal weekday (Tuesday)
 
 If you don't set any `check_period` or `notification_period` attribute
-on your configuration objects Icinga 2 assumes `24x7` as time period
+on your configuration objects, Icinga 2 assumes `24x7` as time period
 as shown below.
 
     object TimePeriod "24x7" {
@@ -178,7 +179,7 @@ as shown below.
       }
     }
 
-If your operation staff should only be notified during workhours
+If your operation staff should only be notified during workhours,
 create a new timeperiod named `workhours` defining a work day from
 09:00 to 17:00.
 
@@ -207,6 +208,68 @@ Use the `period` attribute to assign time periods to
       users = [ "icingaadmin" ]
       period = "workhours"
     }
+
+### <a id="timeperiods-includes-excludes"></a> Time Periods Inclusion and Exclusion
+
+Sometimes it is necessary to exclude certain time ranges from
+your default time period definitions, for example, if you don't
+want to send out any notification during the holiday season,
+or if you only want to allow small time windows for executed checks.
+
+The [TimePeriod object](6-object-types.md#objecttype-timeperiod)
+provides the `includes` and `excludes` attributes to solve this issue.
+`prefer_includes` defines whether included or excluded time periods are
+preferred.
+
+The following example defines a time period called `holidays` where
+notifications should be supressed:
+
+    object TimePeriod "holidays" {
+      import "legacy-timeperiod"
+    
+      ranges = {
+        "january 1" = "00:00-24:00"                 //new year's day
+        "july 4" = "00:00-24:00"                    //independence day
+        "december 25" = "00:00-24:00"               //christmas
+        "december 31" = "18:00-24:00"               //new year's eve (6pm+)
+        "2017-04-16" = "00:00-24:00"                //easter 2017
+        "monday -1 may" = "00:00-24:00"             //memorial day (last monday in may)
+        "monday 1 september" = "00:00-24:00"        //labor day (1st monday in september)
+        "thursday 4 november" = "00:00-24:00"       //thanksgiving (4th thursday in november)
+      }
+    }
+
+In addition to that the time period `weekends` defines an additional
+time window which should be excluded from notifications:
+
+    object TimePeriod "weekends-excluded" {
+      import "legacy-timeperiod"
+    
+      ranges = {
+        "saturday"  = "00:00-09:00,18:00-24:00"
+        "sunday"    = "00:00-09:00,18:00-24:00"
+      }
+    }
+
+The time period `prod-notification` defines the default time ranges
+and adds the excluded time period names as an array.
+
+    object TimePeriod "prod-notification" {
+      import "legacy-timeperiod"
+    
+      excludes = [ "holidays", "weekends-excluded" ]
+    
+      ranges = {
+        "monday"    = "00:00-24:00"
+        "tuesday"   = "00:00-24:00"
+        "wednesday" = "00:00-24:00"
+        "thursday"  = "00:00-24:00"
+        "friday"    = "00:00-24:00"
+        "saturday"  = "00:00-24:00"
+        "sunday"    = "00:00-24:00"
+      }
+    }
+
 
 ## <a id="use-functions-object-config"></a> Use Functions in Object Configuration
 
@@ -237,8 +300,8 @@ The `set_if` attribute inside the command arguments definition in the
 [CheckCommand object definition](6-object-types.md#objecttype-checkcommand) is primarily used to
 evaluate whether the command parameter should be set or not.
 
-By default you can evaluate runtime macros for their existence, and if the result is not an empty
-string the command parameter is passed. This becomes fairly complicated when want to evaluate
+By default you can evaluate runtime macros for their existence. If the result is not an empty
+string, the command parameter is passed. This becomes fairly complicated when want to evaluate
 multiple conditions and attributes.
 
 The following example was found on the community support channels. The user had defined a host
@@ -366,7 +429,121 @@ You can omit the `log()` calls, they only help debugging.
       }
     }
 
+### <a id="custom-functions-as-attribute"></a> Use Custom Functions as Attribute
 
+To use custom functions as attributes, the function must be defined in a
+slightly unexpected way. The following example shows how to assign values
+depending on group membership. All hosts in the `slow-lan` host group use 300
+as value for `ping_wrta`, all other hosts use 100.
+
+    globals.group_specific_value = function(group, group_value, non_group_value) {
+        return function() use (group, group_value, non_group_value) {
+            if (group in host.groups) {
+                return group_value
+            } else {
+                return non_group_value
+            }
+        }
+    }
+    
+    apply Service "ping4" {
+        import "generic-service"
+        check_command = "ping4"
+    
+        vars.ping_wrta = group_specific_value("slow-lan", 300, 100)
+        vars.ping_crta = group_specific_value("slow-lan", 500, 200)
+    
+        assign where true
+    }
+
+### <a id="use-functions-assign-where"></a> Use Functions in Assign Where Expressions
+
+If a simple expression for matching a name or checking if an item
+exists in an array or dictionary does not fit, you should consider
+writing your own global [functions](18-language-reference.md#functions).
+You can call them inside `assign where` and `ignore where` expressions
+for [apply rules](3-monitoring-basics.md#using-apply-expressions) or
+[group assignments](3-monitoring-basics.md#group-assign-intro) just like
+any other global functions for example [match](19-library-reference.md#global-functions).
+
+The following example requires the host `myprinter` being added
+to the host group `printers-lexmark` but only if the host uses
+a template matching the name `lexmark*`.
+
+    template Host "lexmark-printer-host" {
+      vars.printer_type = "Lexmark"
+    }
+
+    object Host "myprinter" {
+      import "generic-host"
+      import "lexmark-printer-host"
+
+      address = "192.168.1.1"
+    }
+
+    /* register a global function for the assign where call */
+    globals.check_host_templates = function(host, search) {
+      /* iterate over all host templates and check if the search matches */
+      for (tmpl in host.templates) {
+        if (match(search, tmpl)) {
+          return true
+        }
+      }
+
+      /* nothing matched */
+      return false
+    }
+
+    object HostGroup "printers-lexmark" {
+      display_name = "Lexmark Printers"
+      /* call the global function and pass the arguments */
+      assign where check_host_templates(host, "lexmark*")
+    }
+
+
+Take a different more complex example: All hosts with the
+custom attribute `vars_app` as nested dictionary should be
+added to the host group `ABAP-app-server`. But only if the
+`app_type` for all entries is set to `ABAP`.
+
+It could read as wildcard match for nested dictionaries:
+
+    where host.vars.vars_app["*"].app_type == "ABAP"
+
+The solution for this problem is to register a global
+function which checks the `app_type` for all hosts
+with the `vars_app` dictionary.
+
+    object Host "appserver01" {
+      check_command = "dummy"
+      vars.vars_app["ABC"] = { app_type = "ABAP" }
+    }
+    object Host "appserver02" {
+      check_command = "dummy"
+      vars.vars_app["DEF"] = { app_type = "ABAP" }
+    }
+
+    globals.check_app_type = function(host, type) {
+      /* ensure that other hosts without the custom attribute do not match */
+      if (typeof(host.vars.vars_app) != Dictionary) {
+        return false
+      }
+
+      /* iterate over the vars_app dictionary */
+      for (key => val in host.vars.vars_app) {
+        /* if the value is a dictionary and if contains the app_type being the requested type */
+        if (typeof(val) == Dictionary && val.app_type == type) {
+          return true
+        }
+      }
+
+      /* nothing matched */
+      return false
+    }
+
+    object HostGroup "ABAP-app-server" {
+      assign where check_app_type(host, "ABAP")
+    }
 
 ## <a id="access-object-attributes-at-runtime"></a> Access Object Attributes at Runtime
 

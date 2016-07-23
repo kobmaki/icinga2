@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,6 +18,7 @@
  ******************************************************************************/
 
 #include "base/convert.hpp"
+#include "base/datetime.hpp"
 #include <boost/lexical_cast.hpp>
 
 using namespace icinga;
@@ -30,4 +31,32 @@ String Convert::ToString(const String& val)
 String Convert::ToString(const Value& val)
 {
 	return val;
+}
+
+String Convert::ToString(double val)
+{
+	double integral;
+	double fractional = std::modf(val, &integral);
+
+	if (fractional == 0)
+		return Convert::ToString(static_cast<long>(val));
+
+	std::ostringstream msgbuf;
+	msgbuf << std::fixed << val;
+	return msgbuf.str();
+}
+
+double Convert::ToDateTimeValue(double val)
+{
+	return val;
+}
+
+double Convert::ToDateTimeValue(const Value& val)
+{
+	if (val.IsNumber())
+		return val;
+	else if (val.IsObjectType<DateTime>())
+		return static_cast<DateTime::Ptr>(val)->GetValue();
+	else
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Not a DateTime value."));
 }

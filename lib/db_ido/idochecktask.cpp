@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -92,6 +92,13 @@ void IdoCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckResult
 
 	DbConnection::Ptr conn = static_pointer_cast<DbConnection>(dtype->GetObject(idoName));
 
+	if (!conn) {
+		cr->SetOutput("IDO connection '" + idoName + "' does not exist.");
+		cr->SetState(ServiceUnknown);
+		checkable->ProcessCheckResult(cr);
+		return;
+	}
+
 	double qps = conn->GetQueryCount(60) / 60.0;
 
 	if (!conn->GetConnected()) {
@@ -104,16 +111,19 @@ void IdoCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckResult
 		}
 	} else {
 		String schema_version = conn->GetSchemaVersion();
+		std::ostringstream msgbuf;
 
 		if (Utility::CompareVersion(IDO_CURRENT_SCHEMA_VERSION, schema_version) < 0) {
-			cr->SetOutput("Outdated schema version: " + schema_version + "; Latest version: "  IDO_CURRENT_SCHEMA_VERSION);
+			msgbuf << "Outdated schema version: '" << schema_version << "'. Latest version: '" << IDO_CURRENT_SCHEMA_VERSION << "'.";
 			cr->SetState(ServiceWarning);
 		} else {
-			std::ostringstream msgbuf;
-			msgbuf << "Connected to the database server; queries per second: "  << std::fixed << std::setprecision(3) << qps;
-			cr->SetOutput(msgbuf.str());
+			msgbuf << "Connected to the database server (Schema version: '" << schema_version << "').";
 			cr->SetState(ServiceOK);
 		}
+
+		msgbuf << " Queries per second: " << std::fixed << std::setprecision(3) << qps;
+
+		cr->SetOutput(msgbuf.str());
 	}
 
 	Array::Ptr perfdata = new Array();

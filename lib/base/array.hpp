@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -123,6 +123,9 @@ public:
 	Array::Ptr Reverse(void) const;
 
 	virtual String ToString(void) const override;
+
+	virtual Value GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const override;
+	virtual void SetFieldByName(const String& field, const Value& value, const DebugInfo& debugInfo) override;
 
 private:
 	std::vector<Value> m_Data; /**< The data for the array. */

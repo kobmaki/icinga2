@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -94,12 +94,8 @@ Dictionary::Ptr ObjectQueryHandler::SerializeObjectAttrs(const Object::Ptr& obje
 			continue;
 
 		/* hide internal navigation fields */
-		if (field.Attributes & FANavigation) {
-			Value nval = object->NavigateField(fid);
-
-			if (val == nval)
-				continue;
-		}
+		if (field.Attributes & FANavigation && !(field.Attributes & (FAConfig | FAState)))
+			continue;
 
 		Value sval = Serialize(val, FAConfig | FAState);
 		resultAttrs->Set(field.Name, sval);
@@ -108,7 +104,7 @@ Dictionary::Ptr ObjectQueryHandler::SerializeObjectAttrs(const Object::Ptr& obje
 	return resultAttrs;
 }
 
-bool ObjectQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response)
+bool ObjectQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
 {
 	if (request.RequestUrl->GetPath().size() < 3 || request.RequestUrl->GetPath().size() > 4)
 		return false;
@@ -127,8 +123,6 @@ bool ObjectQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& re
 	qd.Types.insert(type->GetName());
 	qd.Permission = "objects/query/" + type->GetName();
 
-	Dictionary::Ptr params = HttpUtility::FetchRequestParameters(request);
-
 	Array::Ptr uattrs = params->Get("attrs");
 	Array::Ptr ujoins = params->Get("joins");
 	Array::Ptr umetas = params->Get("meta");
@@ -142,7 +136,16 @@ bool ObjectQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& re
 		params->Set(attr, request.RequestUrl->GetPath()[3]);
 	}
 
-	std::vector<Value> objs = FilterUtility::GetFilterTargets(qd, params, user);
+	std::vector<Value> objs;
+
+	try {
+		objs = FilterUtility::GetFilterTargets(qd, params, user);
+	} catch (const std::exception& ex) {
+		HttpUtility::SendJsonError(response, 404,
+		    "No objects found.",
+		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		return true;
+	}
 
 	Array::Ptr results = new Array();
 	results->Reserve(objs.size());

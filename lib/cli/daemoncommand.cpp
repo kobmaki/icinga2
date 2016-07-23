@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,6 +19,8 @@
 
 #include "cli/daemoncommand.hpp"
 #include "cli/daemonutility.hpp"
+#include "remote/apilistener.hpp"
+#include "remote/configobjectutility.hpp"
 #include "config/configcompiler.hpp"
 #include "config/configcompilercontext.hpp"
 #include "config/configitembuilder.hpp"
@@ -237,6 +239,8 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 	else if (!vm.count("no-config"))
 		configs.push_back(Application::GetSysconfDir() + "/icinga2/icinga2.conf");
 
+	Log(LogInformation, "cli", "Loading configuration file(s).");
+
 	std::vector<ConfigItem::Ptr> newItems;
 
 	if (!DaemonUtility::LoadConfigFiles(configs, newItems, Application::GetObjectsPath(), Application::GetVarsPath()))
@@ -295,12 +299,17 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 		Logger::DisableConsoleLog();
 	}
 
+	/* Remove ignored Downtime/Comment objects. */
+	ConfigItem::RemoveIgnoredItems(ConfigObjectUtility::GetConfigDir());
+
 #ifndef _WIN32
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = &SigHupHandler;
 	sigaction(SIGHUP, &sa, NULL);
 #endif /* _WIN32 */
+
+	ApiListener::UpdateObjectAuthority();
 
 	return Application::GetInstance()->Run();
 }

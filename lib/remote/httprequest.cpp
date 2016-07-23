@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -174,8 +174,11 @@ void HttpRequest::FinishHeaders(void)
 	if (m_State == HttpRequestHeaders) {
 		AddHeader("User-Agent", "Icinga/" + Application::GetAppVersion());
 
-		if (ProtocolVersion == HttpVersion11)
+		if (ProtocolVersion == HttpVersion11) {
 			AddHeader("Transfer-Encoding", "chunked");
+			if (!Headers->Contains("Host"))
+				AddHeader("Host", RequestUrl->GetHost() + ":" + RequestUrl->GetPort());
+		}
 
 		ObjectLock olock(Headers);
 		BOOST_FOREACH(const Dictionary::Pair& kv, Headers)

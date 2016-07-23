@@ -54,9 +54,11 @@ Check command for the built-in `cluster-zone` check.
 
 Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
 
-Name         | Description
--------------|---------------
-cluster_zone | **Optional.** The zone name. Defaults to "$host.name$".
+Name                 | Description
+---------------------|---------------
+cluster_zone         | **Required.** The zone name.
+cluster_lag_warning  | **Optional.** Warning threshold for log lag in seconds. Applies if the log lag is greater than the threshold.
+cluster_lag_critical | **Optional.** Critical threshold for log lag in seconds. Applies if the log lag is greater than the threshold.
 
 ### <a id="itl-icinga-ido"></a> ido
 
@@ -143,18 +145,18 @@ Name               | Description
 -------------------|--------------
 clamd_address        | **Required.** The host's address or unix socket (must be an absolute path).
 clamd_port           | **Optional.** Port number (default: none).
-clamd_expect         | **Optional.** String to expect in server response (may be repeated).
+clamd_expect         | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 clamd_all            | **Optional.** All expect strings need to occur in server response. Defaults to false.
-clamd_escape_send    | **Optional.** Enable usage of \n, \r, \t or \\\\ in send string.
+clamd_escape_send    | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in send string.
 clamd_send           | **Optional.** String to send to the server.
-clamd_escape_quit    | **Optional.** Enable usage of \n, \r, \t or \\\\ in quit string.
+clamd_escape_quit    | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in quit string.
 clamd_quit           | **Optional.** String to send server to initiate a clean close of the connection.
 clamd_refuse         | **Optional.** Accept TCP refusals with states ok, warn, crit. Defaults to crit.
 clamd_mismatch       | **Optional.** Accept expected string mismatches with states ok, warn, crit. Defaults to warn.
 clamd_jail           | **Optional.** Hide output from TCP socket.
 clamd_maxbytes       | **Optional.** Close connection once more than this number of bytes are received.
 clamd_delay          | **Optional.** Seconds to wait between sending string and polling for response.
-clamd_certificate    | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) - seperated by comma.
+clamd_certificate    | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) -- separated by comma.
 clamd_ssl            | **Optional.** Use SSL for the connection. Defaults to false.
 clamd_wtime          | **Optional.** Response time to result in warning status (seconds).
 clamd_ctime          | **Optional.** Response time to result in critical status (seconds).
@@ -213,32 +215,33 @@ Check command object for the `check_disk` plugin.
 Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
 
 Name            	| Description
-------------------------|------------------------
-disk_wfree      	| **Optional.** The free space warning threshold. Defaults to "20%". If the percent sign is omitted, units from `disk_units` are used.
-disk_cfree      	| **Optional.** The free space critical threshold. Defaults to "10%". If the percent sign is omitted, units from `disk_units` are used.
-disk_inode_wfree 	| **Optional.** The free inode warning threshold.
-disk_inode_cfree 	| **Optional.** The free inode critical threshold.
-disk_partition		| **Optional.** The partition. **Deprecated in 2.3.**
-disk_partition_excluded | **Optional.** The excluded partition. **Deprecated in 2.3.**
-disk_partitions        	| **Optional.** The partition(s). Multiple partitions must be defined as array.
-disk_partitions_excluded | **Optional.** The excluded partition(s). Multiple partitions must be defined as array.
-disk_clear               | **Optional.** Clear thresholds.
-disk_exact_match       | **Optional.** For paths or partitions specified with -p, only check for exact paths.
-disk_errors_only       | **Optional.** Display only devices/mountpoints with errors. May be true or false.
-disk_group             | **Optional.** Group paths. Thresholds apply to (free-)space of all partitions together
-disk_kilobytes         | **Optional.** Same as --units kB. May be true or false.
-disk_local             | **Optional.** Only check local filesystems. May be true or false.
-disk_stat_remote_fs    | **Optional.** Only check local filesystems against thresholds. Yet call stat on remote filesystems to test if they are accessible (e.g. to detect Stale NFS Handles). Myy be true or false
-disk_mountpoint        | **Optional.** Display the mountpoint instead of the partition. May be true or false.
-disk_megabytes         | **Optional.** Same as --units MB. May be true or false.
-disk_all               | **Optional.** Explicitly select all paths. This is equivalent to -R '.*'. May be true or false.
-disk_eregi_path        | **Optional.** Case insensitive regular expression for path/partition (may be repeated).
-disk_ereg_path         | **Optional.** Regular expression for path or partition (may be repeated).
-disk_ignore_eregi_path | **Optional.** Regular expression to ignore selected path/partition (case insensitive) (may be repeated).
-disk_ignore_ereg_path  | **Optional.** Regular expression to ignore selected path or partition (may be repeated).
-disk_timeout           | **Optional.** Seconds before connection times out (default: 10).
-disk_units             | **Optional.** Choose bytes, kB, MB, GB, TB (default: MB).
-disk_exclude_type      | **Optional.** Ignore all filesystems of indicated type (may be repeated).
+--------------------|------------------------
+disk\_wfree      	| **Optional.** The free space warning threshold. Defaults to "20%". If the percent sign is omitted, units from `disk_units` are used.
+disk\_cfree      	| **Optional.** The free space critical threshold. Defaults to "10%". If the percent sign is omitted, units from `disk_units` are used.
+disk\_inode\_wfree 	| **Optional.** The free inode warning threshold.
+disk\_inode\_cfree 	| **Optional.** The free inode critical threshold.
+disk\_partition		| **Optional.** The partition. **Deprecated in 2.3.**
+disk\_partition\_excluded  | **Optional.** The excluded partition. **Deprecated in 2.3.**
+disk\_partitions 	| **Optional.** The partition(s). Multiple partitions must be defined as array.
+disk\_partitions\_excluded | **Optional.** The excluded partition(s). Multiple partitions must be defined as array.
+disk\_clear             | **Optional.** Clear thresholds.
+disk\_exact\_match      | **Optional.** For paths or partitions specified with -p, only check for exact paths.
+disk\_errors\_only      | **Optional.** Display only devices/mountpoints with errors. May be true or false.
+disk\_ignore\_reserved  | **Optional.** If set, account root-reserved blocks are not accounted for freespace in perfdata.
+disk\_group             | **Optional.** Group paths. Thresholds apply to (free-)space of all partitions together.
+disk\_kilobytes         | **Optional.** Same as --units kB. May be true or false.
+disk\_local             | **Optional.** Only check local filesystems. May be true or false.
+disk\_stat\_remote\_fs  | **Optional.** Only check local filesystems against thresholds. Yet call stat on remote filesystems to test if they are accessible (e.g. to detect Stale NFS Handles). May be true or false.
+disk\_mountpoint          | **Optional.** Display the mountpoint instead of the partition. May be true or false.
+disk\_megabytes           | **Optional.** Same as --units MB. May be true or false.
+disk\_all                 | **Optional.** Explicitly select all paths. This is equivalent to -R '.\*'. May be true or false.
+disk\_eregi\_path         | **Optional.** Case insensitive regular expression for path/partition. Multiple regular expression strings must be defined as array.
+disk\_ereg\_path          | **Optional.** Regular expression for path or partition. Multiple regular expression strings must be defined as array.
+disk\_ignore\_eregi\_path | **Optional.** Regular expression to ignore selected path/partition (case insensitive). Multiple regular expression strings must be defined as array.
+disk\_ignore\_ereg\_path  | **Optional.** Regular expression to ignore selected path or partition. Multiple regular expression strings must be defined as array.
+disk\_timeout             | **Optional.** Seconds before connection times out (default: 10).
+disk\_units               | **Optional.** Choose bytes, kB, MB, GB, TB (default: MB).
+disk\_exclude\_type       | **Optional.** Ignore all filesystems of indicated type. Multiple regular expression strings must be defined as array.
 
 ### <a id="plugin-check-command-disk-smb"></a> disk_smb
 
@@ -344,18 +347,18 @@ Name               | Description
 -------------------|--------------
 ftp_address        | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 ftp_port           | **Optional.** The FTP port number.
-ftp_expect         | **Optional.** String to expect in server response (may be repeated).
+ftp_expect         | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 ftp_all            | **Optional.** All expect strings need to occur in server response. Defaults to false.
-ftp_escape_send    | **Optional.** Enable usage of \n, \r, \t or \\\\ in send string.
+ftp_escape_send    | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in send string.
 ftp_send           | **Optional.** String to send to the server.
-ftp_escape_quit    | **Optional.** Enable usage of \n, \r, \t or \\\\ in quit string.
+ftp_escape_quit    | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in quit string.
 ftp_quit           | **Optional.** String to send server to initiate a clean close of the connection.
 ftp_refuse         | **Optional.** Accept TCP refusals with states ok, warn, crit. Defaults to crit.
 ftp_mismatch       | **Optional.** Accept expected string mismatches with states ok, warn, crit. Defaults to warn.
 ftp_jail           | **Optional.** Hide output from TCP socket.
 ftp_maxbytes       | **Optional.** Close connection once more than this number of bytes are received.
 ftp_delay          | **Optional.** Seconds to wait between sending string and polling for response.
-ftp_certificate    | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) - seperated by comma.
+ftp_certificate    | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) -- separated by comma.
 ftp_ssl            | **Optional.** Use SSL for the connection. Defaults to false.
 ftp_wtime          | **Optional.** Response time to result in warning status (seconds).
 ftp_ctime          | **Optional.** Response time to result in critical status (seconds).
@@ -438,41 +441,51 @@ Check command object for the `check_http` plugin.
 
 Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
 
-Name                     | Description
--------------------------|--------------
-http_address             | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-http_vhost               | **Optional.** The virtual host that should be sent in the "Host" header.
-http_uri                 | **Optional.** The request URI.
-http_port                | **Optional.** The TCP port. Defaults to 80 when not using SSL, 443 otherwise.
-http_ssl                 | **Optional.** Whether to use SSL. Defaults to false.
-http_sni                 | **Optional.** Whether to use SNI. Defaults to false.
-http_auth_pair           | **Optional.** Add 'username:password' authorization pair.
-http_proxy_auth_pair     | **Optional.** Add 'username:password' authorization pair for proxy.
-http_ignore_body         | **Optional.** Don't download the body, just the headers.
-http_linespan            | **Optional.** Allow regex to span newline.
-http_expect_body_regex   | **Optional.** A regular expression which the body must match against. Incompatible with http_ignore_body.
-http_expect_body_eregi   | **Optional.** A case-insensitive expression which the body must match against. Incompatible with http_ignore_body.
-http_invertregex         | **Optional.** Changes behaviour of http_expect_body_regex and http_expect_body_eregi to return CRITICAL if found, OK if not.
-http_warn_time           | **Optional.** The warning threshold.
-http_critical_time       | **Optional.** The critical threshold.
-http_expect              | **Optional.** Comma-delimited list of strings, at least one of them is expected in the first (status) line of the server response. Default: HTTP/1.
-http_certificate         | **Optional.** Minimum number of days a certificate has to be valid. Port defaults to 443.
-http_clientcert          | **Optional.** Name of file contains the client certificate (PEM format).
-http_privatekey          | **Optional.** Name of file contains the private key (PEM format).
-http_headerstring        | **Optional.** String to expect in the response headers.
-http_string              | **Optional.** String to expect in the content.
-http_post                | **Optional.** URL encoded http POST data.
-http_method              | **Optional.** Set http method (for example: HEAD, OPTIONS, TRACE, PUT, DELETE).
-http_maxage              | **Optional.** Warn if document is more than seconds old.
-http_contenttype         | **Optional.** Specify Content-Type header when POSTing.
-http_useragent           | **Optional.** String to be sent in http header as User Agent.
-http_header              | **Optional.** Any other tags to be sent in http header.
-http_extendedperfdata    | **Optional.** Print additional perfdata. Defaults to false.
-http_onredirect          | **Optional.** How to handle redirect pages. Possible values: "ok" (default), "warning", "critical", "follow", "sticky" (like follow but stick to address), "stickyport" (like sticky but also to port)
-http_pagesize            | **Optional.** Minimum page size required:Maximum page size required.
-http_timeout             | **Optional.** Seconds before connection times out.
-http_ipv4                | **Optional.** Use IPv4 connection. Defaults to false.
-http_ipv6                | **Optional.** Use IPv6 connection. Defaults to false.
+Name                             | Description
+---------------------------------|---------------------------------
+http_address                     | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
+http_vhost                       | **Optional.** The virtual host that should be sent in the "Host" header.
+http_uri                         | **Optional.** The request URI for GET or POST. Defaults to `/`.
+http_port                        | **Optional.** The TCP port. Defaults to 80 when not using SSL, 443 otherwise.
+http_ssl                         | **Optional.** Whether to use SSL. Defaults to false.
+http_ssl_force_tlsv1             | **Optional.** Whether to force TLSv1.
+http_ssl_force_tlsv1_1           | **Optional.** Whether to force TLSv1.1.
+http_ssl_force_tlsv1_2           | **Optional.** Whether to force TLSv1.2.
+http_ssl_force_sslv2             | **Optional.** Whether to force SSLv2.
+http_ssl_force_sslv3             | **Optional.** Whether to force SSLv3.
+http_ssl_force_tlsv1_or_higher   | **Optional.** Whether to force TLSv1 or higher.
+http_ssl_force_tlsv1_1_or_higher | **Optional.** Whether to force TLSv1.1 or higher.
+http_ssl_force_tlsv1_2_or_higher | **Optional.** Whether to force TLSv1.2 or higher.
+http_ssl_force_sslv2_or_higher   | **Optional.** Whether to force SSLv2 or higher.
+http_ssl_force_sslv3_or_higher   | **Optional.** Whether to force SSLv3 or higher.
+http_sni                         | **Optional.** Whether to use SNI. Defaults to false.
+http_auth_pair                   | **Optional.** Add 'username:password' authorization pair.
+http_proxy_auth_pair             | **Optional.** Add 'username:password' authorization pair for proxy.
+http_ignore_body                 | **Optional.** Don't download the body, just the headers.
+http_linespan                    | **Optional.** Allow regex to span newline.
+http_expect_body_regex           | **Optional.** A regular expression which the body must match against. Incompatible with http_ignore_body.
+http_expect_body_eregi           | **Optional.** A case-insensitive expression which the body must match against. Incompatible with http_ignore_body.
+http_invertregex                 | **Optional.** Changes behaviour of http_expect_body_regex and http_expect_body_eregi to return CRITICAL if found, OK if not.
+http_warn_time                   | **Optional.** The warning threshold.
+http_critical_time               | **Optional.** The critical threshold.
+http_expect                      | **Optional.** Comma-delimited list of strings, at least one of them is expected in the first (status) line of the server response. Default: HTTP/1.
+http_certificate                 | **Optional.** Minimum number of days a certificate has to be valid. Port defaults to 443.
+http_clientcert                  | **Optional.** Name of file contains the client certificate (PEM format).
+http_privatekey                  | **Optional.** Name of file contains the private key (PEM format).
+http_headerstring                | **Optional.** String to expect in the response headers.
+http_string                      | **Optional.** String to expect in the content.
+http_post                        | **Optional.** URL encoded http POST data.
+http_method                      | **Optional.** Set http method (for example: HEAD, OPTIONS, TRACE, PUT, DELETE).
+http_maxage                      | **Optional.** Warn if document is more than seconds old.
+http_contenttype                 | **Optional.** Specify Content-Type header when POSTing.
+http_useragent                   | **Optional.** String to be sent in http header as User Agent.
+http_header                      | **Optional.** Any other tags to be sent in http header.
+http_extendedperfdata            | **Optional.** Print additional perfdata. Defaults to false.
+http_onredirect                  | **Optional.** How to handle redirect pages. Possible values: "ok" (default), "warning", "critical", "follow", "sticky" (like follow but stick to address), "stickyport" (like sticky but also to port)
+http_pagesize                    | **Optional.** Minimum page size required:Maximum page size required.
+http_timeout                     | **Optional.** Seconds before connection times out.
+http_ipv4                        | **Optional.** Use IPv4 connection. Defaults to false.
+http_ipv6                        | **Optional.** Use IPv6 connection. Defaults to false.
 
 
 ### <a id="plugin-check-command-icmp"></a> icmp
@@ -507,9 +520,9 @@ Name                  | Description
 ----------------------|--------------
 imap_address          | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 imap_port             | **Optional.** The port that should be checked. Defaults to 143.
-imap_escape           | **Optional.** Can use \n, \r, \t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \r\n added to end of quit.
+imap_escape           | **Optional.** Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \\r\\n added to end of quit.
 imap_send             | **Optional.** String to send to the server.
-imap_expect           | **Optional.** String to expect in server response (may be repeated).
+imap_expect           | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 imap_all              | **Optional.** All expect strings need to occur in server response. Default is any.
 imap_quit             | **Optional.** String to send server to initiate a clean close of the connection.
 imap_refuse           | **Optional.** Accept TCP refusals with states ok, warn, crit (default: crit).
@@ -578,7 +591,7 @@ mailq_critical		| **Required.** Min. number of messages in queue to generate cri
 mailq_domain_warning	| **Optional.** Min. number of messages for same domain in queue to generate warning
 mailq_domain_critical	| **Optional.** Min. number of messages for same domain in queue to generate critical alert ( W < C ).
 mailq_timeout		| **Optional.** Plugin timeout in seconds (default = 15).
-mailq_servertype	| **Optional.** [ sendmail | qmail | postfix | exim | nullmailer ] (default = autodetect).
+mailq_servertype	| **Optional.** [ sendmail \| qmail \| postfix \| exim \| nullmailer ] (default = autodetect).
 
 ### <a id="plugin-check-command-mysql"></a> mysql
 
@@ -797,9 +810,9 @@ Name                 | Description
 ---------------------|--------------
 pop_address          | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 pop_port             | **Optional.** The port that should be checked. Defaults to 110.
-pop_escape           | **Optional.** Can use \n, \r, \t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \r\n added to end of quit.
+pop_escape           | **Optional.** Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \\r\\n added to end of quit.
 pop_send             | **Optional.** String to send to the server.
-pop_expect           | **Optional.** String to expect in server response (may be repeated).
+pop_expect           | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 pop_all              | **Optional.** All expect strings need to occur in server response. Default is any.
 pop_quit             | **Optional.** String to send server to initiate a clean close of the connection.
 pop_refuse           | **Optional.** Accept TCP refusals with states ok, warn, crit (default: crit).
@@ -851,9 +864,9 @@ Name                   | Description
 -----------------------|--------------
 simap_address          | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 simap_port             | **Optional.** The port that should be checked. Defaults to 993.
-simap_escape           | **Optional.** Can use \n, \r, \t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \r\n added to end of quit.
+simap_escape           | **Optional.** Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \\r\\n added to end of quit.
 simap_send             | **Optional.** String to send to the server.
-simap_expect           | **Optional.** String to expect in server response (may be repeated).
+simap_expect           | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 simap_all              | **Optional.** All expect strings need to occur in server response. Default is any.
 simap_quit             | **Optional.** String to send server to initiate a clean close of the connection.
 simap_refuse           | **Optional.** Accept TCP refusals with states ok, warn, crit (default: crit).
@@ -949,6 +962,10 @@ snmpv3_ereg          | **Optional.** Return OK state (for that OID) if extended 
 snmpv3_eregi         | **Optional.** Return OK state (for that OID) if case-insensitive extended REGEX matches.
 snmpv3_invert_search | **Optional.** Invert search result and return CRITICAL if found
 snmpv3_label         | **Optional.** Prefix label for output value.
+snmpv3_units         | **Optional.** Units label(s) for output value (e.g., 'sec.').
+snmpv3_rate_multiplier | **Optional.** Converts rate per second. For example, set to 60 to convert to per minute.
+snmpv3_rate          | **Optional.** Boolean. Enable rate calculation.
+snmpv3_timeout       | **Optional.** The command timeout in seconds. Defaults to 10 seconds.
 
 ### <a id="plugin-check-command-snmp-uptime"></a> snmp-uptime
 
@@ -973,9 +990,9 @@ Name                  | Description
 ----------------------|--------------
 spop_address          | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 spop_port             | **Optional.** The port that should be checked. Defaults to 995.
-spop_escape           | **Optional.** Can use \n, \r, \t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \r\n added to end of quit.
+spop_escape           | **Optional.** Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \\r\\n added to end of quit.
 spop_send             | **Optional.** String to send to the server.
-spop_expect           | **Optional.** String to expect in server response (may be repeated).
+spop_expect           | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 spop_all              | **Optional.** All expect strings need to occur in server response. Default is any.
 spop_quit             | **Optional.** String to send server to initiate a clean close of the connection.
 spop_refuse           | **Optional.** Accept TCP refusals with states ok, warn, crit (default: crit).
@@ -1032,9 +1049,9 @@ Name                   | Description
 -----------------------|--------------
 ssmtp_address          | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 ssmtp_port             | **Optional.** The port that should be checked. Defaults to 465.
-ssmtp_escape           | **Optional.** Can use \n, \r, \t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \r\n added to end of quit.
+ssmtp_escape           | **Optional.** Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option. Default: nothing added to send, \\r\\n added to end of quit.
 ssmtp_send             | **Optional.** String to send to the server.
-ssmtp_expect           | **Optional.** String to expect in server response (may be repeated).
+ssmtp_expect           | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 ssmtp_all              | **Optional.** All expect strings need to occur in server response. Default is any.
 ssmtp_quit             | **Optional.** String to send server to initiate a clean close of the connection.
 ssmtp_refuse           | **Optional.** Accept TCP refusals with states ok, warn, crit (default: crit).
@@ -1073,18 +1090,18 @@ Name            | Description
 ----------------|--------------
 tcp_address     | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 tcp_port        | **Required.** The port that should be checked.
-tcp_expect      | **Optional.** String to expect in server response (may be repeated).
+tcp_expect      | **Optional.** String to expect in server response. Multiple strings must be defined as array.
 tcp_all         | **Optional.** All expect strings need to occur in server response. Defaults to false.
-tcp_escape_send | **Optional.** Enable usage of \n, \r, \t or \\\\ in send string.
+tcp_escape_send | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in send string.
 tcp_send        | **Optional.** String to send to the server.
-tcp_escape_quit | **Optional.** Enable usage of \n, \r, \t or \\\\ in quit string.
+tcp_escape_quit | **Optional.** Enable usage of \\n, \\r, \\t or \\\\ in quit string.
 tcp_quit        | **Optional.** String to send server to initiate a clean close of the connection.
 tcp_refuse      | **Optional.** Accept TCP refusals with states ok, warn, crit. Defaults to crit.
 tcp_mismatch    | **Optional.** Accept expected string mismatches with states ok, warn, crit. Defaults to warn.
 tcp_jail        | **Optional.** Hide output from TCP socket.
 tcp_maxbytes    | **Optional.** Close connection once more than this number of bytes are received.
 tcp_delay       | **Optional.** Seconds to wait between sending string and polling for response.
-tcp_certificate | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) - seperated by comma.
+tcp_certificate | **Optional.** Minimum number of days a certificate has to be valid. 1st value is number of days for warning, 2nd is critical (if not specified: 0) -- separated by comma.
 tcp_ssl         | **Optional.** Use SSL for the connection. Defaults to false.
 tcp_wtime       | **Optional.** Response time to result in warning status (seconds).
 tcp_ctime       | **Optional.** Response time to result in critical status (seconds).
@@ -1169,13 +1186,13 @@ Aggregates the free disk space of all volumes and mount points it can find, or t
 
 Custom attributes:
 
-Name            | Description
-:---------------|:------------
-disk\_win\_warn | **Optional**. The warning threshold.
-disk\_win\_crit | **Optional**. The critical threshold.
-disk\_win\_path | **Optional**. Check only these paths, default checks all.
-disk\_win\_unit | **Optional**. Use this unit to display disk space, thresholds are interpreted in this unit. Defaults to "mb", possible values are: b, kb, mb, gb and tb.
-
+Name                | Description
+:-------------------|:------------
+disk\_win\_warn     | **Optional**. The warning threshold.
+disk\_win\_crit     | **Optional**. The critical threshold.
+disk\_win\_path     | **Optional**. Check only these paths, default checks all.
+disk\_win\_unit     | **Optional**. Use this unit to display disk space, thresholds are interpreted in this unit. Defaults to "mb", possible values are: b, kb, mb, gb and tb.
+disk\_win\_exclude  | **Optional**. Exclude these drives from check.
 
 ### <a id="windows-plugins-load-windows"></a> load-windows
 
@@ -1244,14 +1261,14 @@ perfmon\_win\_type    | **Optional**. Format in which to expect perfomance value
 ### <a id="windows-plugins-ping-windows"></a> ping-windows
 
 Check command object for the `check_ping.exe` plugin.
-ping-windows should automaticly detect whether `ping_win_address` is an IPv4 or IPv6 address, if not use ping4-windows and ping6-windows. Also note that check\_ping.exe waits at least `ping_win_timeout` milliseconds between the pings.
+ping-windows should automaticly detect whether `ping_win_address` is an IPv4 or IPv6 address. If not, use ping4-windows and ping6-windows. Also note that check\_ping.exe waits at least `ping_win_timeout` milliseconds between the pings.
 
 Custom attributes:
 
 Name               | Description
 :------------------|:------------
-ping\_win\_warn    | **Optional**. The warning threshold. RTA and package loss seperated by comma.
-ping\_win\_crit    | **Optional**. The critical threshold. RTA and package loss seperated by comma.
+ping\_win\_warn    | **Optional**. The warning threshold. RTA and package loss separated by comma.
+ping\_win\_crit    | **Optional**. The critical threshold. RTA and package loss separated by comma.
 ping\_win\_address | **Required**. An IPv4 or IPv6 address
 ping\_win\_packets | **Optional**. Number of packages to send. Default: 5.
 ping\_win\_timeout | **Optional**. The timeout in milliseconds. Default: 1000
@@ -1312,8 +1329,8 @@ Custom attributes:
 
 Name                | Description
 :-------------------|:------------
-update\_win\_warn   | If set returns warning when important updates are available
-update\_win\_crit   | If set return critical when important updates that require a reboot are available.
+update\_win\_warn   | If set, returns warning when important updates are available
+update\_win\_crit   | If set, return critical when important updates that require a reboot are available.
 update\_win\_reboot | Set to treat 'may need update' as 'definitely needs update'
 
 
@@ -1376,18 +1393,33 @@ nscp_load_all   | **Optional.** Whether to load all modules. Defaults to true.
 nscp_boot       | **Optional.** Whether to use the --boot option. Defaults to true.
 nscp_query      | **Required.** The NSClient++ query. Try `nscp client -q x` for a list.
 nscp_arguments  | **Optional.** An array of query arguments.
+nscp_showall	| **Optional.** Shows more details in plugin output, default to false.
 
 ### <a id="nscp-check-local-cpu"></a> nscp-local-cpu
 
 Check command object for the `check_cpu` NSClient++ plugin.
 
-This command has the same custom attributes like the `nscp-local` check command.
+Name                | Description
+--------------------|------------------
+nscp_cpu_time       | **Optional.** Calculate avarage usage for the given time intervals. Value has to be an array, default to [ "1m", "5m", "15m" ].
+nscp_cpu_warning    | **Optional.** Threshold for WARNING state in percent, default to 80.
+nscp_cpu_critical   | **Optional.** Threshold for CRITICAL state in percent, default to 90.
+nscp_cpu_arguments  | **Optional.** Additional arguments.
+nscp_cpu_showall    | **Optional.** Shows more details in plugin output, default to false.
 
 ### <a id="nscp-check-local-memory"></a> nscp-local-memory
 
 Check command object for the `check_memory` NSClient++ plugin.
 
-This command has the same custom attributes like the `nscp-local` check command.
+Name                  | Description
+----------------------|------------------
+nscp_memory_committed | **Optional.** Check for committed memory, default to false.
+nscp_memory_physical  | **Optional.** Check for physical memory, default to true.
+nscp_memory_free      | **Optional.** Switch between checking free (true) or used memory (false), default to false.
+nscp_memory_warning   | **Optional.** Threshold for WARNING state in percent or absolut (use MB, GB, ...), default to 80 (free=false) or 20 (free=true).
+nscp_memory_critical  | **Optional.** Threshold for CRITICAL state in percent or absolut (use MB, GB, ...), default to 90 (free=false) or 10 (free=true).
+nscp_memory_arguments | **Optional.** Additional arguments.
+nscp_memory_showall   | **Optional.** Shows more details in plugin output, default to false.
 
 ### <a id="nscp-check-local-os-version"></a> nscp-local-os-version
 
@@ -1411,7 +1443,18 @@ This command has the same custom attributes like the `nscp-local` check command.
 
 Check command object for the `check_service` NSClient++ plugin.
 
-This command has the same custom attributes like the `nscp-local` check command.
+Name                   | Description
+-----------------------|------------------
+nscp_service_name      | **Required.** Name of service to check.
+nscp_service_type      | **Optional.** Type to check, default to state.
+nscp_service_ok	       | **Optional.** State for return an OK, i.e. for type=state running, stopped, ...
+nscp_service_otype     | **Optional.** Dedicate type for nscp_service_ok, default to nscp_service_state.
+nscp_service_warning   | **Optional.** State for return an WARNING.
+nscp_service_wtype     | **Optional.** Dedicate type for nscp_service_warning, default to nscp_service_state.
+nscp_service_critical  | **Optional.** State for return an CRITICAL.
+nscp_service_ctype     | **Optional.** Dedicate type for nscp_service_critical, default to nscp_service_state.
+nscp_service_arguments | **Optional.** Additional arguments.
+nscp_service_showall   | **Optional.** Shows more details in plugin output, default to true.
 
 ### <a id="nscp-check-local-uptime"></a> nscp-local-uptime
 
@@ -1429,20 +1472,36 @@ This command has the same custom attributes like the `nscp-local` check command.
 
 Check command object for the `check_drivesize` NSClient++ plugin.
 
-This command has the same custom attributes like the `nscp-local` check command.
+Name                   | Description
+-----------------------|------------------
+nscp_disk_drive        | **Optional.** Drive character, default to all drives.
+nscp_disk_free         | **Optional.** Switch between checking free space (free=true) or used space (free=false), default to false.
+nscp_disk_warning      | **Optional.** Threshold for WARNING in percent or absolut (use MB, GB, ...), default to 80 (used) or 20 percent (free).
+nscp_disk_critical     | **Optional.** Threshold for CRITICAL in percent or absolut (use MB, GB, ...), default to 90 (used) or 10 percent (free).
+nscp_disk_arguments    | **Optional.** Additional arguments.
+nscp_disk_showall      | **Optional.** Shows more details in plugin output, default to true.
 
 ### <a id="nscp-check-local-counter"></a> nscp-local-counter
 
 Check command object for the `check_pdh` NSClient++ plugin.
 
-This command has the same custom attributes like the `nscp-local` check command.
+Name                   | Description
+-----------------------|------------------
+nscp_counter_name      | **Required.** Performance counter name.
+nscp_counter_warning   | **Optional.** WARNING Threshold.
+nscp_counter_critical  | **Optional.** CRITICAL Threshold.
+nscp_counter_arguments | **Optional.** Additional arguments.
+nscp_counter_showall   | **Optional.** Shows more details in plugin output, default to false.
 
 
 
 ## <a id="snmp-manubulon-plugin-check-commands"></a> Plugin Check Commands for Manubulon SNMP
 
-The `SNMP Manubulon Plugin Check Commands` provide example configuration for plugin check
+The `SNMP Manubulon Plugin Check Commands` provide configuration for plugin check
 commands provided by the [SNMP Manubulon project](http://nagios.manubulon.com/index_snmp.html).
+
+**Note:** Some plugin parameters are only available in Debian packages or in a
+[forked repository](https://github.com/dnsmichi/manubulon-snmp) with patches applied.
 
 The SNMP manubulon plugin check commands assume that the global constant named `ManubulonPluginDir`
 is set to the path where the Manubublon SNMP plugins are installed.
@@ -1490,7 +1549,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 Name                    | Description
 ------------------------|--------------
 snmp_address            | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-snmp_nocrypt            | **Optional.** Define SNMP encryption. If set **snmp_v3** needs to be set. Defaults to false.
+snmp_nocrypt            | **Optional.** Define SNMP encryption. If set, **snmp_v3** needs to be set. Defaults to false.
 snmp_community          | **Optional.** The SNMP community. Defaults to "public".
 snmp_port               | **Optional.** The SNMP port connection.
 snmp_v2                 | **Optional.** SNMP version to 2c. Defaults to false.
@@ -1515,7 +1574,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 Name                    | Description
 ------------------------|--------------
 snmp_address            | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-snmp_nocrypt            | **Optional.** Define SNMP encryption. If set **snmp_v3** needs to be set. Defaults to false.
+snmp_nocrypt            | **Optional.** Define SNMP encryption. If set, **snmp_v3** needs to be set. Defaults to false.
 snmp_community          | **Optional.** The SNMP community. Defaults to "public".
 snmp_port               | **Optional.** The SNMP port connection.
 snmp_v2                 | **Optional.** SNMP version to 2c. Defaults to false.
@@ -1540,7 +1599,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 Name                    | Description
 ------------------------|--------------
 snmp_address            | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-snmp_nocrypt            | **Optional.** Define SNMP encryption. If set **snmp_v3** needs to be set. Defaults to false.
+snmp_nocrypt            | **Optional.** Define SNMP encryption. If set, **snmp_v3** needs to be set. Defaults to false.
 snmp_community          | **Optional.** The SNMP community. Defaults to "public".
 snmp_port               | **Optional.** The SNMP port connection.
 snmp_v2                 | **Optional.** SNMP version to 2c. Defaults to false.
@@ -1565,7 +1624,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 Name                        | Description
 ----------------------------|--------------
 snmp_address                | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-snmp_nocrypt                | **Optional.** Define SNMP encryption. If set **snmp_v3** needs to be set. Defaults to false.
+snmp_nocrypt                | **Optional.** Define SNMP encryption. If set, **snmp_v3** needs to be set. Defaults to false.
 snmp_community              | **Optional.** The SNMP community. Defaults to "public".
 snmp_port                   | **Optional.** The SNMP port connection.
 snmp_v2                     | **Optional.** SNMP version to 2c. Defaults to false.
@@ -1579,7 +1638,7 @@ snmp_warn                   | **Optional.** The warning threshold.
 snmp_crit                   | **Optional.** The critical threshold.
 snmp_interface              | **Optional.** Network interface name. Default to regex "eth0".
 snmp_interface_perf         | **Optional.** Check the input/ouput bandwidth of the interface. Defaults to true.
-snmp_interface_label        | **Optional.** Add label before speed in output: in=, out=, errors-out=, etc...
+snmp_interface_label        | **Optional.** Add label before speed in output: in=, out=, errors-out=, etc.
 snmp_interface_bits_bytes   | **Optional.** Output performance data in bits/s or Bytes/s. **Depends** on snmp_interface_kbits set to true. Defaults to true.
 snmp_interface_percent      | **Optional.** Output performance data in % of max speed. Defaults to false.
 snmp_interface_kbits        | **Optional.** Make the warning and critical levels in KBits/s. Defaults to true.
@@ -1588,7 +1647,8 @@ snmp_interface_64bit        | **Optional.** Use 64 bits counters instead of the 
 snmp_interface_errors       | **Optional.** Add error & discard to Perfparse output. Defaults to true.
 snmp_interface_noregexp     | **Optional.** Do not use regexp to match interface name in description OID. Defaults to false.
 snmp_interface_delta        | **Optional.** Delta time of perfcheck. Defaults to "300" (5 min).
-snmp_warncrit_percent       | **Optional.** Make the warning and critical levels in % of reported interface speed. If set **snmp_interface_megabytes** needs to be set to false. Defaults to false.
+snmp_interface_warncrit_percent | **Optional.** Make the warning and critical levels in % of reported interface speed. If set, **snmp_interface_megabytes** needs to be set to false. Defaults to false.
+snmp_interface_ifname       | **Optional.** Switch from IF-MIB::ifDescr to IF-MIB::ifName when looking up the interface's name
 snmp_perf                   | **Optional.** Enable perfdata values. Defaults to true.
 snmp_timeout                | **Optional.** The command timeout in seconds. Defaults to 5 seconds.
 
@@ -1601,7 +1661,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 Name                    | Description
 ------------------------|--------------
 snmp_address            | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
-snmp_nocrypt            | **Optional.** Define SNMP encryption. If set **snmp_v3** needs to be set. Defaults to false.
+snmp_nocrypt            | **Optional.** Define SNMP encryption. If set, **snmp_v3** needs to be set. Defaults to false.
 snmp_community          | **Optional.** The SNMP community. Defaults to "public".
 snmp_port               | **Optional.** The SNMP port connection.
 snmp_v2                 | **Optional.** SNMP version to 2c. Defaults to false.
@@ -1616,6 +1676,7 @@ snmp_crit               | **Optional.** The critical threshold.
 snmp_process_name       | **Optional.** Name of the process (regexp). No trailing slash!. Defaults to ".*".
 snmp_perf               | **Optional.** Enable perfdata values. Defaults to true.
 snmp_timeout            | **Optional.** The command timeout in seconds. Defaults to 5 seconds.
+snmp_process_use_params | **Optional.** Add process parameters to process name for regexp matching. Example: "named.*-t /var/named/chroot" will only select named process with this parameter. Defaults to false.
 
 
 
@@ -1652,11 +1713,12 @@ mssql_health_password            | **Optional.** The password for the database c
 mssql_health_warning             | **Optional.** The warning threshold depending on the mode.
 mssql_health_critical            | **Optional.** The critical threshold depending on the mode.
 mssql_health_mode                | **Required.** The mode uses predefined keywords for the different checks. For example "connection-time", "database-free" or "sql".
+mssql_health_method              | **Optional.** How the plugin should connect to the database (dbi for the perl module `DBD::Sybase` (default) and `sqlrelay` for the SQLRelay proxy).
 mssql_health_name                | **Optional.** Depending on the mode this could be the database name or a SQL statement.
 mssql_health_name2               | **Optional.** If "mssql_health_name" is a sql statement, "mssql_health_name2" can be used to appear in the output and the performance data.
 mssql_health_regexp              | **Optional.** If set to true, "mssql_health_name" will be interpreted as a regular expression. Defaults to false.
 mssql_health_units               | **Optional.** This is used for a better output of mode=sql and for specifying thresholds for mode=tablespace-free. Possible values are "%", "KB", "MB" and "GB".
-mssql_health_offlineok           | **Optional.** Set this to true, if offline databases are perfectly ok for you. Defaults to false.
+mssql_health_offlineok           | **Optional.** Set this to true if offline databases are perfectly ok for you. Defaults to false.
 mssql_health_commit              | **Optional.** Set this to true to turn on autocommit for the dbd::sybase module. Defaults to false.
 
 #### <a id="plugins-contrib-command-mysql_health"></a> mysql_health
@@ -1677,6 +1739,7 @@ mysql_health_database            | **Optional.** The database to connect to. Def
 mysql_health_warning             | **Optional.** The warning threshold depending on the mode.
 mysql_health_critical            | **Optional.** The critical threshold depending on the mode.
 mysql_health_mode                | **Required.** The mode uses predefined keywords for the different checks. For example "connection-time", "slave-lag" or "sql".
+mysql_health_method              | **Optional.** How the plugin should connect to the database (`dbi` for using DBD::Mysql (default), `mysql` for using the mysql-Tool).
 mysql_health_name                | **Optional.** The SQL statement to be executed with "mysql_health_mode" sql.
 mysql_health_name2               | **Optional.** If "mysql_health_name" is a sql statement, "mysql_health_name2" can be used to appear in the output and the performance data.
 mysql_health_units               | **Optional.** This is used for a better output of mode=sql and for specifying thresholds for mode=tablespace-free. Possible values are "%", "KB", "MB" and "GB".
@@ -1697,11 +1760,12 @@ oracle_health_password           | **Optional.** The password for the database c
 oracle_health_warning            | **Optional.** The warning threshold depending on the mode.
 oracle_health_critical           | **Optional.** The critical threshold depending on the mode.
 oracle_health_mode               | **Required.** The mode uses predefined keywords for the different checks. For example "connection-time", "flash-recovery-area-usage" or "sql".
+oracle_health_method             | **Optional.** How the plugin should connect to the database (`dbi` for using DBD::Oracle (default), `sqlplus` for using the sqlplus-Tool).
 oracle_health_name               | **Optional.** The tablespace, datafile, wait event, latch, enqueue depending on the mode or SQL statement to be executed with "oracle_health_mode" sql.
 oracle_health_name2              | **Optional.** If "oracle_health_name" is a sql statement, "oracle_health_name2" can be used to appear in the output and the performance data.
 oracle_health_regexp             | **Optional.** If set to true, "oracle_health_name" will be interpreted as a regular expression. Defaults to false.
 oracle_health_units              | **Optional.** This is used for a better output of mode=sql and for specifying thresholds for mode=tablespace-free. Possible values are "%", "KB", "MB" and "GB".
-oracle_health_ident              | **Optional.** If set to true outputs instance and database names. Defaults to false.
+oracle_health_ident              | **Optional.** If set to true, outputs instance and database names. Defaults to false.
 oracle_health_commit             | **Optional.** Set this to true to turn on autocommit for the dbd::oracle module. Defaults to false.
 oracle_health_noperfdata         | **Optional.** Set this to true if you want to disable perfdata. Defaults to false.
 
@@ -1721,7 +1785,7 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 
 Name                             | Description
 ---------------------------------|------------------------------------------------------------------------------------------------------------------------------
-postgres_host        | **Optional.** Specifies the database hostname or address. Defaults to "$address$" or "$address6$" if the `address` attribute is not set. If "postgres_unixsocket" is set to true falls back to unix socket.
+postgres_host        | **Optional.** Specifies the database hostname or address. Defaults to "$address$" or "$address6$" if the `address` attribute is not set. If "postgres_unixsocket" is set to true, falls back to unix socket.
 postgres_port        | **Optional.** Specifies the database port. Defaults to 5432.
 postgres_dbname      | **Optional.** Specifies the database name to connect to. Defaults to "postgres" or "template1".
 postgres_dbuser      | **Optional.** The username for the database connection. Defaults to "postgres".
@@ -1736,7 +1800,10 @@ postgres_excludeuser | **Optional.** Exclude objects owned by certain users.
 postgres_standby     | **Optional.** Assume that the server is in continious WAL recovery mode if set to true. Defaults to false.
 postgres_production  | **Optional.** Assume that the server is in production mode if set to true. Defaults to false.
 postgres_action      | **Required.** Determines the test executed.
-postgres_unixsocket  | **Optional.** If "postgres_unixsocket" is set to true the unix socket is used instead of an address. Defaults to false.
+postgres_unixsocket  | **Optional.** If "postgres_unixsocket" is set to true, the unix socket is used instead of an address. Defaults to false.
+postgres_query       | **Optional.** Query for "custom_query" action.
+postgres_valtype     | **Optional.** Value type of query result for "custom_query".
+postgres_reverse     | **Optional.** If "postgres_reverse" is set, warning and critical values are reversed for "custom_query" action.
 
 #### <a id="plugins-contrib-command-mongodb"></a> mongodb
 
@@ -1761,7 +1828,8 @@ mongodb_database                 | **Optional.** Specify the database to check
 mongodb_alldatabases             | **Optional.** Check all databases (action database_size)
 mongodb_ssl                      | **Optional.** Connect using SSL
 mongodb_replicaset               | **Optional.** Connect to replicaset
-mongodb_querytype                | **Optional.** The query type to check [query|insert|update|delete|getmore|command] from queries_per_second
+mongodb_replcheck                | **Optional.** If set to true, will enable the mongodb_replicaset value needed for "replica_primary" check
+mongodb_querytype                | **Optional.** The query type to check [query\|insert\|update\|delete\|getmore\|command] from queries_per_second
 mongodb_collection               | **Optional.** Specify the collection to check
 mongodb_sampletime               | **Optional.** Time used to sample number of pages faults
 
@@ -1782,7 +1850,7 @@ elasticsearch_yellowcritical | **Optional.** Instead of issuing a 'warning' for 
 
 #### <a id="plugins-contrib-command-redis"></a> redis
 
-The plugin `redis` can measure response time, hitrate, memory utilization, check replication sync and more. It can also test data in a specified key (if necessary doing average or sum on range).
+The plugin `redis` can measure response time, hitrate, memory utilization, check replication sync and more. It can also test data in a specified key (if necessary, doing average or sum on range).
 It is provided by `William Leibzon` at [https://github.com](https://github.com/willixix/naglio-plugins/blob/master/check_redis.pl).
 
 Name                     | Description
@@ -1798,11 +1866,11 @@ redis_warn               | **Optional.** This option can only be used if **redis
 redis_crit               | **Optional.** This option can only be used if **redis_variables** is used and the number of values listed here must exactly match number of variables specified.
 redis_perfparse          | **Optional.** This should only be used with variables and causes variable data not only to be printed as part of main status line but also as perfparse compatible output. Defaults to false.
 redis_perfvars           | **Optional.** This allows to list variables which values will go only into perfparse output (and not for threshold checking).
-redis_prev_perfdata      | **Optional.** If set to true previous performance data are used to calculate rate of change for counter statistics variables and for proper calculation of hitrate. Defaults to false.
+redis_prev_perfdata      | **Optional.** If set to true, previous performance data are used to calculate rate of change for counter statistics variables and for proper calculation of hitrate. Defaults to false.
 redis_rate_label         | **Optional.** Prefix or Suffix label used to create a new variable which has rate of change of another base variable. You can specify PREFIX or SUFFIX or both as one string separated by ",". Default if not specified is suffix "_rate".
 redis_query              | **Optional.** Option specifies key to query and optional variable name to assign the results to after.
 redis_option             | **Optional.** Specifiers are separated by "," and must include NAME or PATTERN.
-redis_response_time      | **Optional.** If this is used plugin will measure and output connection response time in seconds. With **redis_perfparse** this would also be provided on perf variables.
+redis_response_time      | **Optional.** If this is used, plugin will measure and output connection response time in seconds. With **redis_perfparse** this would also be provided on perf variables.
 redis_hitrate            | **Optional.** Calculates Hitrate and specify values are interpreted as WARNING and CRITICAL thresholds.
 redis_memory_utilization | **Optional.** This calculates percent of total memory on system used by redis. Total_memory on server must be specified with **redis_total_memory**. If you specify by itself, the plugin will just output this info. Parameter values are interpreted as WARNING and CRITICAL thresholds.
 redis_total_memory       | **Optional.** Amount of memory on a system for memory utilization calculation. Use system memory or max_memory setting of redis.
@@ -1833,11 +1901,28 @@ hpasm_eventrange		| **Optional.** Period of time before critical IML events resp
 hpasm_perfdata			| **Optional.** Output performance data. If your performance data string becomes too long and is truncated by Nagios, then you can use --perfdata=short instead. This will output temperature tags without location information.
 hpasm_username			| **Optional.** The securityName for the USM security model (SNMPv3 only).
 hpasm_authpassword		| **Optional.** The authentication password for SNMPv3.
-hpasm_authprotocol		| **Optional.** The authentication protocol for SNMPv3 (md5|sha).
+hpasm_authprotocol		| **Optional.** The authentication protocol for SNMPv3 (md5\|sha).
 hpasm_privpassword		| **Optional.** The password for authPriv security level.
-hpasm_privprotocol		| **Optional.** The private protocol for SNMPv3 (des|aes|aes128|3des|3desde).
+hpasm_privprotocol		| **Optional.** The private protocol for SNMPv3 (des\|aes\|aes128\|3des\|3desde).
 hpasm_servertype		| **Optional.** The type of the server: proliant (default) or bladesystem.
-hpasm_eval-nics			| **Optional.** Check network interfaces (and groups). Try it and report me whyt you think about it. I need to build up some know how on this subject. If get an error and you think, it is not justified for your configuration, please tell me about it. (alwasy send the output of "snmpwalk -On .... 1.3.6.1.4.1.232" and a description how you setup your nics and why it is correct opposed to the plugins error message.
+hpasm_eval-nics			| **Optional.** Check network interfaces (and groups). Try it and report me whyt you think about it. I need to build up some know how on this subject. If you get an error and think, it is not justified for your configuration, please tell me about it. (alwasy send the output of "snmpwalk -On .... 1.3.6.1.4.1.232" and a description how you setup your nics and why it is correct opposed to the plugins error message.
+
+
+### <a id="plugins-contrib-icingacli"></a> IcingaCLI
+
+This category includes all plugins using the icingacli provided by Icinga Web 2.
+
+#### <a id="plugins-contrib-icingacli-businessprocess"></a> Business Process
+
+This subcommand is provided by the [business process module](https://exchange.icinga.org/icinga/Business+Process) and executed as `icingacli-businessprocess`. The module is hosted by the Icinga project on its [project homepage](https://dev.icinga.org/projects/icingaweb2-module-businessprocess).
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name                    	          | Description
+------------------------------------------|-----------------------------------------------------------------------------------------
+icingacli_businessprocess_process         | **Required.** Business process to monitor.
+icingacli_businessprocess_config          | **Optional.** Configuration file containing your business process without file extension.
+icingacli_businessprocess_details         | **Optional.** Get details for root cause analyses. Defaults to false.
 
 
 ### <a id="plugins-contrib-ipmi"></a> IPMI Devices
@@ -1952,9 +2037,27 @@ iftraffic_community	| **Optional.** SNMP community. Defaults to "public'" if omi
 iftraffic_interface	| **Required.** Queried interface name.
 iftraffic_bandwidth	| **Required.** Interface maximum speed in kilo/mega/giga/bits per second.
 iftraffic_units		| **Optional.** Interface units can be one of these values: `g` (gigabits/s),`m` (megabits/s), `k` (kilobits/s),`b` (bits/s)
-iftraffic_warn		| **Optional.** Percent of bandwidth usage necessary to result in warning status (defaults to `85%`).
-iftraffic_crit		| **Optional.** Percent of bandwidth usage necessary to result in critical status (defaults to `98%`).
+iftraffic_warn		| **Optional.** Percent of bandwidth usage necessary to result in warning status (defaults to `85`).
+iftraffic_crit		| **Optional.** Percent of bandwidth usage necessary to result in critical status (defaults to `98`).
 iftraffic_max_counter	| **Optional.** Maximum counter value of net devices in kilo/mega/giga/bytes.
+
+#### <a id="plugins-contrib-command-iftraffic64"></a> iftraffic64
+
+The plugin [check_iftraffic64](https://exchange.icinga.org/exchange/iftraffic64)
+checks the utilization of a given interface name using the SNMP protocol.
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name                    | Description
+------------------------|---------------------------------------------------------
+iftraffic64_address     | **Required.** Specifies the remote host. Defaults to "$address$".
+iftraffic64_community   | **Optional.** SNMP community. Defaults to "public'" if omitted.
+iftraffic64_interface   | **Required.** Queried interface name.
+iftraffic64_bandwidth   | **Required.** Interface maximum speed in kilo/mega/giga/bits per second.
+iftraffic64_units       | **Optional.** Interface units can be one of these values: `g` (gigabits/s),`m` (megabits/s), `k` (kilobits/s),`b` (bits/s)
+iftraffic64_warn        | **Optional.** Percent of bandwidth usage necessary to result in warning status (defaults to `85`).
+iftraffic64_crit        | **Optional.** Percent of bandwidth usage necessary to result in critical status (defaults to `98`).
+iftraffic64_max_counter	| **Optional.** Maximum counter value of net devices in kilo/mega/giga/bytes.
 
 #### <a id="plugins-contrib-command-interfaces"></a> interfaces
 
@@ -1977,9 +2080,9 @@ interfaces_bandwidth      | **Optional.** Bandwidth warn level in percent.
 interfaces_speed          | **Optional.** Override speed detection with this value (bits per sec).
 interfaces_trim           | **Optional.** Cut this number of characters from the start of interface descriptions.
 interfaces_mode           | **Optional.** Special operating mode (default,cisco,nonbulk,bintec).
-interfaces_auth_proto     | **Optional.** SNMPv3 Auth Protocol (SHA|MD5)
+interfaces_auth_proto     | **Optional.** SNMPv3 Auth Protocol (SHA\|MD5)
 interfaces_auth_phrase    | **Optional.** SNMPv3 Auth Phrase
-interfaces_priv_proto     | **Optional.** SNMPv3 Privacy Protocol (AES|DES)
+interfaces_priv_proto     | **Optional.** SNMPv3 Privacy Protocol (AES\|DES)
 interfaces_priv_phrase    | **Optional.** SNMPv3 Privacy Phrase
 interfaces_user           | **Optional.** SNMPv3 User
 interfaces_down_is_ok     | **Optional.** Disables critical alerts for down interfaces.
@@ -1997,18 +2100,19 @@ Custom attributes passed as [command parameters](3-monitoring-basics.md#command-
 
 Name                      	| Description
 --------------------------------|---------------------------------------------------------
+nwc_health_hostname             | **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
+nwc_health_mode                 | **Optional.** The plugin mode. A list of all available modes can be found in the [plugin documentation](https://labs.consol.de/nagios/check_nwc_health/index.html).
 nwc_health_timeout	  	| **Optional.** Seconds before plugin times out (default: 15)
 nwc_health_blacklist	  	| **Optional.** Blacklist some (missing/failed) components.
-nwc_health_hostname	  	| **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, "$address6$" otherwise.
 nwc_health_port		  	| **Optional.** The SNMP port to use (default: 161).
 nwc_health_domain	  	| **Optional.** The transport domain to use (default: udp/ipv4, other possible values: udp6, udp/ipv6, tcp, tcp4, tcp/ipv4, tcp6, tcp/ipv6).
 nwc_health_protocol	  	| **Optional.** The SNMP protocol to use (default: 2c, other possibilities: 1,3).
 nwc_health_community	  	| **Optional.** SNMP community of the server (SNMP v1/2 only).
 nwc_health_username	  	| **Optional.** The securityName for the USM security model (SNMPv3 only).
 nwc_health_authpassword	  	| **Optional.** The authentication password for SNMPv3.
-nwc_health_authprotocol	  	| **Optional.** The authentication protocol for SNMPv3 (md5|sha).
+nwc_health_authprotocol	  	| **Optional.** The authentication protocol for SNMPv3 (md5\|sha).
 nwc_health_privpassword   	| **Optional.** The password for authPriv security level.
-nwc_health_privprotocol		| **Optional.** The private protocol for SNMPv3 (des|aes|aes128|3des|3desde).
+nwc_health_privprotocol		| **Optional.** The private protocol for SNMPv3 (des\|aes\|aes128\|3des\|3desde).
 nwc_health_contextengineid	| **Optional.** The context engine id for SNMPv3 (10 to 64 hex characters).
 nwc_health_contextname		| **Optional.** The context name for SNMPv3 (empty represents the default context).
 nwc_health_name			| **Optional.** The name of an interface (ifDescr).
@@ -2087,7 +2191,7 @@ jmx4perl_base                | **Optional.** Base name, which when given, interp
 jmx4perl_base_mbean          | **Optional.** Base MBean name, interprets critical and warning values as relative in the range 0 .. 100%. Requires "jmx4perl_base_attribute".
 jmx4perl_base_attribute      | **Optional.** Base attribute for a relative check. Requires "jmx4perl_base_mbean".
 jmx4perl_base_path           | **Optional.** Base path for relative checks, where this path is used on the base attribute's value.
-jmx4perl_unit                | **Optional.** Unit of measurement of the data retreived. Recognized values are [B|KB|MN|GB|TB] for memory values and [us|ms|s|m|h|d] for time values.
+jmx4perl_unit                | **Optional.** Unit of measurement of the data retreived. Recognized values are [B\|KB\|MN\|GB\|TB] for memory values and [us\|ms\|s\|m\|h\|d] for time values.
 jmx4perl_null                | **Optional.** Value which should be used in case of a null return value of an operation or attribute. Defaults to null.
 jmx4perl_string              | **Optional.** Force string comparison for critical and warning checks. Defaults to false.
 jmx4perl_numeric             | **Optional.** Force numeric comparison for critical and warning checks. Defaults to false.
@@ -2142,6 +2246,53 @@ nginx_status_timeout		| **Optional.** timeout in seconds
 nginx_status_warn		| **Optional.** Warning threshold (number of active connections, ReqPerSec or ConnPerSec that will cause a WARNING) like '10000,100,200'.
 nginx_status_critical		| **Optional.** Critical threshold (number of active connections, ReqPerSec or ConnPerSec that will cause a CRITICAL) like '20000,200,300'.
 
+
+#### <a id="plugins-contrib-apache_status"></a> apache_status
+
+Plugin for monitoring [apache_status](https://github.com/lbetz/check_apache_status).
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name                    | Description
+------------------------|----------------------------------------------------------------------------------
+apache_status_address	| **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, `address6` otherwise.
+apache_status_port	| **Optional.** the http port.
+apache_status_url	| **Optional.** URL to use, instead of the default (http://`apache_status_address`/server-status).
+apache_status_ssl	| **Optional.** set to use ssl connection
+apache_status_timeout	| **Optional.** timeout in seconds
+apache_status_warning	| **Optional.** Warning threshold (number of open slots, busy workers and idle workers that will cause a WARNING) like ':20,50,:50'.
+apache_status_critical	| **Optional.** Critical threshold (number of open slots, busy workers and idle workers that will cause a CRITICAL) like ':10,25,:20'.
+
+
+#### <a id="plugins-contrib-kdc"></a> kdc
+
+Plugin for monitoring [kdc](https://exchange.nagios.org/directory/Plugins/Security/check_kdc/details).
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name            | Description
+----------------|--------------------------------------------------------------------------
+kdc_address	| **Optional.** The host's address. Defaults to "$address$" if the host's `address` attribute is set, `address6` otherwise.
+kdc_port	| **Optional** Port on which KDC runs (default 88).
+kdc_principal	| **Required** Principal name to authenticate as (including realm).
+kdc_keytab	| **Required** Keytab file containing principal's key.
+
+
+#### <a id="plugins-contrib-rbl"></a> rbl
+
+Plugin for monitoring [rbl](https://github.com/matteocorti/check_rbl)
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name            | Description
+----------------|--------------------------------------------------------------------------
+rbl_hostname	| **Optional.** The address or name of the SMTP server to check. Defaults to "$address$" if the host's `address` attribute is set, `address6` otherwise.
+rbl_server	| **Required** List of RBL servers as an array.
+rbl_warning	| **Optional** Number of blacklisting servers for a warning.
+rbl_critical	| **Optional** Number of blacklisting servers for a critical.
+tbl_timeout	| **Optional** Seconds before plugin times out (default: 15).
+
+
 ### <a id="plugins-contrib-operating-system"></a> Operating System
 
 In this category you can find plugins for gathering information about your operating system or the system beneath like memory usage.
@@ -2156,9 +2307,9 @@ Name         | Description
 -------------|-----------------------------------------------------------------------------------------------------------------------
 mem_used     | **Optional.** Tell the plugin to check for used memory in opposite of **mem_free**. Must specify one of these as true.
 mem_free     | **Optional.** Tell the plugin to check for free memory in opposite of **mem_used**. Must specify one of these as true.
-mem_cache    | **Optional.** If set to true plugin will count cache as free memory. Defaults to false.
-mem_warning  | **Required.** Specifiy the warning threshold as number interpreted as percent.
-mem_critical | **Required.** Specifiy the critical threshold as number interpreted as percent.
+mem_cache    | **Optional.** If set to true, plugin will count cache as free memory. Defaults to false.
+mem_warning  | **Required.** Specify the warning threshold as number interpreted as percent.
+mem_critical | **Required.** Specify the critical threshold as number interpreted as percent.
 
 #### <a id="plugin-contrib-command-running-kernel"></a> running_kernel
 
@@ -2171,6 +2322,22 @@ Name                       | Description
 ---------------------------|-------------
 running\_kernel\_use\_sudo | Whether to run the plugin with `sudo`. Defaults to false except on Ubuntu where it defaults to true.
 
+#### <a id="plugins-contrib-command-iostat"></a> iostat
+
+The plugin [check_iostat](https://github.com/dnsmichi/icinga-plugins/blob/master/scripts/check_iostat) is used to monitor I/O with `iostat` on a linux host. The default thresholds are rather high so you can use a grapher for baselining before setting your own.
+
+Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
+
+Name           | Description
+---------------|-----------------------------------------------------------------------------------------------------------------------
+iostat\_disk   | **Required.** The device to monitor without path. e.g. sda or vda. (default: sda)
+iostat\_wtps   | **Required.** Warning threshold for tps (default: 100)
+iostat\_wread  | **Required.** Warning threshold for KB/s reads (default: 100)
+iostat\_wwrite | **Required.** Warning threshold for KB/s writes (default: 100)
+iostat\_ctps   | **Required.** Critical threshold for tps (default: 200)
+iostat\_cread  | **Required.** Critical threshold for KB/s reads (default: 200)
+iostat\_cwrite | **Required.** Critical threshold for KB/s writes (default: 200)
+
 #### <a id="plugin-contrib-command-yum"></a> yum
 
 The plugin `yum` is used to check the YUM package management system for package updates. To differentiate between security and normal updates it requires the YUM security plugin installed. It is provied by `Christoph Anton Mitterer` on [https://github.com](https://github.com/calestyo/check_yum).
@@ -2181,9 +2348,9 @@ Name                    | Description
 ------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 yum_all_updates         | **Optional.** Set to true to not distinguish between security and non-security updates, but returns critical for any available update. This may be used if the YUM security plugin is absent or you want to maintain every single package at the latest version. You may want to use **yum_warn_on_any_update** instead of this option. Defaults to false.
 yum_warn_on_any_update  | **Optional.** Set to true to warn if there are any (non-security) package updates available. Defaults to false.
-yum_cache_only          | **Optional.** If set to true plugin runs entirely from cache and does not update the cache when running YUM. Useful if you have `yum makecache` cronned. Defaults to false.
-yum_no_warn_on_lock     | **Optional.** If set to true returns OK instead of WARNING when YUM is locked and fails to check for updates due to another instance running. Defaults to false.
-yum_no_warn_on_updates  | **Optional.** If set to true returns OK instead of WARNING even when updates are available. The plugin output still shows the number of available updates. Defaults to false.
+yum_cache_only          | **Optional.** If set to true, plugin runs entirely from cache and does not update the cache when running YUM. Useful if you have `yum makecache` cronned. Defaults to false.
+yum_no_warn_on_lock     | **Optional.** If set to true, returns OK instead of WARNING when YUM is locked and fails to check for updates due to another instance running. Defaults to false.
+yum_no_warn_on_updates  | **Optional.** If set to true, returns OK instead of WARNING even when updates are available. The plugin output still shows the number of available updates. Defaults to false.
 yum_enablerepo          | **Optional.** Explicitly enables a reposity when calling YUM. Can take a comma separated list of repositories. Note that enabling repositories can lead to unexpected results, for example when protected repositories are enabled.
 yum_disablerepo         | **Optional.** Explicitly disables a reposity when calling YUM. Can take a comma separated list of repositories. Note that enabling repositories can lead to unexpected results, for example when protected repositories are enabled.
 yum_installroot         | **Optional.** Specifies another installation root directory (for example a chroot).
@@ -2204,6 +2371,7 @@ Name                    | Description
 esxi_hardware_host      | **Required.** Specifies the host to monitor. Defaults to "$address$".
 esxi_hardware_user      | **Required.** Specifies the user for polling. Must be a local user of the root group on the system. Can also be provided as a file path file:/path/to/.passwdfile, then first string of file is used.
 esxi_hardware_pass      | **Required.** Password of the user. Can also be provided as a file path file:/path/to/.passwdfile, then second string of file is used.
+esxi_hardware_port      | **Optional.** Specifies the CIM port to connect to. Defaults to 5989.
 esxi_hardware_vendor    | **Optional.** Defines the vendor of the server: "auto", "dell", "hp", "ibm", "intel", "unknown" (default).
 esxi_hardware_html      | **Optional.** Add web-links to hardware manuals for Dell servers (use your country extension). Only useful with **esxi_hardware_vendor** = dell.
 esxi_hardware_ignore    | **Optional.** Comma separated list of elements to ignore.
@@ -2234,7 +2402,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2266,7 +2434,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2288,7 +2456,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2315,7 +2483,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2342,7 +2510,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2369,7 +2537,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2395,7 +2563,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2417,7 +2585,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2446,7 +2614,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2468,7 +2636,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2490,7 +2658,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2514,7 +2682,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2536,7 +2704,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2558,7 +2726,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2582,7 +2750,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2604,7 +2772,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2628,7 +2796,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2652,7 +2820,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2677,7 +2845,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2687,7 +2855,7 @@ vmware_crit             | **Optional.** The critical threshold in percent. No va
 
 #### <a id="plugins-contrib-vmware-esx-soap-host-mem-memctl"></a> vmware-esx-soap-host-mem-memctl
 
-Check command object for the `check_vmware_esx` plugin. The sum of all vmmemctl values in MB for all powered-on virtual machines, plus vSphere services on the host. If the balloon target value is greater than the balloon value, the VMkernel inflates the balloon, causing more virtual machine memory to be reclaimed. If the balloon target value is less than the balloon value, the VMkernel deflates the balloon, which allows the virtual machine to consume additional memory if needed.used by VM memory control driver. In case of an error all VMs with their vmmemctl values will be displayed.
+Check command object for the `check_vmware_esx` plugin. The sum of all vmmemctl values in MB for all powered-on virtual machines, plus vSphere services on the host. If the balloon target value is greater than the balloon value, the VMkernel inflates the balloon, causing more virtual machine memory to be reclaimed. If the balloon target value is less than the balloon value, the VMkernel deflates the balloon, which allows the virtual machine to consume additional memory if needed (used by VM memory control driver). In case of an error all VMs with their vmmemctl values will be displayed.
 
 Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
 
@@ -2701,7 +2869,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2726,7 +2894,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2750,7 +2918,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2774,7 +2942,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2798,7 +2966,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2822,7 +2990,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2846,7 +3014,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2878,7 +3046,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2900,7 +3068,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2924,7 +3092,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2948,7 +3116,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2972,7 +3140,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -2996,7 +3164,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3020,7 +3188,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3044,7 +3212,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3068,7 +3236,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3092,7 +3260,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3116,7 +3284,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3140,7 +3308,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3164,7 +3332,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3190,7 +3358,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3216,7 +3384,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3238,7 +3406,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3260,7 +3428,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3286,7 +3454,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3308,7 +3476,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3333,7 +3501,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3358,7 +3526,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3383,7 +3551,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3409,7 +3577,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3435,7 +3603,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3461,7 +3629,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3486,7 +3654,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3512,7 +3680,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3538,7 +3706,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3567,7 +3735,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3592,7 +3760,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3618,7 +3786,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3644,7 +3812,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3670,7 +3838,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3694,7 +3862,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3705,7 +3873,7 @@ vmware_crit             | **Optional.** Critical threshold in percent. Defaults 
 #### <a id="plugins-contrib-vmware-esx-soap-vm-mem-consumed"></a> vmware-esx-soap-vm-mem-consumed
 
 Check command object for the `check_vmware_esx` plugin. Amount of guest physical memory in MB consumed by the virtual machine for guest memory. Consumed memory does not include overhead memory. It includes shared memory and memory that might be reserved, but not actually used. Use this metric for charge-back purposes.<br>
-**vm consumed memory = memory granted - memory saved**
+**vm consumed memory = memory granted -- memory saved**
 
 Custom attributes passed as [command parameters](3-monitoring-basics.md#command-passing-parameters):
 
@@ -3721,7 +3889,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3747,7 +3915,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3774,7 +3942,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3798,7 +3966,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3824,7 +3992,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3850,7 +4018,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3876,7 +4044,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3926,7 +4094,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3952,7 +4120,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -3978,7 +4146,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4002,7 +4170,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4026,7 +4194,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4050,7 +4218,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4074,7 +4242,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4100,7 +4268,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4123,7 +4291,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd
@@ -4148,7 +4316,7 @@ vmware_timeout          | **Optional.** Seconds before plugin times out. Default
 vmware_trace            | **Optional.** Set verbosity level of vSphere API request/respond trace.
 vmware_sessionfile      | **Optional.** Session file name enhancement.
 vmware_sessionfiledir   | **Optional.** Path to store the **vmware_sessionfile** file. Defaults to "/var/spool/icinga2/tmp".
-vmware_nosession        | **Optional.** No auth session - IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
+vmware_nosession        | **Optional.** No auth session -- IT SHOULD BE USED FOR TESTING PURPOSES ONLY!. Defaults to "false".
 vmware_username         | **Optional.** The username to connect to Host or vCenter server. No value defined as default.
 vmware_password         | **Optional.** The username's password. No value defined as default.
 vmware_authfile         | **Optional.** Use auth file instead username/password to session connect. No effect if **vmware_username** and **vmware_password** are defined <br> **Autentication file content:** <br>  username=vmuser <br> password=p@ssw0rd

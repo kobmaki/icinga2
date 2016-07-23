@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -67,22 +67,6 @@ static std::map<String, ExternalCommandInfo>& GetCommands(void)
 
 boost::signals2::signal<void (double, const String&, const std::vector<String>&)> ExternalCommandProcessor::OnNewExternalCommand;
 
-static Value ExternalCommandAPIWrapper(const String& command, const Dictionary::Ptr& params)
-{
-	std::vector<String> arguments;
-
-	if (params) {
-		int i = 0;
-		while (params->Contains("arg" + Convert::ToString(i))) {
-			arguments.push_back(params->Get("arg" + Convert::ToString(i)));
-			i++;
-		}
-	}
-
-	ExternalCommandProcessor::Execute(Utility::GetTime(), command, arguments);
-	return true;
-}
-
 static void RegisterCommand(const String& command, const ExternalCommandCallback& callback, size_t minArgs = 0, size_t maxArgs = UINT_MAX)
 {
 	boost::mutex::scoped_lock lock(GetMutex());
@@ -91,9 +75,6 @@ static void RegisterCommand(const String& command, const ExternalCommandCallback
 	eci.MinArgs = minArgs;
 	eci.MaxArgs = (maxArgs == UINT_MAX) ? minArgs : maxArgs;
 	GetCommands()[command] = eci;
-
-	ApiFunction::Ptr afunc = new ApiFunction(boost::bind(&ExternalCommandAPIWrapper, command, _2));
-	ApiFunction::Register("extcmd::" + command, afunc);
 }
 
 void ExternalCommandProcessor::Execute(const String& line)
@@ -215,7 +196,7 @@ void ExternalCommandProcessor::StaticInitialize(void)
 	RegisterCommand("DEL_SVC_DOWNTIME", &ExternalCommandProcessor::DelSvcDowntime, 1);
 	RegisterCommand("SCHEDULE_HOST_DOWNTIME", &ExternalCommandProcessor::ScheduleHostDowntime, 8);
 	RegisterCommand("DEL_HOST_DOWNTIME", &ExternalCommandProcessor::DelHostDowntime, 1);
-	RegisterCommand("DEL_DOWNTIME_BY_HOST_NAME", &ExternalCommandProcessor::DelDowntimeByHostName, 1);
+	RegisterCommand("DEL_DOWNTIME_BY_HOST_NAME", &ExternalCommandProcessor::DelDowntimeByHostName, 1, 4);
 	RegisterCommand("SCHEDULE_HOST_SVC_DOWNTIME", &ExternalCommandProcessor::ScheduleHostSvcDowntime, 8);
 	RegisterCommand("SCHEDULE_HOSTGROUP_HOST_DOWNTIME", &ExternalCommandProcessor::ScheduleHostgroupHostDowntime, 8);
 	RegisterCommand("SCHEDULE_HOSTGROUP_SVC_DOWNTIME", &ExternalCommandProcessor::ScheduleHostgroupSvcDowntime, 8);
@@ -290,6 +271,44 @@ void ExternalCommandProcessor::StaticInitialize(void)
 	RegisterCommand("DISABLE_SERVICEGROUP_SVC_NOTIFICATIONS", &ExternalCommandProcessor::DisableServicegroupSvcNotifications, 1);
 }
 
+void ExternalCommandProcessor::ExecuteFromFile(const String& line, std::deque< std::vector<String> >& file_queue)
+{
+	if (line.IsEmpty())
+		return;
+
+	if (line[0] != '[')
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Missing timestamp in command: " + line));
+
+	size_t pos = line.FindFirstOf("]");
+
+	if (pos == String::NPos)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Missing timestamp in command: " + line));
+
+	String timestamp = line.SubStr(1, pos - 1);
+	String args = line.SubStr(pos + 2, String::NPos);
+
+	double ts = Convert::ToDouble(timestamp);
+
+	if (ts == 0)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid timestamp in command: " + line));
+
+	std::vector<String> argv;
+	boost::algorithm::split(argv, args, boost::is_any_of(";"));
+
+	if (argv.empty())
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Missing arguments in command: " + line));
+
+	std::vector<String> argvExtra(argv.begin() + 1, argv.end());
+
+	if (argv[0] == "PROCESS_FILE") {
+		Log(LogDebug, "ExternalCommandProcessor")
+			<< "Enqueing external command file " << argvExtra[0];
+		file_queue.push_back(argvExtra);
+	} else {
+		Execute(ts, argv[0], argvExtra);
+	}
+}
+
 void ExternalCommandProcessor::ProcessHostCheckResult(double time, const std::vector<String>& arguments)
 {
 	Host::Ptr host = Host::GetByName(arguments[0]);
@@ -321,17 +340,14 @@ void ExternalCommandProcessor::ProcessHostCheckResult(double time, const std::ve
 	result->SetScheduleEnd(time);
 	result->SetExecutionStart(time);
 	result->SetExecutionEnd(time);
+
+	/* Mark this check result as passive. */
 	result->SetActive(false);
 
 	Log(LogNotice, "ExternalCommandProcessor")
 	    << "Processing passive check result for host '" << arguments[0] << "'";
 
 	host->ProcessCheckResult(result);
-
-	/* Reschedule the next check. The side effect of this is that for as long
-	 * as we receive passive results for a service we won't execute any
-	 * active checks. */
-	host->SetNextCheck(Utility::GetTime() + host->GetCheckInterval());
 }
 
 void ExternalCommandProcessor::ProcessServiceCheckResult(double time, const std::vector<String>& arguments)
@@ -356,17 +372,14 @@ void ExternalCommandProcessor::ProcessServiceCheckResult(double time, const std:
 	result->SetScheduleEnd(time);
 	result->SetExecutionStart(time);
 	result->SetExecutionEnd(time);
+
+	/* Mark this check result as passive. */
 	result->SetActive(false);
 
 	Log(LogNotice, "ExternalCommandProcessor")
 	    << "Processing passive check result for service '" << arguments[1] << "'";
 
 	service->ProcessCheckResult(result);
-
-	/* Reschedule the next check. The side effect of this is that for as long
-	 * as we receive passive results for a service we won't execute any
-	 * active checks. */
-	service->SetNextCheck(Utility::GetTime() + service->GetCheckInterval());
 }
 
 void ExternalCommandProcessor::ScheduleHostCheck(double, const std::vector<String>& arguments)
@@ -392,6 +405,9 @@ void ExternalCommandProcessor::ScheduleHostCheck(double, const std::vector<Strin
 		planned_check = Utility::GetTime();
 
 	host->SetNextCheck(planned_check);
+
+	/* trigger update event for DB IDO */
+	Checkable::OnNextCheckUpdated(host);
 }
 
 void ExternalCommandProcessor::ScheduleForcedHostCheck(double, const std::vector<String>& arguments)
@@ -406,6 +422,9 @@ void ExternalCommandProcessor::ScheduleForcedHostCheck(double, const std::vector
 
 	host->SetForceNextCheck(true);
 	host->SetNextCheck(Convert::ToDouble(arguments[1]));
+
+	/* trigger update event for DB IDO */
+	Checkable::OnNextCheckUpdated(host);
 }
 
 void ExternalCommandProcessor::ScheduleSvcCheck(double, const std::vector<String>& arguments)
@@ -431,6 +450,9 @@ void ExternalCommandProcessor::ScheduleSvcCheck(double, const std::vector<String
 		planned_check = Utility::GetTime();
 
 	service->SetNextCheck(planned_check);
+
+	/* trigger update event for DB IDO */
+	Checkable::OnNextCheckUpdated(service);
 }
 
 void ExternalCommandProcessor::ScheduleForcedSvcCheck(double, const std::vector<String>& arguments)
@@ -445,6 +467,9 @@ void ExternalCommandProcessor::ScheduleForcedSvcCheck(double, const std::vector<
 
 	service->SetForceNextCheck(true);
 	service->SetNextCheck(Convert::ToDouble(arguments[2]));
+
+	/* trigger update event for DB IDO */
+	Checkable::OnNextCheckUpdated(service);
 }
 
 void ExternalCommandProcessor::EnableHostCheck(double, const std::vector<String>& arguments)
@@ -526,6 +551,9 @@ void ExternalCommandProcessor::ScheduleForcedHostSvcChecks(double, const std::ve
 
 		service->SetNextCheck(planned_check);
 		service->SetForceNextCheck(true);
+
+		/* trigger update event for DB IDO */
+		Checkable::OnNextCheckUpdated(service);
 	}
 }
 
@@ -553,6 +581,9 @@ void ExternalCommandProcessor::ScheduleHostSvcChecks(double, const std::vector<S
 		    << "Rescheduling next check for service '" << service->GetName() << "'";
 
 		service->SetNextCheck(planned_check);
+
+		/* trigger update event for DB IDO */
+		Checkable::OnNextCheckUpdated(service);
 	}
 }
 
@@ -885,33 +916,41 @@ void ExternalCommandProcessor::DisableHostgroupPassiveSvcChecks(double, const st
 
 void ExternalCommandProcessor::ProcessFile(double, const std::vector<String>& arguments)
 {
-	String file = arguments[0];
-	int del = Convert::ToLong(arguments[1]);
+	std::deque< std::vector<String> > file_queue;
+	file_queue.push_back(arguments);
 
-	std::ifstream ifp;
-	ifp.exceptions(std::ifstream::badbit);
+	while (!file_queue.empty()) {
+		std::vector<String> argument = file_queue.front();
+		file_queue.pop_front();
 
-	ifp.open(file.CStr(), std::ifstream::in);
+		String file = argument[0];
+		int to_delete = Convert::ToLong(argument[1]);
 
-	while (ifp.good()) {
-		std::string line;
-		std::getline(ifp, line);
+		std::ifstream ifp;
+		ifp.exceptions(std::ifstream::badbit);
 
-		try {
-			Log(LogNotice, "compat")
-			    << "Executing external command: " << line;
+		ifp.open(file.CStr(), std::ifstream::in);
 
-			Execute(line);
-		} catch (const std::exception& ex) {
-			Log(LogWarning, "ExternalCommandProcessor")
-			    << "External command failed: " << DiagnosticInformation(ex);
+		while (ifp.good()) {
+			std::string line;
+			std::getline(ifp, line);
+
+			try {
+				Log(LogNotice, "compat")
+				    << "Executing external command: " << line;
+
+				ExecuteFromFile(line, file_queue);
+			} catch (const std::exception& ex) {
+				Log(LogWarning, "ExternalCommandProcessor")
+				    << "External command failed: " << DiagnosticInformation(ex);
+			}
 		}
+
+		ifp.close();
+
+		if (to_delete > 0)
+			(void) unlink(file.CStr());
 	}
-
-	ifp.close();
-
-	if (del > 0)
-		(void) unlink(file.CStr());
 }
 
 void ExternalCommandProcessor::ScheduleSvcDowntime(double, const std::vector<String>& arguments)
@@ -1170,6 +1209,9 @@ void ExternalCommandProcessor::AddHostComment(double, const std::vector<String>&
 	if (!host)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot add host comment for non-existent host '" + arguments[0] + "'"));
 
+	if (arguments[2].IsEmpty() || arguments[3].IsEmpty())
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Author and comment must not be empty"));
+
 	Log(LogNotice, "ExternalCommandProcessor")
 	    << "Creating comment for host " << host->GetName();
 	(void) Comment::AddComment(host, CommentUser, arguments[2], arguments[3], 0);
@@ -1190,6 +1232,9 @@ void ExternalCommandProcessor::AddSvcComment(double, const std::vector<String>& 
 
 	if (!service)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Cannot add service comment for non-existent service '" + arguments[1] + "' on host '" + arguments[0] + "'"));
+
+	if (arguments[3].IsEmpty() || arguments[4].IsEmpty())
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Author and comment must not be empty"));
 
 	Log(LogNotice, "ExternalCommandProcessor")
 	    << "Creating comment for service " << service->GetName();
@@ -1245,7 +1290,8 @@ void ExternalCommandProcessor::SendCustomHostNotification(double, const std::vec
 		host->SetForceNextNotification(true);
 	}
 
-	Checkable::OnNotificationsRequested(host, NotificationCustom, host->GetLastCheckResult(), arguments[2], arguments[3]);
+	Checkable::OnNotificationsRequested(host, NotificationCustom,
+	    host->GetLastCheckResult(), arguments[2], arguments[3], MessageOrigin::Ptr());
 }
 
 void ExternalCommandProcessor::SendCustomSvcNotification(double, const std::vector<String>& arguments)
@@ -1264,7 +1310,8 @@ void ExternalCommandProcessor::SendCustomSvcNotification(double, const std::vect
 		service->SetForceNextNotification(true);
 	}
 
-	Service::OnNotificationsRequested(service, NotificationCustom, service->GetLastCheckResult(), arguments[3], arguments[4]);
+	Service::OnNotificationsRequested(service, NotificationCustom,
+	    service->GetLastCheckResult(), arguments[3], arguments[4], MessageOrigin::Ptr());
 }
 
 void ExternalCommandProcessor::DelayHostNotification(double, const std::vector<String>& arguments)
@@ -1569,84 +1616,84 @@ void ExternalCommandProcessor::EnableNotifications(double, const std::vector<Str
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling notifications.");
 
-	IcingaApplication::GetInstance()->SetEnableNotifications(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_notifications", true);
 }
 
 void ExternalCommandProcessor::DisableNotifications(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling notifications.");
 
-	IcingaApplication::GetInstance()->SetEnableNotifications(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_notifications", false);
 }
 
 void ExternalCommandProcessor::EnableFlapDetection(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling flap detection.");
 
-	IcingaApplication::GetInstance()->SetEnableFlapping(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_flapping", true);
 }
 
 void ExternalCommandProcessor::DisableFlapDetection(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling flap detection.");
 
-	IcingaApplication::GetInstance()->SetEnableFlapping(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_flapping", false);
 }
 
 void ExternalCommandProcessor::EnableEventHandlers(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling event handlers.");
 
-	IcingaApplication::GetInstance()->SetEnableEventHandlers(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_event_handlers", true);
 }
 
 void ExternalCommandProcessor::DisableEventHandlers(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling event handlers.");
 
-	IcingaApplication::GetInstance()->SetEnableEventHandlers(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_event_handlers", false);
 }
 
 void ExternalCommandProcessor::EnablePerformanceData(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling performance data processing.");
 
-	IcingaApplication::GetInstance()->SetEnablePerfdata(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_perfdata", true);
 }
 
 void ExternalCommandProcessor::DisablePerformanceData(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling performance data processing.");
 
-	IcingaApplication::GetInstance()->SetEnablePerfdata(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_perfdata", false);
 }
 
 void ExternalCommandProcessor::StartExecutingSvcChecks(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling service checks.");
 
-	IcingaApplication::GetInstance()->SetEnableServiceChecks(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_service_checks", true);
 }
 
 void ExternalCommandProcessor::StopExecutingSvcChecks(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling service checks.");
 
-	IcingaApplication::GetInstance()->SetEnableServiceChecks(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_service_checks", false);
 }
 
 void ExternalCommandProcessor::StartExecutingHostChecks(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally enabling host checks.");
 
-	IcingaApplication::GetInstance()->SetEnableHostChecks(true);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_host_checks", true);
 }
 
 void ExternalCommandProcessor::StopExecutingHostChecks(double, const std::vector<String>&)
 {
 	Log(LogNotice, "ExternalCommandProcessor", "Globally disabling host checks.");
 
-	IcingaApplication::GetInstance()->SetEnableHostChecks(false);
+	IcingaApplication::GetInstance()->ModifyAttribute("enable_host_checks", false);
 }
 
 void ExternalCommandProcessor::ChangeNormalSvcCheckInterval(double, const std::vector<String>& arguments)

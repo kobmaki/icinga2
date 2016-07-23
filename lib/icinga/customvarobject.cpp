@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2015 Icinga Development Team (http://www.icinga.org)    *
+ * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,3 +33,34 @@ void CustomVarObject::ValidateVars(const Dictionary::Ptr& value, const Validatio
 {
 	MacroProcessor::ValidateCustomVars(this, value);
 }
+
+int icinga::FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<String, int>& filterMap, int defaultValue)
+{
+	Value resultTypeFilter;
+
+	if (!typeFilters)
+		return defaultValue;
+
+	resultTypeFilter = 0;
+
+	ObjectLock olock(typeFilters);
+	BOOST_FOREACH(const Value& typeFilter, typeFilters) {
+		if (typeFilter.IsNumber()) {
+			resultTypeFilter = resultTypeFilter | typeFilter;
+			continue;
+		}
+
+		if (!typeFilter.IsString())
+			return -1;
+
+		std::map<String, int>::const_iterator it = filterMap.find(typeFilter);
+
+		if (it == filterMap.end())
+			return -1;
+
+		resultTypeFilter = resultTypeFilter | it->second;
+	}
+
+	return resultTypeFilter;
+}
+
