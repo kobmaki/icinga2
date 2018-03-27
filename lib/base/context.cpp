@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,7 +19,7 @@
 
 #include "base/context.hpp"
 #include <boost/thread/tss.hpp>
-#include <boost/foreach.hpp>
+#include <iostream>
 
 using namespace icinga;
 
@@ -30,35 +30,38 @@ ContextFrame::ContextFrame(const String& message)
 	GetFrames().push_front(message);
 }
 
-ContextFrame::~ContextFrame(void)
+ContextFrame::~ContextFrame()
 {
 	GetFrames().pop_front();
 }
 
-std::list<String>& ContextFrame::GetFrames(void)
+std::list<String>& ContextFrame::GetFrames()
 {
-	if (l_Frames.get() == NULL)
+	if (!l_Frames.get())
 		l_Frames.reset(new std::list<String>());
 
 	return *l_Frames;
 }
 
-ContextTrace::ContextTrace(void)
+ContextTrace::ContextTrace()
 	: m_Frames(ContextFrame::GetFrames())
 { }
 
 void ContextTrace::Print(std::ostream& fp) const
 {
-	fp << std::endl;
+	if (m_Frames.empty())
+		return;
+
+	fp << "\n";
 
 	int i = 0;
-	BOOST_FOREACH(const String& frame, m_Frames) {
-		fp << "\t(" << i << ") " << frame << std::endl;
+	for (const String& frame : m_Frames) {
+		fp << "\t(" << i << ") " << frame << "\n";
 		i++;
 	}
 }
 
-size_t ContextTrace::GetLength(void) const
+size_t ContextTrace::GetLength() const
 {
 	return m_Frames.size();
 }

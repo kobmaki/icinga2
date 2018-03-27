@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,20 +21,10 @@
 #include "remote/apilistener.hpp"
 #include "base/configtype.hpp"
 #include "base/utility.hpp"
-#include "base/initialize.hpp"
-#include "base/timer.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-static Timer::Ptr l_AuthorityTimer;
-
-static bool ObjectNameLessComparer(const ConfigObject::Ptr& a, const ConfigObject::Ptr& b)
-{
-	return a->GetName() < b->GetName();
-}
-
-void ApiListener::UpdateObjectAuthority(void)
+void ApiListener::UpdateObjectAuthority()
 {
 	Zone::Ptr my_zone = Zone::GetLocalZone();
 
@@ -46,7 +36,7 @@ void ApiListener::UpdateObjectAuthority(void)
 
 		int num_total = 0;
 
-		BOOST_FOREACH(const Endpoint::Ptr& endpoint, my_zone->GetEndpoints()) {
+		for (const Endpoint::Ptr& endpoint : my_zone->GetEndpoints()) {
 			num_total++;
 
 			if (endpoint != my_endpoint && !endpoint->GetConnected())
@@ -60,12 +50,21 @@ void ApiListener::UpdateObjectAuthority(void)
 		if (num_total > 1 && endpoints.size() <= 1 && (mainTime == 0 || Utility::GetTime() - mainTime < 60))
 			return;
 
-		std::sort(endpoints.begin(), endpoints.end(), ObjectNameLessComparer);
+		std::sort(endpoints.begin(), endpoints.end(),
+			[](const ConfigObject::Ptr& a, const ConfigObject::Ptr& b) {
+				return a->GetName() < b->GetName();
+			}
+		);
 	}
 
-	BOOST_FOREACH(const ConfigType::Ptr& type, ConfigType::GetTypes()) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, type->GetObjects()) {
-			if (object->GetHAMode() != HARunOnce)
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		auto *dtype = dynamic_cast<ConfigType *>(type.get());
+
+		if (!dtype)
+			continue;
+
+		for (const ConfigObject::Ptr& object : dtype->GetObjects()) {
+			if (!object->IsActive() || object->GetHAMode() != HARunOnce)
 				continue;
 
 			bool authority;
@@ -79,13 +78,3 @@ void ApiListener::UpdateObjectAuthority(void)
 		}
 	}
 }
-
-static void StaticInitialize(void)
-{
-	l_AuthorityTimer = new Timer();
-	l_AuthorityTimer->OnTimerExpired.connect(boost::bind(&ApiListener::UpdateObjectAuthority));
-	l_AuthorityTimer->SetInterval(30);
-	l_AuthorityTimer->Start();
-}
-
-INITIALIZE_ONCE(StaticInitialize);

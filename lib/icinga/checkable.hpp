@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define CHECKABLE_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/checkable.thpp"
+#include "icinga/checkable-ti.hpp"
 #include "icinga/timeperiod.hpp"
 #include "icinga/notification.hpp"
 #include "icinga/comment.hpp"
@@ -53,6 +53,22 @@ enum CheckableType
 	CheckableService
 };
 
+/**
+ * Severity Flags
+ *
+ * @ingroup icinga
+ */
+enum SeverityFlag
+{
+	SeverityFlagDowntime = 1,
+	SeverityFlagAcknowledgement = 2,
+	SeverityFlagUnhandled = 8,
+	SeverityFlagPending = 16,
+	SeverityFlagWarning = 32,
+	SeverityFlagUnknown = 64,
+	SeverityFlagCritical = 128,
+};
+
 class CheckCommand;
 class EventCommand;
 class Dependency;
@@ -62,137 +78,151 @@ class Dependency;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API Checkable : public ObjectImpl<Checkable>
+class Checkable : public ObjectImpl<Checkable>
 {
 public:
 	DECLARE_OBJECT(Checkable);
 	DECLARE_OBJECTNAME(Checkable);
 
-	Checkable(void);
+	static void StaticInitialize();
 
-	std::set<Checkable::Ptr> GetParents(void) const;
-	std::set<Checkable::Ptr> GetChildren(void) const;
+	Checkable();
+
+	std::set<Checkable::Ptr> GetParents() const;
+	std::set<Checkable::Ptr> GetChildren() const;
+	std::set<Checkable::Ptr> GetAllChildren() const;
 
 	void AddGroup(const String& name);
 
-	bool IsReachable(DependencyType dt = DependencyState, intrusive_ptr<Dependency> *failedDependency = NULL, int rstack = 0) const;
+	bool IsReachable(DependencyType dt = DependencyState, intrusive_ptr<Dependency> *failedDependency = nullptr, int rstack = 0) const;
 
-	AcknowledgementType GetAcknowledgement(void);
+	AcknowledgementType GetAcknowledgement();
 
-	void AcknowledgeProblem(const String& author, const String& comment, AcknowledgementType type, bool notify = true, double expiry = 0, const MessageOrigin::Ptr& origin = MessageOrigin::Ptr());
-	void ClearAcknowledgement(const MessageOrigin::Ptr& origin = MessageOrigin::Ptr());
+	void AcknowledgeProblem(const String& author, const String& comment, AcknowledgementType type, bool notify = true, bool persistent = false, double expiry = 0, const MessageOrigin::Ptr& origin = nullptr);
+	void ClearAcknowledgement(const MessageOrigin::Ptr& origin = nullptr);
+
+	int GetSeverity() const override;
 
 	/* Checks */
-	intrusive_ptr<CheckCommand> GetCheckCommand(void) const;
-	TimePeriod::Ptr GetCheckPeriod(void) const;
+	intrusive_ptr<CheckCommand> GetCheckCommand() const;
+	TimePeriod::Ptr GetCheckPeriod() const;
 
-	long GetSchedulingOffset(void);
+	long GetSchedulingOffset();
 	void SetSchedulingOffset(long offset);
 
-	void UpdateNextCheck(const MessageOrigin::Ptr& origin = MessageOrigin::Ptr());
+	void UpdateNextCheck(const MessageOrigin::Ptr& origin = nullptr);
 
-	bool HasBeenChecked(void) const;
+	bool HasBeenChecked() const;
 	virtual bool IsStateOK(ServiceState state) = 0;
 
-	virtual double GetLastCheck(void) const override;
+	double GetLastCheck() const final;
 
 	virtual void SaveLastState(ServiceState state, double timestamp) = 0;
 
 	static void UpdateStatistics(const CheckResult::Ptr& cr, CheckableType type);
 
-	void ExecuteRemoteCheck(const Dictionary::Ptr& resolvedMacros = Dictionary::Ptr());
+	void ExecuteRemoteCheck(const Dictionary::Ptr& resolvedMacros = nullptr);
 	void ExecuteCheck();
-	void ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrigin::Ptr& origin = MessageOrigin::Ptr());
+	void ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrigin::Ptr& origin = nullptr);
 
-	Endpoint::Ptr GetCommandEndpoint(void) const;
+	Endpoint::Ptr GetCommandEndpoint() const;
 
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, const MessageOrigin::Ptr&)> OnNewCheckResult;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, StateType, const MessageOrigin::Ptr&)> OnStateChange;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const CheckResult::Ptr&, std::set<Checkable::Ptr>, const MessageOrigin::Ptr&)> OnReachabilityChanged;
 	static boost::signals2::signal<void (const Checkable::Ptr&, NotificationType, const CheckResult::Ptr&,
-	    const String&, const String&, const MessageOrigin::Ptr&)> OnNotificationsRequested;
+		const String&, const String&, const MessageOrigin::Ptr&)> OnNotificationsRequested;
 	static boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const User::Ptr&,
-	    const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
-	    const MessageOrigin::Ptr&)> OnNotificationSentToUser;
+		const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
+		const MessageOrigin::Ptr&)> OnNotificationSentToUser;
 	static boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
-	    const NotificationType&, const CheckResult::Ptr&, const String&,
-	    const String&, const MessageOrigin::Ptr&)> OnNotificationSentToAllUsers;
+		const NotificationType&, const CheckResult::Ptr&, const String&,
+		const String&, const MessageOrigin::Ptr&)> OnNotificationSentToAllUsers;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const String&, const String&, AcknowledgementType,
-					     bool, double, const MessageOrigin::Ptr&)> OnAcknowledgementSet;
+		bool, bool, double, const MessageOrigin::Ptr&)> OnAcknowledgementSet;
 	static boost::signals2::signal<void (const Checkable::Ptr&, const MessageOrigin::Ptr&)> OnAcknowledgementCleared;
 	static boost::signals2::signal<void (const Checkable::Ptr&)> OnNextCheckUpdated;
 	static boost::signals2::signal<void (const Checkable::Ptr&)> OnEventCommandExecuted;
 
 	/* Downtimes */
-	virtual int GetDowntimeDepth(void) const override;
+	int GetDowntimeDepth() const final;
 
-	void RemoveAllDowntimes(void);
-	void TriggerDowntimes(void);
-	bool IsInDowntime(void) const;
-	bool IsAcknowledged(void);
+	void RemoveAllDowntimes();
+	void TriggerDowntimes();
+	bool IsInDowntime() const;
+	bool IsAcknowledged() const;
 
-	std::set<Downtime::Ptr> GetDowntimes(void) const;
+	std::set<Downtime::Ptr> GetDowntimes() const;
 	void RegisterDowntime(const Downtime::Ptr& downtime);
 	void UnregisterDowntime(const Downtime::Ptr& downtime);
 
 	/* Comments */
-	void RemoveAllComments(void);
+	void RemoveAllComments();
 	void RemoveCommentsByType(int type);
 
-	std::set<Comment::Ptr> GetComments(void) const;
+	std::set<Comment::Ptr> GetComments() const;
 	void RegisterComment(const Comment::Ptr& comment);
 	void UnregisterComment(const Comment::Ptr& comment);
 
 	/* Notifications */
 	void SendNotifications(NotificationType type, const CheckResult::Ptr& cr, const String& author = "", const String& text = "");
 
-	std::set<Notification::Ptr> GetNotifications(void) const;
+	std::set<Notification::Ptr> GetNotifications() const;
 	void RegisterNotification(const Notification::Ptr& notification);
 	void UnregisterNotification(const Notification::Ptr& notification);
 
-	void ResetNotificationNumbers(void);
+	void ResetNotificationNumbers();
 
 	/* Event Handler */
-	void ExecuteEventHandler(const Dictionary::Ptr& resolvedMacros = Dictionary::Ptr(),
-	    bool useResolvedMacros = false);
+	void ExecuteEventHandler(const Dictionary::Ptr& resolvedMacros = nullptr,
+		bool useResolvedMacros = false);
 
-	intrusive_ptr<EventCommand> GetEventCommand(void) const;
+	intrusive_ptr<EventCommand> GetEventCommand() const;
 
 	/* Flapping Detection */
-	double GetFlappingCurrent(void) const;
-
-	bool IsFlapping(void) const;
-	void UpdateFlappingStatus(bool stateChange);
+	bool IsFlapping() const;
 
 	/* Dependencies */
 	void AddDependency(const intrusive_ptr<Dependency>& dep);
 	void RemoveDependency(const intrusive_ptr<Dependency>& dep);
-	std::set<intrusive_ptr<Dependency> > GetDependencies(void) const;
+	std::vector<intrusive_ptr<Dependency> > GetDependencies() const;
 
 	void AddReverseDependency(const intrusive_ptr<Dependency>& dep);
 	void RemoveReverseDependency(const intrusive_ptr<Dependency>& dep);
-	std::set<intrusive_ptr<Dependency> > GetReverseDependencies(void) const;
+	std::vector<intrusive_ptr<Dependency> > GetReverseDependencies() const;
 
-	virtual void ValidateCheckInterval(double value, const ValidationUtils& utils) override;
+	void ValidateCheckInterval(const Lazy<double>& lvalue, const ValidationUtils& value) final;
+	void ValidateMaxCheckAttempts(const Lazy<int>& lvalue, const ValidationUtils& value) final;
 
-	static void IncreasePendingChecks(void);
-	static void DecreasePendingChecks(void);
-	static int GetPendingChecks(void);
+	static void IncreasePendingChecks();
+	static void DecreasePendingChecks();
+	static int GetPendingChecks();
+	static void AquirePendingCheckSlot(int maxPendingChecks);
+
+	static Object::Ptr GetPrototype();
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void OnAllConfigLoaded() override;
 
 private:
 	mutable boost::mutex m_CheckableMutex;
-	bool m_CheckRunning;
+	bool m_CheckRunning{false};
 	long m_SchedulingOffset;
 
 	static boost::mutex m_StatsMutex;
 	static int m_PendingChecks;
+	static boost::condition_variable m_PendingChecksCV;
 
 	/* Downtimes */
 	std::set<Downtime::Ptr> m_Downtimes;
 	mutable boost::mutex m_DowntimeMutex;
+
+	static void NotifyFixedDowntimeStart(const Downtime::Ptr& downtime);
+	static void NotifyFlexibleDowntimeStart(const Downtime::Ptr& downtime);
+	static void NotifyDowntimeInternal(const Downtime::Ptr& downtime);
+
+	static void NotifyDowntimeEnd(const Downtime::Ptr& downtime);
 
 	/* Comments */
 	std::set<Comment::Ptr> m_Comments;
@@ -206,6 +236,11 @@ private:
 	mutable boost::mutex m_DependencyMutex;
 	std::set<intrusive_ptr<Dependency> > m_Dependencies;
 	std::set<intrusive_ptr<Dependency> > m_ReverseDependencies;
+
+	void GetAllChildrenInternal(std::set<Checkable::Ptr>& children, int level = 0) const;
+
+	/* Flapping */
+	void UpdateFlappingStatus(bool stateChange);
 };
 
 }

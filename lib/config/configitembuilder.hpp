@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,38 +34,40 @@ namespace icinga
  *
  * @ingroup config
  */
-class I2_CONFIG_API ConfigItemBuilder : public Object
+class ConfigItemBuilder final
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConfigItemBuilder);
 
-	ConfigItemBuilder(void);
+	ConfigItemBuilder() = default;
 	explicit ConfigItemBuilder(const DebugInfo& debugInfo);
 
-	void SetType(const String& type);
+	void SetType(const Type::Ptr& type);
 	void SetName(const String& name);
 	void SetAbstract(bool abstract);
 	void SetScope(const Dictionary::Ptr& scope);
 	void SetZone(const String& zone);
 	void SetPackage(const String& package);
+	void SetDefaultTemplate(bool defaultTmpl);
 	void SetIgnoreOnError(bool ignoreOnError);
 
 	void AddExpression(Expression *expr);
-	void SetFilter(const boost::shared_ptr<Expression>& filter);
+	void SetFilter(const std::shared_ptr<Expression>& filter);
 
-	ConfigItem::Ptr Compile(void);
+	ConfigItem::Ptr Compile();
 
 private:
-	String m_Type; /**< The object type. */
+	Type::Ptr m_Type; /**< The object type. */
 	String m_Name; /**< The name. */
-	bool m_Abstract; /**< Whether the item is abstract. */
-	std::vector<Expression *> m_Expressions; /**< Expressions for this item. */
-	boost::shared_ptr<Expression> m_Filter; /**< Filter expression. */
+	bool m_Abstract{false}; /**< Whether the item is abstract. */
+	std::vector<std::unique_ptr<Expression> > m_Expressions; /**< Expressions for this item. */
+	std::shared_ptr<Expression> m_Filter; /**< Filter expression. */
 	DebugInfo m_DebugInfo; /**< Debug information. */
 	Dictionary::Ptr m_Scope; /**< variable scope. */
 	String m_Zone; /**< The zone. */
 	String m_Package; /**< The package name. */
-	bool m_IgnoreOnError; /**< Whether the object should be ignored when an error occurs in one of the expressions. */
+	bool m_DefaultTmpl{false};
+	bool m_IgnoreOnError{false}; /**< Whether the object should be ignored when an error occurs in one of the expressions. */
 };
 
 }

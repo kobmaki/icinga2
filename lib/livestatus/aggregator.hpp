@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,20 +30,28 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API Aggregator : public Object
+struct AggregatorState
+{
+	virtual ~AggregatorState();
+};
+
+/**
+ * @ingroup livestatus
+ */
+class Aggregator : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(Aggregator);
 
-	virtual void Apply(const Table::Ptr& table, const Value& row) = 0;
-	virtual double GetResult(void) const = 0;
+	virtual void Apply(const Table::Ptr& table, const Value& row, AggregatorState **state) = 0;
+	virtual double GetResultAndFreeState(AggregatorState *state) const = 0;
 	void SetFilter(const Filter::Ptr& filter);
 
 protected:
-	Aggregator(void);
-	
-	Filter::Ptr GetFilter(void) const;
-	
+	Aggregator() = default;
+
+	Filter::Ptr GetFilter() const;
+
 private:
 	Filter::Ptr m_Filter;
 };

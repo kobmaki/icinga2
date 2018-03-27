@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define USER_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/user.thpp"
+#include "icinga/user-ti.hpp"
 #include "icinga/timeperiod.hpp"
 #include "remote/messageorigin.hpp"
 
@@ -33,7 +33,7 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API User : public ObjectImpl<User>
+class User final : public ObjectImpl<User>
 {
 public:
 	DECLARE_OBJECT(User);
@@ -42,16 +42,16 @@ public:
 	void AddGroup(const String& name);
 
 	/* Notifications */
-	TimePeriod::Ptr GetPeriod(void) const;
+	TimePeriod::Ptr GetPeriod() const;
 
-	virtual void ValidateStates(const Array::Ptr& value, const ValidationUtils& utils) override;
-	virtual void ValidateTypes(const Array::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateStates(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils) override;
+	void ValidateTypes(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void Stop(bool runtimeRemoved) override;
+	void Stop(bool runtimeRemoved) override;
 
-	virtual void OnConfigLoaded(void) override;
-	virtual void OnAllConfigLoaded(void) override;
+	void OnConfigLoaded() override;
+	void OnAllConfigLoaded() override;
 private:
 	mutable boost::mutex m_UserMutex;
 };

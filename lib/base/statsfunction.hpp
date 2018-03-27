@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,55 +21,13 @@
 #define STATSFUNCTION_H
 
 #include "base/i2-base.hpp"
-#include "base/registry.hpp"
-#include "base/value.hpp"
-#include "base/dictionary.hpp"
-#include "base/array.hpp"
-#include <boost/function.hpp>
+#include "base/function.hpp"
 
 namespace icinga
 {
 
-/**
- * A stats function that can be used to execute a stats task.
- *
- * @ingroup base
- */
-class I2_BASE_API StatsFunction : public Object
-{
-public:
-	DECLARE_PTR_TYPEDEFS(StatsFunction);
-
-	typedef boost::function<void (const Dictionary::Ptr& status, const Array::Ptr& perfdata)> Callback;
-
-	StatsFunction(const Callback& function);
-
-	void Invoke(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
-
-private:
-	Callback m_Callback;
-};
-
-/**
- * A registry for script functions.
- *
- * @ingroup base
- */
-class I2_BASE_API StatsFunctionRegistry : public Registry<StatsFunctionRegistry, StatsFunction::Ptr>
-{
-public:
-	static StatsFunctionRegistry *GetInstance(void);
-};
-
 #define REGISTER_STATSFUNCTION(name, callback) \
-	namespace { namespace UNIQUE_NAME(stf) { namespace stf ## name { \
-		void RegisterStatsFunction(void) \
-		{ \
-			StatsFunction::Ptr stf = new StatsFunction(callback); \
-			StatsFunctionRegistry::GetInstance()->Register(#name, stf); \
-		} \
-		INITIALIZE_ONCE(RegisterStatsFunction); \
-	} } }
+	REGISTER_SCRIPTFUNCTION_NS(StatsFunctions, name, callback, "status:perfdata")
 
 }
 

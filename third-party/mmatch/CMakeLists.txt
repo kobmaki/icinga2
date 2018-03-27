@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,23 +15,13 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-add_library(mmatch SHARED mmatch.c mmatch.h)
+set(mmatch_SOURCES
+  mmatch.c mmatch.h
+)
+
+add_library(mmatch OBJECT ${mmatch_SOURCES})
 
 set_target_properties(
   mmatch PROPERTIES
-  DEFINE_SYMBOL I2_MMATCH_BUILD
   FOLDER Lib
 )
-
-install(
-  TARGETS mmatch
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
-)
-
-if(APPLE)
-  install(
-    TARGETS mmatch
-    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/icinga-studio.app/Contents
-  )
-endif()

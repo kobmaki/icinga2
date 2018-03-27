@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,45 +24,31 @@
 #include "base/configtype.hpp"
 #include "base/logger.hpp"
 #include "base/utility.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_APIFUNCTION(Heartbeat, event, &JsonRpcConnection::HeartbeatAPIHandler);
 
-static Timer::Ptr l_HeartbeatTimer;
-
-static void StartHeartbeatTimer(void)
+void JsonRpcConnection::HeartbeatTimerHandler()
 {
-	l_HeartbeatTimer = new Timer();
-	l_HeartbeatTimer->OnTimerExpired.connect(boost::bind(&JsonRpcConnection::HeartbeatTimerHandler));
-	l_HeartbeatTimer->SetInterval(10);
-	l_HeartbeatTimer->Start();
-}
-
-INITIALIZE_ONCE(StartHeartbeatTimer);
-
-void JsonRpcConnection::HeartbeatTimerHandler(void)
-{
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, ConfigType::GetObjectsByType<Endpoint>()) {
-		BOOST_FOREACH(const JsonRpcConnection::Ptr& client, endpoint->GetClients()) {
+	for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
 			if (client->m_NextHeartbeat != 0 && client->m_NextHeartbeat < Utility::GetTime()) {
 				Log(LogWarning, "JsonRpcConnection")
-				    << "Client for endpoint '" << endpoint->GetName() << "' has requested "
-				    << "heartbeat message but hasn't responded in time. Closing connection.";
+					<< "Client for endpoint '" << endpoint->GetName() << "' has requested "
+					<< "heartbeat message but hasn't responded in time. Closing connection.";
 
 				client->Disconnect();
 				continue;
 			}
 
-			Dictionary::Ptr request = new Dictionary();
-			request->Set("jsonrpc", "2.0");
-			request->Set("method", "event::Heartbeat");
-
-			Dictionary::Ptr params = new Dictionary();
-			params->Set("timeout", 120);
-
-			request->Set("params", params);
+			Dictionary::Ptr request = new Dictionary({
+				{ "jsonrpc", "2.0" },
+				{ "method", "event::Heartbeat" },
+				{ "params", new Dictionary({
+					{ "timeout", 120 }
+				}) }
+			});
 
 			client->SendMessage(request);
 		}

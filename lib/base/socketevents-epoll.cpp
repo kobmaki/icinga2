@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,6 @@
 #include "base/exception.hpp"
 #include "base/logger.hpp"
 #include <boost/thread/once.hpp>
-#include <boost/foreach.hpp>
 #include <map>
 #ifdef __linux__
 #	include <sys/epoll.h>
@@ -117,17 +116,17 @@ void SocketEventEngineEpoll::ThreadProc(int tid)
 				event.LifesupportReference = event.Descriptor.LifesupportObject;
 				VERIFY(event.LifesupportReference);
 
-				events.push_back(event);
+				events.emplace_back(std::move(event));
 			}
 		}
 
-		BOOST_FOREACH(const EventDescription& event, events) {
+		for (const EventDescription& event : events) {
 			try {
 				event.Descriptor.EventInterface->OnEvent(event.REvents);
 			} catch (const std::exception& ex) {
 				Log(LogCritical, "SocketEvents")
-				    << "Exception thrown in socket I/O handler:\n"
-				    << DiagnosticInformation(ex);
+					<< "Exception thrown in socket I/O handler:\n"
+					<< DiagnosticInformation(ex);
 			} catch (...) {
 				Log(LogCritical, "SocketEvents", "Exception of unknown type thrown in socket I/O handler.");
 			}
@@ -175,7 +174,7 @@ void SocketEventEngineEpoll::Unregister(SocketEvents *se)
 		m_Sockets[tid].erase(se->m_FD);
 		m_FDChanged[tid] = true;
 
-		epoll_ctl(m_PollFDs[tid], EPOLL_CTL_DEL, se->m_FD, NULL);
+		epoll_ctl(m_PollFDs[tid], EPOLL_CTL_DEL, se->m_FD, nullptr);
 
 		se->m_FD = INVALID_SOCKET;
 		se->m_Events = false;
@@ -194,7 +193,7 @@ void SocketEventEngineEpoll::ChangeEvents(SocketEvents *se, int events)
 	{
 		boost::mutex::scoped_lock lock(m_EventMutex[tid]);
 
-		std::map<SOCKET, SocketEventDescriptor>::iterator it = m_Sockets[tid].find(se->m_FD);
+		auto it = m_Sockets[tid].find(se->m_FD);
 
 		if (it == m_Sockets[tid].end())
 			return;

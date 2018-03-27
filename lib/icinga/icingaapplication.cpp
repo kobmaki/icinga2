@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/icingaapplication.hpp"
-#include "icinga/icingaapplication.tcpp"
+#include "icinga/icingaapplication-ti.cpp"
 #include "icinga/cib.hpp"
 #include "icinga/macroprocessor.hpp"
 #include "config/configcompiler.hpp"
@@ -33,6 +33,8 @@
 #include "base/scriptglobal.hpp"
 #include "base/initialize.hpp"
 #include "base/statsfunction.hpp"
+#include "base/loader.hpp"
+#include <fstream>
 
 using namespace icinga;
 
@@ -41,7 +43,7 @@ static Timer::Ptr l_RetentionTimer;
 REGISTER_TYPE(IcingaApplication);
 INITIALIZE_ONCE(&IcingaApplication::StaticInitialize);
 
-void IcingaApplication::StaticInitialize(void)
+void IcingaApplication::StaticInitialize()
 {
 	String node_name = Utility::GetFQDN();
 
@@ -64,25 +66,24 @@ REGISTER_STATSFUNCTION(IcingaApplication, &IcingaApplication::StatsFunc);
 
 void IcingaApplication::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const IcingaApplication::Ptr& icingaapplication, ConfigType::GetObjectsByType<IcingaApplication>()) {
-		Dictionary::Ptr stats = new Dictionary();
-		stats->Set("node_name", icingaapplication->GetNodeName());
-		stats->Set("enable_notifications", icingaapplication->GetEnableNotifications());
-		stats->Set("enable_event_handlers", icingaapplication->GetEnableEventHandlers());
-		stats->Set("enable_flapping", icingaapplication->GetEnableFlapping());
-		stats->Set("enable_host_checks", icingaapplication->GetEnableHostChecks());
-		stats->Set("enable_service_checks", icingaapplication->GetEnableServiceChecks());
-		stats->Set("enable_perfdata", icingaapplication->GetEnablePerfdata());
-		stats->Set("pid", Utility::GetPid());
-		stats->Set("program_start", Application::GetStartTime());
-		stats->Set("version", Application::GetAppVersion());
-
-		nodes->Set(icingaapplication->GetName(), stats);
+	for (const IcingaApplication::Ptr& icingaapplication : ConfigType::GetObjectsByType<IcingaApplication>()) {
+		nodes.emplace_back(icingaapplication->GetName(), new Dictionary({
+			{ "node_name", icingaapplication->GetNodeName() },
+			{ "enable_notifications", icingaapplication->GetEnableNotifications() },
+			{ "enable_event_handlers", icingaapplication->GetEnableEventHandlers() },
+			{ "enable_flapping", icingaapplication->GetEnableFlapping() },
+			{ "enable_host_checks", icingaapplication->GetEnableHostChecks() },
+			{ "enable_service_checks", icingaapplication->GetEnableServiceChecks() },
+			{ "enable_perfdata", icingaapplication->GetEnablePerfdata() },
+			{ "pid", Utility::GetPid() },
+			{ "program_start", Application::GetStartTime() },
+			{ "version", Application::GetAppVersion() }
+		}));
 	}
 
-	status->Set("icingaapplication", nodes);
+	status->Set("icingaapplication", new Dictionary(std::move(nodes)));
 }
 
 /**
@@ -90,31 +91,15 @@ void IcingaApplication::StatsFunc(const Dictionary::Ptr& status, const Array::Pt
  *
  * @returns An exit status.
  */
-int IcingaApplication::Main(void)
+int IcingaApplication::Main()
 {
 	Log(LogDebug, "IcingaApplication", "In IcingaApplication::Main()");
 
 	/* periodically dump the program state */
 	l_RetentionTimer = new Timer();
 	l_RetentionTimer->SetInterval(300);
-	l_RetentionTimer->OnTimerExpired.connect(boost::bind(&IcingaApplication::DumpProgramState, this));
+	l_RetentionTimer->OnTimerExpired.connect(std::bind(&IcingaApplication::DumpProgramState, this));
 	l_RetentionTimer->Start();
-
-	/* restore modified attributes */
-	if (Utility::PathExists(GetModAttrPath())) {
-		Expression *expression = ConfigCompiler::CompileFile(GetModAttrPath());
-
-		if (expression) {
-			try {
-				ScriptFrame frame;
-				expression->Evaluate(frame);
-			} catch (const std::exception& ex) {
-				Log(LogCritical, "config", DiagnosticInformation(ex));
-			}
-		}
-
-		delete expression;
-	}
 
 	RunEventLoop();
 
@@ -123,7 +108,7 @@ int IcingaApplication::Main(void)
 	return EXIT_SUCCESS;
 }
 
-void IcingaApplication::OnShutdown(void)
+void IcingaApplication::OnShutdown()
 {
 	{
 		ObjectLock olock(this);
@@ -144,9 +129,10 @@ static void PersistModAttrHelper(std::fstream& fp, ConfigObject::Ptr& previousOb
 
 		ConfigWriter::EmitRaw(fp, "var obj = ");
 
-		Array::Ptr args1 = new Array();
-		args1->Add(object->GetReflectionType()->GetName());
-		args1->Add(object->GetName());
+		Array::Ptr args1 = new Array({
+			object->GetReflectionType()->GetName(),
+			object->GetName()
+		});
 		ConfigWriter::EmitFunctionCall(fp, "get_object", args1);
 
 		ConfigWriter::EmitRaw(fp, "\nif (obj) {\n");
@@ -154,9 +140,10 @@ static void PersistModAttrHelper(std::fstream& fp, ConfigObject::Ptr& previousOb
 
 	ConfigWriter::EmitRaw(fp, "\tobj.");
 
-	Array::Ptr args2 = new Array();
-	args2->Add(attr);
-	args2->Add(value);
+	Array::Ptr args2 = new Array({
+		attr,
+		value
+	});
 	ConfigWriter::EmitFunctionCall(fp, "modify_attribute", args2);
 
 	ConfigWriter::EmitRaw(fp, "\n");
@@ -164,21 +151,22 @@ static void PersistModAttrHelper(std::fstream& fp, ConfigObject::Ptr& previousOb
 	previousObject = object;
 }
 
-void IcingaApplication::DumpProgramState(void)
+void IcingaApplication::DumpProgramState()
 {
 	ConfigObject::DumpObjects(GetStatePath());
 	DumpModifiedAttributes();
 }
 
-void IcingaApplication::DumpModifiedAttributes(void)
+void IcingaApplication::DumpModifiedAttributes()
 {
 	String path = GetModAttrPath();
 
 	std::fstream fp;
 	String tempFilename = Utility::CreateTempFile(path + ".XXXXXX", 0644, fp);
+	fp.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 
 	ConfigObject::Ptr previousObject;
-	ConfigObject::DumpModifiedAttributes(boost::bind(&PersistModAttrHelper, boost::ref(fp), boost::ref(previousObject), _1, _2, _3));
+	ConfigObject::DumpModifiedAttributes(std::bind(&PersistModAttrHelper, std::ref(fp), std::ref(previousObject), _1, _2, _3));
 
 	if (previousObject) {
 		ConfigWriter::EmitRaw(fp, "\tobj.version = ");
@@ -194,13 +182,13 @@ void IcingaApplication::DumpModifiedAttributes(void)
 
 	if (rename(tempFilename.CStr(), path.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rename")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(tempFilename));
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(tempFilename));
 	}
 }
 
-IcingaApplication::Ptr IcingaApplication::GetInstance(void)
+IcingaApplication::Ptr IcingaApplication::GetInstance()
 {
 	return static_pointer_cast<IcingaApplication>(Application::GetInstance());
 }
@@ -298,12 +286,12 @@ bool IcingaApplication::ResolveMacro(const String& macro, const CheckResult::Ptr
 	return false;
 }
 
-String IcingaApplication::GetNodeName(void) const
+String IcingaApplication::GetNodeName() const
 {
 	return ScriptGlobal::Get("NodeName");
 }
 
-void IcingaApplication::ValidateVars(const Dictionary::Ptr& value, const ValidationUtils& utils)
+void IcingaApplication::ValidateVars(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils)
 {
-	MacroProcessor::ValidateCustomVars(this, value);
+	MacroProcessor::ValidateCustomVars(this, lvalue());
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,8 +22,7 @@
 #include "remote/filterutility.hpp"
 #include "remote/apiaction.hpp"
 #include "base/exception.hpp"
-#include "base/serializer.hpp"
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 #include <set>
 
 using namespace icinga;
@@ -41,7 +40,7 @@ bool ModifyObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	Type::Ptr type = FilterUtility::TypeFromPluralName(request.RequestUrl->GetPath()[2]);
 
 	if (!type) {
-		HttpUtility::SendJsonError(response, 400, "Invalid type specified.");
+		HttpUtility::SendJsonError(response, params, 400, "Invalid type specified.");
 		return true;
 	}
 
@@ -62,17 +61,25 @@ bool ModifyObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user);
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No objects found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No objects found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
-	Dictionary::Ptr attrs = params->Get("attrs");
+	Value attrsVal = params->Get("attrs");
 
-	Array::Ptr results = new Array();
+	if (attrsVal.GetReflectionType() != Dictionary::TypeInstance) {
+		HttpUtility::SendJsonError(response, params, 400,
+			"Invalid type for 'attrs' attribute specified. Dictionary type is required.", Empty);
+		return true;
+	}
 
-	BOOST_FOREACH(const ConfigObject::Ptr& obj, objs) {
+	Dictionary::Ptr attrs = attrsVal;
+
+	ArrayData results;
+
+	for (const ConfigObject::Ptr& obj : objs) {
 		Dictionary::Ptr result1 = new Dictionary();
 
 		result1->Set("type", type->GetName());
@@ -83,7 +90,7 @@ bool ModifyObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 		try {
 			if (attrs) {
 				ObjectLock olock(attrs);
-				BOOST_FOREACH(const Dictionary::Pair& kv, attrs) {
+				for (const Dictionary::Pair& kv : attrs) {
 					key = kv.first;
 					obj->ModifyAttribute(kv.first, kv.second);
 				}
@@ -96,14 +103,15 @@ bool ModifyObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 			result1->Set("status", "Attribute '" + key + "' could not be set: " + DiagnosticInformation(ex));
 		}
 
-		results->Add(result1);
+		results.push_back(std::move(result1));
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }

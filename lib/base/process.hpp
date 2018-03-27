@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,10 +22,10 @@
 
 #include "base/i2-base.hpp"
 #include "base/dictionary.hpp"
-#include <boost/function.hpp>
-#include <sstream>
+#include <iosfwd>
 #include <deque>
 #include <vector>
+#include <sstream>
 
 namespace icinga
 {
@@ -50,7 +50,7 @@ struct ProcessResult
  *
  * @ingroup base
  */
-class I2_BASE_API Process : public Object
+class Process final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(Process);
@@ -67,28 +67,35 @@ public:
 
 	static const std::deque<Process::Ptr>::size_type MaxTasksPerThread = 512;
 
-	Process(const Arguments& arguments, const Dictionary::Ptr& extraEnvironment = Dictionary::Ptr());
-	~Process(void);
+	Process(Arguments arguments, Dictionary::Ptr extraEnvironment = nullptr);
+	~Process() override;
 
 	void SetTimeout(double timeout);
-	double GetTimeout(void) const;
+	double GetTimeout() const;
 
-	void Run(const boost::function<void (const ProcessResult&)>& callback = boost::function<void (const ProcessResult&)>());
+	void SetAdjustPriority(bool adjust);
+	bool GetAdjustPriority() const;
 
-	pid_t GetPID(void) const;
+	void Run(const std::function<void (const ProcessResult&)>& callback = std::function<void (const ProcessResult&)>());
+
+	pid_t GetPID() const;
 
 	static Arguments PrepareCommand(const Value& command);
 
-	static void StaticInitialize(void);
-	static void ThreadInitialize(void);
+	static void ThreadInitialize();
 
 	static String PrettyPrintArguments(const Arguments& arguments);
+
+#ifndef _WIN32
+	static void InitializeSpawnHelper();
+#endif /* _WIN32 */
 
 private:
 	Arguments m_Arguments;
 	Dictionary::Ptr m_ExtraEnvironment;
 
 	double m_Timeout;
+	bool m_AdjustPriority;
 
 	ProcessHandle m_Process;
 	pid_t m_PID;
@@ -102,12 +109,12 @@ private:
 #endif /* _WIN32 */
 
 	std::ostringstream m_OutputStream;
-	boost::function<void (const ProcessResult&)> m_Callback;
+	std::function<void (const ProcessResult&)> m_Callback;
 	ProcessResult m_Result;
 
 	static void IOThreadProc(int tid);
-	bool DoEvents(void);
-	int GetTID(void) const;
+	bool DoEvents();
+	int GetTID() const;
 };
 
 }

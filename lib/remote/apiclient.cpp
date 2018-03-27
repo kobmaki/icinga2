@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,18 +18,17 @@
  ******************************************************************************/
 
 #include "remote/apiclient.hpp"
-#include "remote/base64.hpp"
+#include "base/base64.hpp"
 #include "base/json.hpp"
 #include "base/logger.hpp"
 #include "base/exception.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 ApiClient::ApiClient(const String& host, const String& port,
-    const String& user, const String& password)
-    : m_Connection(new HttpClientConnection(host, port, true)), m_User(user), m_Password(password)
+	String user, String password)
+	: m_Connection(new HttpClientConnection(host, port, true)), m_User(std::move(user)), m_Password(std::move(password))
 {
 	m_Connection->Start();
 }
@@ -40,26 +39,22 @@ void ApiClient::GetTypes(const TypesCompletionCallback& callback) const
 	url->SetScheme("https");
 	url->SetHost(m_Connection->GetHost());
 	url->SetPort(m_Connection->GetPort());
-
-	std::vector<String> path;
-	path.push_back("v1");
-	path.push_back("types");
-	url->SetPath(path);
+	url->SetPath({ "v1", "types" });
 
 	try {
-		boost::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
+		std::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
 		req->RequestMethod = "GET";
 		req->RequestUrl = url;
 		req->AddHeader("Authorization", "Basic " + Base64::Encode(m_User + ":" + m_Password));
 		req->AddHeader("Accept", "application/json");
-		m_Connection->SubmitRequest(req, boost::bind(TypesHttpCompletionCallback, _1, _2, callback));
-	} catch (const std::exception& ex) {
+		m_Connection->SubmitRequest(req, std::bind(TypesHttpCompletionCallback, _1, _2, callback));
+	} catch (const std::exception&) {
 		callback(boost::current_exception(), std::vector<ApiType::Ptr>());
 	}
 }
 
 void ApiClient::TypesHttpCompletionCallback(HttpRequest& request, HttpResponse& response,
-    const TypesCompletionCallback& callback)
+	const TypesCompletionCallback& callback)
 {
 	Dictionary::Ptr result;
 
@@ -84,72 +79,67 @@ void ApiClient::TypesHttpCompletionCallback(HttpRequest& request, HttpResponse& 
 		Array::Ptr results = result->Get("results");
 
 		ObjectLock olock(results);
-		BOOST_FOREACH(const Dictionary::Ptr typeInfo, results)
+		for (const Dictionary::Ptr typeInfo : results)
 		{
-			ApiType::Ptr type = new ApiType();;
+			ApiType::Ptr type = new ApiType();
 			type->Abstract = typeInfo->Get("abstract");
 			type->BaseName = typeInfo->Get("base");
 			type->Name = typeInfo->Get("name");
 			type->PluralName = typeInfo->Get("plural_name");
 			// TODO: attributes
-			types.push_back(type);
+			types.emplace_back(std::move(type));
 		}
 
 		callback(boost::exception_ptr(), types);
 	} catch (const std::exception& ex) {
 		Log(LogCritical, "ApiClient")
-		    << "Error while decoding response: " << DiagnosticInformation(ex);
+			<< "Error while decoding response: " << DiagnosticInformation(ex);
 		callback(boost::current_exception(), std::vector<ApiType::Ptr>());
 	}
 
 }
 
 void ApiClient::GetObjects(const String& pluralType, const ObjectsCompletionCallback& callback,
-    const std::vector<String>& names, const std::vector<String>& attrs, const std::vector<String>& joins, bool all_joins) const
+	const std::vector<String>& names, const std::vector<String>& attrs, const std::vector<String>& joins, bool all_joins) const
 {
 	Url::Ptr url = new Url();
 	url->SetScheme("https");
 	url->SetHost(m_Connection->GetHost());
 	url->SetPort(m_Connection->GetPort());
-
-	std::vector<String> path;
-	path.push_back("v1");
-	path.push_back("objects");
-	path.push_back(pluralType);
-	url->SetPath(path);
+	url->SetPath({ "v1", "objects", pluralType });
 
 	std::map<String, std::vector<String> > params;
 
-	BOOST_FOREACH(const String& name, names) {
+	for (const String& name : names) {
 		params[pluralType.ToLower()].push_back(name);
 	}
 
-	BOOST_FOREACH(const String& attr, attrs) {
+	for (const String& attr : attrs) {
 		params["attrs"].push_back(attr);
 	}
 
-	BOOST_FOREACH(const String& join, joins) {
+	for (const String& join : joins) {
 		params["joins"].push_back(join);
 	}
 
-	params["all_joins"].push_back(all_joins ? "1" : "0");
+	params["all_joins"].emplace_back(all_joins ? "1" : "0");
 
 	url->SetQuery(params);
 
 	try {
-		boost::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
+		std::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
 		req->RequestMethod = "GET";
 		req->RequestUrl = url;
 		req->AddHeader("Authorization", "Basic " + Base64::Encode(m_User + ":" + m_Password));
 		req->AddHeader("Accept", "application/json");
-		m_Connection->SubmitRequest(req, boost::bind(ObjectsHttpCompletionCallback, _1, _2, callback));
-	} catch (const std::exception& ex) {
+		m_Connection->SubmitRequest(req, std::bind(ObjectsHttpCompletionCallback, _1, _2, callback));
+	} catch (const std::exception&) {
 		callback(boost::current_exception(), std::vector<ApiObject::Ptr>());
 	}
 }
 
 void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
-    HttpResponse& response, const ObjectsCompletionCallback& callback)
+	HttpResponse& response, const ObjectsCompletionCallback& callback)
 {
 	Dictionary::Ptr result;
 
@@ -175,7 +165,7 @@ void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
 
 		if (results) {
 			ObjectLock olock(results);
-			BOOST_FOREACH(const Dictionary::Ptr objectInfo, results) {
+			for (const Dictionary::Ptr objectInfo : results) {
 				ApiObject::Ptr object = new ApiObject();
 
 				object->Name = objectInfo->Get("name");
@@ -185,7 +175,7 @@ void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
 
 				if (attrs) {
 					ObjectLock olock(attrs);
-					BOOST_FOREACH(const Dictionary::Pair& kv, attrs) {
+					for (const Dictionary::Pair& kv : attrs) {
 						object->Attrs[object->Type.ToLower() + "." + kv.first] = kv.second;
 					}
 				}
@@ -194,12 +184,12 @@ void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
 
 				if (joins) {
 					ObjectLock olock(joins);
-					BOOST_FOREACH(const Dictionary::Pair& kv, joins) {
+					for (const Dictionary::Pair& kv : joins) {
 						Dictionary::Ptr attrs = kv.second;
 
 						if (attrs) {
 							ObjectLock olock(attrs);
-							BOOST_FOREACH(const Dictionary::Pair& kv2, attrs) {
+							for (const Dictionary::Pair& kv2 : attrs) {
 								object->Attrs[kv.first + "." + kv2.first] = kv2.second;
 							}
 						}
@@ -210,11 +200,11 @@ void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
 
 				if (used_by) {
 					ObjectLock olock(used_by);
-					BOOST_FOREACH(const Dictionary::Ptr& refInfo, used_by) {
+					for (const Dictionary::Ptr& refInfo : used_by) {
 						ApiObjectReference ref;
 						ref.Name = refInfo->Get("name");
 						ref.Type = refInfo->Get("type");
-						object->UsedBy.push_back(ref);
+						object->UsedBy.emplace_back(std::move(ref));
 					}
 				}
 
@@ -231,39 +221,34 @@ void ApiClient::ObjectsHttpCompletionCallback(HttpRequest& request,
 }
 
 void ApiClient::ExecuteScript(const String& session, const String& command, bool sandboxed,
-    const ExecuteScriptCompletionCallback& callback) const
+	const ExecuteScriptCompletionCallback& callback) const
 {
 	Url::Ptr url = new Url();
 	url->SetScheme("https");
 	url->SetHost(m_Connection->GetHost());
 	url->SetPort(m_Connection->GetPort());
-
-	std::vector<String> path;
-	path.push_back("v1");
-	path.push_back("console");
-	path.push_back("execute-script");
-	url->SetPath(path);
+	url->SetPath({ "v1", "console", "execute-script" });
 
 	std::map<String, std::vector<String> > params;
 	params["session"].push_back(session);
 	params["command"].push_back(command);
-	params["sandboxed"].push_back(sandboxed ? "1" : "0");
+	params["sandboxed"].emplace_back(sandboxed ? "1" : "0");
 	url->SetQuery(params);
 
 	try {
-		boost::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
+		std::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
 		req->RequestMethod = "POST";
 		req->RequestUrl = url;
 		req->AddHeader("Authorization", "Basic " + Base64::Encode(m_User + ":" + m_Password));
 		req->AddHeader("Accept", "application/json");
-		m_Connection->SubmitRequest(req, boost::bind(ExecuteScriptHttpCompletionCallback, _1, _2, callback));
-	} catch (const std::exception& ex) {
+		m_Connection->SubmitRequest(req, std::bind(ExecuteScriptHttpCompletionCallback, _1, _2, callback));
+	} catch (const std::exception&) {
 		callback(boost::current_exception(), Empty);
 	}
 }
 
 void ApiClient::ExecuteScriptHttpCompletionCallback(HttpRequest& request,
-    HttpResponse& response, const ExecuteScriptCompletionCallback& callback)
+	HttpResponse& response, const ExecuteScriptCompletionCallback& callback)
 {
 	Dictionary::Ptr result;
 
@@ -309,45 +294,40 @@ void ApiClient::ExecuteScriptHttpCompletionCallback(HttpRequest& request,
 		}
 
 		callback(boost::exception_ptr(), result);
-	} catch (const std::exception& ex) {
+	} catch (const std::exception&) {
 		callback(boost::current_exception(), Empty);
 	}
 }
 
 void ApiClient::AutocompleteScript(const String& session, const String& command, bool sandboxed,
-    const AutocompleteScriptCompletionCallback& callback) const
+	const AutocompleteScriptCompletionCallback& callback) const
 {
 	Url::Ptr url = new Url();
 	url->SetScheme("https");
 	url->SetHost(m_Connection->GetHost());
 	url->SetPort(m_Connection->GetPort());
-
-	std::vector<String> path;
-	path.push_back("v1");
-	path.push_back("console");
-	path.push_back("auto-complete-script");
-	url->SetPath(path);
+	url->SetPath({ "v1", "console", "auto-complete-script" });
 
 	std::map<String, std::vector<String> > params;
 	params["session"].push_back(session);
 	params["command"].push_back(command);
-	params["sandboxed"].push_back(sandboxed ? "1" : "0");
+	params["sandboxed"].emplace_back(sandboxed ? "1" : "0");
 	url->SetQuery(params);
 
 	try {
-		boost::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
+		std::shared_ptr<HttpRequest> req = m_Connection->NewRequest();
 		req->RequestMethod = "POST";
 		req->RequestUrl = url;
 		req->AddHeader("Authorization", "Basic " + Base64::Encode(m_User + ":" + m_Password));
 		req->AddHeader("Accept", "application/json");
-		m_Connection->SubmitRequest(req, boost::bind(AutocompleteScriptHttpCompletionCallback, _1, _2, callback));
-	} catch (const std::exception& ex) {
-		callback(boost::current_exception(), Array::Ptr());
+		m_Connection->SubmitRequest(req, std::bind(AutocompleteScriptHttpCompletionCallback, _1, _2, callback));
+	} catch (const std::exception&) {
+		callback(boost::current_exception(), nullptr);
 	}
 }
 
 void ApiClient::AutocompleteScriptHttpCompletionCallback(HttpRequest& request,
-    HttpResponse& response, const AutocompleteScriptCompletionCallback& callback)
+	HttpResponse& response, const AutocompleteScriptCompletionCallback& callback)
 {
 	Dictionary::Ptr result;
 
@@ -382,7 +362,7 @@ void ApiClient::AutocompleteScriptHttpCompletionCallback(HttpRequest& request,
 		}
 
 		callback(boost::exception_ptr(), suggestions);
-	} catch (const std::exception& ex) {
-		callback(boost::current_exception(), Array::Ptr());
+	} catch (const std::exception&) {
+		callback(boost::current_exception(), nullptr);
 	}
 }

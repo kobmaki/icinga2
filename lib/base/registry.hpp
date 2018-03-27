@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,10 +22,9 @@
 
 #include "base/i2-base.hpp"
 #include "base/string.hpp"
-#include <map>
 #include <boost/thread/mutex.hpp>
 #include <boost/signals2.hpp>
-#include <boost/foreach.hpp>
+#include <map>
 
 namespace icinga
 {
@@ -71,7 +70,7 @@ public:
 			OnUnregistered(name);
 	}
 
-	void Clear(void)
+	void Clear()
 	{
 		typename Registry<U, T>::ItemMap items;
 
@@ -80,9 +79,7 @@ public:
 			items = m_Items;
 		}
 
-		typedef typename std::pair<String, T> ItemMapPair;
-
-		BOOST_FOREACH(const ItemMapPair& kv, items) {
+		for (const auto& kv : items) {
 			OnUnregistered(kv.first);
 		}
 
@@ -96,8 +93,7 @@ public:
 	{
 		boost::mutex::scoped_lock lock(m_Mutex);
 
-		typename ItemMap::const_iterator it;
-		it = m_Items.find(name);
+		auto it = m_Items.find(name);
 
 		if (it == m_Items.end())
 			return T();
@@ -105,7 +101,7 @@ public:
 		return it->second;
 	}
 
-	ItemMap GetItems(void) const
+	ItemMap GetItems() const
 	{
 		boost::mutex::scoped_lock lock(m_Mutex);
 

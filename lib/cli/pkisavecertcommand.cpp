@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,34 +18,36 @@
  ******************************************************************************/
 
 #include "cli/pkisavecertcommand.hpp"
-#include "cli/pkiutility.hpp"
+#include "remote/pkiutility.hpp"
 #include "base/logger.hpp"
 #include "base/tlsutility.hpp"
+#include "base/console.hpp"
+#include <iostream>
 
 using namespace icinga;
 namespace po = boost::program_options;
 
 REGISTER_CLICOMMAND("pki/save-cert", PKISaveCertCommand);
 
-String PKISaveCertCommand::GetDescription(void) const
+String PKISaveCertCommand::GetDescription() const
 {
 	return "Saves another Icinga 2 instance's certificate.";
 }
 
-String PKISaveCertCommand::GetShortDescription(void) const
+String PKISaveCertCommand::GetShortDescription() const
 {
 	return "saves another Icinga 2 instance's certificate";
 }
 
 void PKISaveCertCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
-	    ("key", po::value<std::string>(), "Key file path (input), obsolete")
-	    ("cert", po::value<std::string>(), "Certificate file path (input), obsolete")
-	    ("trustedcert", po::value<std::string>(), "Trusted certificate file path (output)")
-	    ("host", po::value<std::string>(), "Icinga 2 host")
-	    ("port", po::value<std::string>()->default_value("5665"), "Icinga 2 port");
+		("key", po::value<std::string>(), "Key file path (input), obsolete")
+		("cert", po::value<std::string>(), "Certificate file path (input), obsolete")
+		("trustedcert", po::value<std::string>(), "Trusted certificate file path (output)")
+		("host", po::value<std::string>(), "Icinga 2 host")
+		("port", po::value<std::string>()->default_value("5665"), "Icinga 2 port");
 }
 
 std::vector<String> PKISaveCertCommand::GetArgumentSuggestions(const String& argument, const String& word) const
@@ -77,13 +79,26 @@ int PKISaveCertCommand::Run(const boost::program_options::variables_map& vm, con
 		return 1;
 	}
 
-	boost::shared_ptr<X509> cert =
-	    PkiUtility::FetchCert(vm["host"].as<std::string>(), vm["port"].as<std::string>());
+	String host = vm["host"].as<std::string>();
+	String port = vm["port"].as<std::string>();
+
+	Log(LogInformation, "cli")
+		<< "Retrieving X.509 certificate for '" << host << ":" << port << "'.";
+
+	std::shared_ptr<X509> cert = PkiUtility::FetchCert(host, port);
 
 	if (!cert) {
-		Log(LogCritical, "cli", "Failed to fetch certificate from host");
+		Log(LogCritical, "cli", "Failed to fetch certificate from host.");
 		return 1;
 	}
+
+	std::cout << PkiUtility::GetCertificateInformation(cert) << "\n";
+	std::cout << ConsoleColorTag(Console_ForegroundRed)
+		<< "***\n"
+		<< "*** You have to ensure that this certificate actually matches the parent\n"
+		<< "*** instance's certificate in order to avoid man-in-the-middle attacks.\n"
+		<< "***\n\n"
+		<< ConsoleColorTag(Console_Normal);
 
 	return PkiUtility::WriteCert(cert, vm["trustedcert"].as<std::string>());
 }

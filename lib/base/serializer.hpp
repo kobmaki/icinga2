@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,9 +27,9 @@
 namespace icinga
 {
 
-I2_BASE_API Value Serialize(const Value& value, int attributeTypes = FAState);
-I2_BASE_API Value Deserialize(const Value& value, bool safe_mode = false, int attributeTypes = FAState);
-I2_BASE_API Value Deserialize(const Object::Ptr& object, const Value& value, bool safe_mode = false, int attributeTypes = FAState);
+Value Serialize(const Value& value, int attributeTypes = FAState);
+Value Deserialize(const Value& value, bool safe_mode = false, int attributeTypes = FAState);
+Value Deserialize(const Object::Ptr& object, const Value& value, bool safe_mode = false, int attributeTypes = FAState);
 
 }
 

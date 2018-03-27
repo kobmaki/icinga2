@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,19 +27,17 @@
 
 using namespace icinga;
 
-INITIALIZE_ONCE(&StackTrace::StaticInitialize);
-
 #ifdef _MSC_VER
 #	pragma optimize("", off)
 #endif /* _MSC_VER */
 
-StackTrace::StackTrace(void)
+StackTrace::StackTrace()
 {
 #ifdef HAVE_BACKTRACE_SYMBOLS
 	m_Count = backtrace(m_Frames, sizeof(m_Frames) / sizeof(m_Frames[0]));
 #else /* HAVE_BACKTRACE_SYMBOLS */
 #	ifdef _WIN32
-	m_Count = CaptureStackBackTrace(0, sizeof(m_Frames) / sizeof(m_Frames), m_Frames, NULL);
+	m_Count = CaptureStackBackTrace(0, sizeof(m_Frames) / sizeof(m_Frames), m_Frames, nullptr);
 #	else /* _WIN32 */
 	m_Count = 0;
 #	endif /* _WIN32 */
@@ -77,28 +75,27 @@ StackTrace::StackTrace(PEXCEPTION_POINTERS exi)
 	m_Count = 0;
 
 	while (StackWalk64(architecture, GetCurrentProcess(), GetCurrentThread(),
-	    &frame, exi->ContextRecord, NULL, &SymFunctionTableAccess64,
-	    &SymGetModuleBase64, NULL) && m_Count < sizeof(m_Frames) / sizeof(m_Frames[0])) {
+		&frame, exi->ContextRecord, nullptr, &SymFunctionTableAccess64,
+		&SymGetModuleBase64, nullptr) && m_Count < sizeof(m_Frames) / sizeof(m_Frames[0])) {
 		m_Frames[m_Count] = reinterpret_cast<void *>(frame.AddrPC.Offset);
 		m_Count++;
 	}
 }
 #endif /* _WIN32 */
 
-void StackTrace::StaticInitialize(void)
-{
 #ifdef _WIN32
+INITIALIZE_ONCE([]() {
 	(void) SymSetOptions(SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
-	(void) SymInitialize(GetCurrentProcess(), NULL, TRUE);
+	(void) SymInitialize(GetCurrentProcess(), nullptr, TRUE);
+});
 #endif /* _WIN32 */
-}
 
 /**
  * Prints a stacktrace to the specified stream.
  *
  * @param fp The stream.
  * @param ignoreFrames The number of stackframes to ignore (in addition to
- *		       the one this function is executing in).
+ *        the one this function is executing in).
  * @returns true if the stacktrace was printed, false otherwise.
  */
 void StackTrace::Print(std::ostream& fp, int ignoreFrames) const
@@ -109,7 +106,7 @@ void StackTrace::Print(std::ostream& fp, int ignoreFrames) const
 #	ifdef HAVE_BACKTRACE_SYMBOLS
 	char **messages = backtrace_symbols(m_Frames, m_Count);
 
-	for (int i = ignoreFrames + 1; i < m_Count && messages != NULL; ++i) {
+	for (int i = ignoreFrames + 1; i < m_Count && messages; ++i) {
 		String message = messages[i];
 
 		char *sym_begin = strchr(messages[i], '(');
@@ -117,7 +114,7 @@ void StackTrace::Print(std::ostream& fp, int ignoreFrames) const
 		if (sym_begin) {
 			char *sym_end = strchr(sym_begin, '+');
 
-			if (sym_end != NULL) {
+			if (sym_end) {
 				String sym = String(sym_begin + 1, sym_end);
 				String sym_demangled = Utility::DemangleSymbolName(sym);
 
@@ -146,9 +143,7 @@ void StackTrace::Print(std::ostream& fp, int ignoreFrames) const
 #	endif /* HAVE_BACKTRACE_SYMBOLS */
 #else /* _WIN32 */
 	for (int i = ignoreFrames + 1; i < m_Count; i++) {
-		fp << "\t(" << i - ignoreFrames - 1 << "): "
-		   << Utility::GetSymbolName(m_Frames[i])
-		   << std::endl;
+		fp << "\t(" << i - ignoreFrames - 1 << "): " << Utility::GetSymbolName(m_Frames[i]) << std::endl;
 	}
 #endif /* _WIN32 */
 }

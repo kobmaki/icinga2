@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -24,12 +24,19 @@ add_flex_bison_dependency(class_lexer class_parser)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/class_parser.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register")
-  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/class_lexer.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register")
+  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/class_lexer.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register -Wno-null-conversion")
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(mkclass mkclass.cpp classcompiler.cpp classcompiler.hpp ${FLEX_class_lexer_OUTPUTS} ${BISON_class_parser_OUTPUTS})
+set(mkclass_SOURCES
+  mkclass.cpp
+  classcompiler.cpp classcompiler.hpp
+  ${FLEX_class_lexer_OUTPUTS}
+  ${BISON_class_parser_OUTPUTS}
+)
+
+add_executable(mkclass ${mkclass_SOURCES})
 
 if(WIN32)
   target_link_libraries(mkclass shlwapi)
@@ -41,11 +48,11 @@ set_target_properties (
 )
 
 macro(MKCLASS_TARGET ClassInput ClassImplOutput ClassHeaderOutput)
-    add_custom_command(
-        OUTPUT ${ClassImplOutput} ${ClassHeaderOutput}
-        COMMAND mkclass
-        ARGS ${ClassInput} ${CMAKE_CURRENT_BINARY_DIR}/${ClassImplOutput} ${CMAKE_CURRENT_BINARY_DIR}/${ClassHeaderOutput}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS mkclass ${ClassInput}
-    )
+  add_custom_command(
+    OUTPUT ${ClassImplOutput} ${ClassHeaderOutput}
+    COMMAND mkclass
+    ARGS ${ClassInput} ${CMAKE_CURRENT_BINARY_DIR}/${ClassImplOutput} ${CMAKE_CURRENT_BINARY_DIR}/${ClassHeaderOutput}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS mkclass ${ClassInput}
+  )
 endmacro()

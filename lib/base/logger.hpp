@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,9 @@
 #define LOGGER_H
 
 #include "base/i2-base.hpp"
-#include "base/logger.thpp"
+#include "base/logger-ti.hpp"
 #include <set>
-#include <sstream>
+#include <iosfwd>
 
 namespace icinga
 {
@@ -59,7 +59,7 @@ struct LogEntry {
  *
  * @ingroup base
  */
-class I2_BASE_API Logger : public ObjectImpl<Logger>
+class Logger : public ObjectImpl<Logger>
 {
 public:
 	DECLARE_OBJECT(Logger);
@@ -67,7 +67,7 @@ public:
 	static String SeverityToString(LogSeverity severity);
 	static LogSeverity StringToSeverity(const String& severity);
 
-	LogSeverity GetMinSeverity(void) const;
+	LogSeverity GetMinSeverity() const;
 
 	/**
 	 * Processes the log entry and writes it to the log that is
@@ -77,26 +77,24 @@ public:
 	 */
 	virtual void ProcessLogEntry(const LogEntry& entry) = 0;
 
-	virtual void Flush(void) = 0;
+	virtual void Flush() = 0;
 
-	static std::set<Logger::Ptr> GetLoggers(void);
+	static std::set<Logger::Ptr> GetLoggers();
 
-	static void DisableConsoleLog(void);
-	static void EnableConsoleLog(void);
-	static bool IsConsoleLogEnabled(void);
+	static void DisableConsoleLog();
+	static void EnableConsoleLog();
+	static bool IsConsoleLogEnabled();
 	static void DisableTimestamp(bool);
-	static bool IsTimestampEnabled(void);
+	static bool IsTimestampEnabled();
 
 	static void SetConsoleLogSeverity(LogSeverity logSeverity);
-	static LogSeverity GetConsoleLogSeverity(void);
+	static LogSeverity GetConsoleLogSeverity();
 
-	static void StaticInitialize(void);
-
-	virtual void ValidateSeverity(const String& value, const ValidationUtils& utils) override;
+	void ValidateSeverity(const Lazy<String>& lvalue, const ValidationUtils& utils) final;
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
-	virtual void Stop(bool runtimeRemoved) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	static boost::mutex m_Mutex;
@@ -106,25 +104,17 @@ private:
 	static LogSeverity m_ConsoleLogSeverity;
 };
 
-I2_BASE_API void IcingaLog(LogSeverity severity, const String& facility, const String& message);
-
 class Log
 {
 public:
-	inline Log(LogSeverity severity, const String& facility, const String& message)
-		: m_Severity(severity), m_Facility(facility)
-	{
-		m_Buffer << message;
-	}
+	Log() = delete;
+	Log(const Log& other) = delete;
+	Log& operator=(const Log& rhs) = delete;
 
-	inline Log(LogSeverity severity, const String& facility)
-		: m_Severity(severity), m_Facility(facility)
-	{ }
+	Log(LogSeverity severity, String facility, const String& message);
+	Log(LogSeverity severity, String facility);
 
-	inline ~Log(void)
-	{
-		IcingaLog(m_Severity, m_Facility, m_Buffer.str());
-	}
+	~Log();
 
 	template<typename T>
 	Log& operator<<(const T& val)
@@ -133,15 +123,23 @@ public:
 		return *this;
 	}
 
+	Log& operator<<(const char *val);
+
 private:
 	LogSeverity m_Severity;
 	String m_Facility;
 	std::ostringstream m_Buffer;
-
-	Log(void);
-	Log(const Log& other);
-	Log& operator=(const Log& rhs);
 };
+
+extern template Log& Log::operator<<(const Value&);
+extern template Log& Log::operator<<(const String&);
+extern template Log& Log::operator<<(const std::string&);
+extern template Log& Log::operator<<(const bool&);
+extern template Log& Log::operator<<(const unsigned int&);
+extern template Log& Log::operator<<(const int&);
+extern template Log& Log::operator<<(const unsigned long&);
+extern template Log& Log::operator<<(const long&);
+extern template Log& Log::operator<<(const double&);
 
 }
 

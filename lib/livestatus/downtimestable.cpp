@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,17 +24,16 @@
 #include "base/configtype.hpp"
 #include "base/objectlock.hpp"
 #include <boost/tuple/tuple.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-DowntimesTable::DowntimesTable(void)
+DowntimesTable::DowntimesTable()
 {
 	AddColumns(this);
 }
 
 void DowntimesTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "author", Column(&DowntimesTable::AuthorAccessor, objectAccessor));
 	table->AddColumn(prefix + "comment", Column(&DowntimesTable::CommentAccessor, objectAccessor));
@@ -49,23 +48,23 @@ void DowntimesTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "triggered_by", Column(&DowntimesTable::TriggeredByAccessor, objectAccessor));
 
 	/* order is important - host w/o services must not be empty */
-	ServicesTable::AddColumns(table, "service_", boost::bind(&DowntimesTable::ServiceAccessor, _1, objectAccessor));
-	HostsTable::AddColumns(table, "host_", boost::bind(&DowntimesTable::HostAccessor, _1, objectAccessor));
+	ServicesTable::AddColumns(table, "service_", std::bind(&DowntimesTable::ServiceAccessor, _1, objectAccessor));
+	HostsTable::AddColumns(table, "host_", std::bind(&DowntimesTable::HostAccessor, _1, objectAccessor));
 }
 
-String DowntimesTable::GetName(void) const
+String DowntimesTable::GetName() const
 {
 	return "downtimes";
 }
 
-String DowntimesTable::GetPrefix(void) const
+String DowntimesTable::GetPrefix() const
 {
 	return "downtime";
 }
 
 void DowntimesTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const Downtime::Ptr& downtime, ConfigType::GetObjectsByType<Downtime>()) {
+	for (const Downtime::Ptr& downtime : ConfigType::GetObjectsByType<Downtime>()) {
 		if (!addRowFn(downtime, LivestatusGroupByNone, Empty))
 			return;
 	}

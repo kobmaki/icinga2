@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,11 +19,11 @@
 
 #include "cli/clicommand.hpp"
 #include "base/logger.hpp"
+#include "base/console.hpp"
 #include "base/type.hpp"
 #include "base/serializer.hpp"
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
 #include <algorithm>
 #include <iostream>
@@ -47,7 +47,8 @@ std::vector<String> icinga::GetBashCompletionSuggestions(const String& type, con
 		boost::algorithm::trim_right_if(wline, boost::is_any_of("\r\n"));
 		result.push_back(wline);
 	}
-	fclose(fp);
+
+	pclose(fp);
 
 	/* Append a slash if there's only one suggestion and it's a directory */
 	if ((type == "file" || type == "directory") && result.size() == 1) {
@@ -77,7 +78,7 @@ std::vector<String> icinga::GetFieldCompletionSuggestions(const Type::Ptr& type,
 			continue;
 
 		if (strcmp(field.TypeName, "int") != 0 && strcmp(field.TypeName, "double") != 0
-		    && strcmp(field.TypeName, "bool") != 0 && strcmp(field.TypeName, "String") != 0)
+			&& strcmp(field.TypeName, "bool") != 0 && strcmp(field.TypeName, "String") != 0)
 			continue;
 
 		String fname = field.Name;
@@ -91,28 +92,33 @@ std::vector<String> icinga::GetFieldCompletionSuggestions(const Type::Ptr& type,
 	return result;
 }
 
-int CLICommand::GetMinArguments(void) const
+int CLICommand::GetMinArguments() const
 {
 	return 0;
 }
 
-int CLICommand::GetMaxArguments(void) const
+int CLICommand::GetMaxArguments() const
 {
 	return GetMinArguments();
 }
 
-bool CLICommand::IsHidden(void) const
+bool CLICommand::IsHidden() const
 {
 	return false;
 }
 
-boost::mutex& CLICommand::GetRegistryMutex(void)
+bool CLICommand::IsDeprecated() const
+{
+	return false;
+}
+
+boost::mutex& CLICommand::GetRegistryMutex()
 {
 	static boost::mutex mtx;
 	return mtx;
 }
 
-std::map<std::vector<String>, CLICommand::Ptr>& CLICommand::GetRegistry(void)
+std::map<std::vector<String>, CLICommand::Ptr>& CLICommand::GetRegistry()
 {
 	static std::map<std::vector<String>, CLICommand::Ptr> registry;
 	return registry;
@@ -122,10 +128,10 @@ CLICommand::Ptr CLICommand::GetByName(const std::vector<String>& name)
 {
 	boost::mutex::scoped_lock lock(GetRegistryMutex());
 
-	std::map<std::vector<String>, CLICommand::Ptr>::const_iterator it = GetRegistry().find(name);
+	auto it = GetRegistry().find(name);
 
 	if (it == GetRegistry().end())
-		return CLICommand::Ptr();
+		return nullptr;
 
 	return it->second;
 }
@@ -153,18 +159,18 @@ std::vector<String> CLICommand::GetPositionalSuggestions(const String& word) con
 }
 
 void CLICommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 { }
 
-ImpersonationLevel CLICommand::GetImpersonationLevel(void) const
+ImpersonationLevel CLICommand::GetImpersonationLevel() const
 {
 	return ImpersonateIcinga;
 }
 
 bool CLICommand::ParseCommand(int argc, char **argv, po::options_description& visibleDesc,
-    po::options_description& hiddenDesc,
-    po::positional_options_description& positionalDesc,
-    po::variables_map& vm, String& cmdname, CLICommand::Ptr& command, bool autocomplete)
+	po::options_description& hiddenDesc,
+	po::positional_options_description& positionalDesc,
+	po::variables_map& vm, String& cmdname, CLICommand::Ptr& command, bool autocomplete)
 {
 	boost::mutex::scoped_lock lock(GetRegistryMutex());
 
@@ -172,15 +178,20 @@ bool CLICommand::ParseCommand(int argc, char **argv, po::options_description& vi
 
 	std::vector<String> best_match;
 	int arg_end = 0;
+	bool tried_command = false;
 
-	BOOST_FOREACH(const CLIKeyValue& kv, GetRegistry()) {
+	for (const CLIKeyValue& kv : GetRegistry()) {
 		const std::vector<String>& vname = kv.first;
 
-		for (int i = 0, k = 1; i < vname.size() && k < argc; i++, k++) {
-			if (strcmp(argv[k], "--no-stack-rlimit") == 0 || strcmp(argv[k], "--autocomplete") == 0 || strcmp(argv[k], "--scm") == 0) {
+		std::vector<String>::size_type i;
+		int k;
+		for (i = 0, k = 1; i < vname.size() && k < argc; i++, k++) {
+			if (strncmp(argv[k], "--", 2) == 0) {
 				i--;
 				continue;
 			}
+
+			tried_command = true;
 
 			if (vname[i] != argv[k])
 				break;
@@ -206,12 +217,18 @@ found_command:
 		visibleDesc.add(vdesc);
 	}
 
-	if (autocomplete)
+	if (autocomplete || (tried_command && !command))
 		return true;
 
 	po::options_description adesc;
 	adesc.add(visibleDesc);
 	adesc.add(hiddenDesc);
+
+	if (command && command->IsDeprecated()) {
+		std::cerr << ConsoleColorTag(Console_ForegroundRed | Console_Bold)
+			<< "Warning: CLI command '" << cmdname << "' is DEPRECATED! Please read the Changelog."
+			<< ConsoleColorTag(Console_Normal) << std::endl << std::endl;
+	}
 
 	po::store(po::command_line_parser(argc - arg_end, argv + arg_end).options(adesc).positional(positionalDesc).run(), vm);
 	po::notify(vm);
@@ -220,9 +237,9 @@ found_command:
 }
 
 void CLICommand::ShowCommands(int argc, char **argv, po::options_description *visibleDesc,
-    po::options_description *hiddenDesc,
-    ArgumentCompletionCallback globalArgCompletionCallback,
-    bool autocomplete, int autoindex)
+	po::options_description *hiddenDesc,
+	ArgumentCompletionCallback globalArgCompletionCallback,
+	bool autocomplete, int autoindex)
 {
 	boost::mutex::scoped_lock lock(GetRegistryMutex());
 
@@ -232,19 +249,21 @@ void CLICommand::ShowCommands(int argc, char **argv, po::options_description *vi
 	int arg_begin = 0;
 	CLICommand::Ptr command;
 
-	BOOST_FOREACH(const CLIKeyValue& kv, GetRegistry()) {
+	for (const CLIKeyValue& kv : GetRegistry()) {
 		const std::vector<String>& vname = kv.first;
 
 		arg_begin = 0;
 
-		for (int i = 0, k = 1; i < vname.size() && k < argc; i++, k++) {
+		std::vector<String>::size_type i;
+		int k;
+		for (i = 0, k = 1; i < vname.size() && k < argc; i++, k++) {
 			if (strcmp(argv[k], "--no-stack-rlimit") == 0 || strcmp(argv[k], "--autocomplete") == 0 || strcmp(argv[k], "--scm") == 0) {
 				i--;
 				arg_begin++;
 				continue;
 			}
 
-			if (autocomplete && i >= autoindex - 1)
+			if (autocomplete && static_cast<int>(i) >= autoindex - 1)
 				break;
 
 			if (vname[i] != argv[k])
@@ -267,12 +286,12 @@ void CLICommand::ShowCommands(int argc, char **argv, po::options_description *vi
 		if (autoindex < argc)
 			aword = argv[autoindex];
 
-		if (autoindex - 1 > best_match.size() && !command)
+		if (autoindex - 1 > static_cast<int>(best_match.size()) && !command)
 			return;
 	} else
 		std::cout << "Supported commands: " << std::endl;
 
-	BOOST_FOREACH(const CLIKeyValue& kv, GetRegistry()) {
+	for (const CLIKeyValue& kv : GetRegistry()) {
 		const std::vector<String>& vname = kv.first;
 
 		if (vname.size() < best_match.size() || kv.second->IsHidden())
@@ -280,7 +299,7 @@ void CLICommand::ShowCommands(int argc, char **argv, po::options_description *vi
 
 		bool match = true;
 
-		for (int i = 0; i < best_match.size(); i++) {
+		for (std::vector<String>::size_type i = 0; i < best_match.size(); i++) {
 			if (vname[i] != best_match[i]) {
 				match = false;
 				break;
@@ -293,14 +312,17 @@ void CLICommand::ShowCommands(int argc, char **argv, po::options_description *vi
 		if (autocomplete) {
 			String cname;
 
-			if (autoindex - 1 < vname.size()) {
+			if (autoindex - 1 < static_cast<int>(vname.size())) {
 				cname = vname[autoindex - 1];
 
 				if (cname.Find(aword) == 0)
 					std::cout << cname << "\n";
 			}
-		} else
-			std::cout << "  * " << boost::algorithm::join(vname, " ") << " (" << kv.second->GetShortDescription() << ")" << std::endl;
+		} else {
+			std::cout << "  * " << boost::algorithm::join(vname, " ")
+				<< " (" << kv.second->GetShortDescription() << ")"
+				<< (kv.second->IsDeprecated() ? " (DEPRECATED)" : "") << std::endl;
+		}
 	}
 
 	if (!autocomplete)
@@ -341,25 +363,25 @@ void CLICommand::ShowCommands(int argc, char **argv, po::options_description *vi
 		if (odesc->semantic()->min_tokens() == 0)
 			goto complete_option;
 
-		BOOST_FOREACH(const String& suggestion, globalArgCompletionCallback(odesc->long_name(), pword)) {
+		for (const String& suggestion : globalArgCompletionCallback(odesc->long_name(), pword)) {
 			std::cout << prefix << suggestion << "\n";
 		}
 
-		BOOST_FOREACH(const String& suggestion, command->GetArgumentSuggestions(odesc->long_name(), pword)) {
+		for (const String& suggestion : command->GetArgumentSuggestions(odesc->long_name(), pword)) {
 			std::cout << prefix << suggestion << "\n";
 		}
 
 		return;
 
 complete_option:
-		BOOST_FOREACH(const boost::shared_ptr<po::option_description>& odesc, visibleDesc->options()) {
+		for (const boost::shared_ptr<po::option_description>& odesc : visibleDesc->options()) {
 			String cname = "--" + odesc->long_name();
 
 			if (cname.Find(aword) == 0)
 				std::cout << cname << "\n";
 		}
 
-		BOOST_FOREACH(const String& suggestion, command->GetPositionalSuggestions(aword)) {
+		for (const String& suggestion : command->GetPositionalSuggestions(aword)) {
 			std::cout << suggestion << "\n";
 		}
 	}

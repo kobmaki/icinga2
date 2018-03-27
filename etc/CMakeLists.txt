@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,9 +15,6 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-configure_file(icinga/icinga-classic-apache.conf.cmake ${CMAKE_CURRENT_BINARY_DIR}/icinga/icinga-classic-apache.conf @ONLY)
-configure_file(icinga2/init.conf.cmake ${CMAKE_CURRENT_BINARY_DIR}/icinga2/init.conf @ONLY)
-
 if(NOT WIN32)
   configure_file(icinga2/constants.conf.cmake ${CMAKE_CURRENT_BINARY_DIR}/icinga2/constants.conf @ONLY)
 endif()
@@ -25,8 +22,6 @@ endif()
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   configure_file(logrotate.d/icinga2.cmake ${CMAKE_CURRENT_BINARY_DIR}/logrotate.d/icinga2 @ONLY)
 endif()
-
-install_if_not_exists(${CMAKE_CURRENT_BINARY_DIR}/icinga2/init.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2)
 
 if(NOT WIN32)
   install_if_not_exists(${CMAKE_CURRENT_BINARY_DIR}/icinga2/constants.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2)
@@ -51,7 +46,6 @@ else()
 endif()
 
 install_if_not_exists(icinga2/conf.d/notifications.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/conf.d)
-install_if_not_exists(icinga2/conf.d/satellite.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/conf.d)
 install_if_not_exists(icinga2/conf.d/templates.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/conf.d)
 install_if_not_exists(icinga2/conf.d/timeperiods.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/conf.d)
 install_if_not_exists(icinga2/conf.d/users.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/conf.d)
@@ -64,14 +58,10 @@ endif()
 install_if_not_exists(icinga2/scripts/mail-host-notification.sh ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/scripts)
 install_if_not_exists(icinga2/scripts/mail-service-notification.sh ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/scripts)
 install_if_not_exists(icinga2/zones.d/README ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/zones.d)
-install_if_not_exists(icinga2/repository.d/README ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/repository.d)
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   install_if_not_exists(${CMAKE_CURRENT_BINARY_DIR}/logrotate.d/icinga2 ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d)
 endif()
-
-install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_SYSCONFDIR}/icinga2/pki\")")
-install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_SYSCONFDIR}/icinga2/repository.d\")")
 
 if(NOT WIN32)
   install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_SYSCONFDIR}/icinga2/features-enabled\")")
@@ -85,7 +75,7 @@ else()
   install_if_not_exists(icinga2/features-enabled/mainlog.conf ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-enabled)
 endif()
 
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+if(${CMAKE_SYSTEM_NAME} MATCHES "(Linux|Solaris|SunOS)")
   add_subdirectory(initsystem)
 endif()
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,6 +19,7 @@
 
 #include "remote/infohandler.hpp"
 #include "remote/httputility.hpp"
+#include "base/application.hpp"
 
 using namespace icinga;
 
@@ -48,7 +49,7 @@ bool InfoHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, 
 
 	if (permissions) {
 		ObjectLock olock(permissions);
-		BOOST_FOREACH(const Value& permission, permissions) {
+		for (const Value& permission : permissions) {
 			String name;
 			bool hasFilter = false;
 			if (permission.IsObjectType<Dictionary>()) {
@@ -61,34 +62,33 @@ bool InfoHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, 
 			if (hasFilter)
 				name += " (filtered)";
 
-			permInfo.push_back(name);
+			permInfo.emplace_back(std::move(name));
 		}
 	}
 
 	if (request.Headers->Get("accept") == "application/json") {
-		Dictionary::Ptr result1 = new Dictionary();
+		Dictionary::Ptr result1 = new Dictionary({
+			{ "user", user->GetName() },
+			{ "permissions", Array::FromVector(permInfo) },
+			{ "version", Application::GetAppVersion() },
+			{ "info", "More information about API requests is available in the documentation at https://docs.icinga.com/icinga2/latest." }
+		});
 
-		result1->Set("user", user->GetName());
-		result1->Set("permissions", Array::FromVector(permInfo));
-		result1->Set("info", "More information about API requests is available in the documentation at http://docs.icinga.org/icinga2/latest.");
+		Dictionary::Ptr result = new Dictionary({
+			{ "results", new Array({ result1 }) }
+		});
 
-		Array::Ptr results = new Array();
-		results->Add(result1);
-
-		Dictionary::Ptr result = new Dictionary();
-		result->Set("results", results);
-
-		HttpUtility::SendJsonBody(response, result);
+		HttpUtility::SendJsonBody(response, params, result);
 	} else {
 		response.AddHeader("Content-Type", "text/html");
 
-		String body = "<html><head><title>Icinga 2</title></head><h1>Hello from Icinga 2!</h1>";
+		String body = "<html><head><title>Icinga 2</title></head><h1>Hello from Icinga 2 (Version: " + Application::GetAppVersion() + ")!</h1>";
 		body += "<p>You are authenticated as <b>" + user->GetName() + "</b>. ";
 
 		if (!permInfo.empty()) {
 			body += "Your user has the following permissions:</p> <ul>";
 
-			BOOST_FOREACH(const String& perm, permInfo) {
+			for (const String& perm : permInfo) {
 				body += "<li>" + perm + "</li>";
 			}
 
@@ -96,7 +96,7 @@ bool InfoHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, 
 		} else
 			body += "Your user does not have any permissions.</p>";
 
-		body += "<p>More information about API requests is available in the <a href=\"http://docs.icinga.org/icinga2/latest\" target=\"_blank\">documentation</a>.</p></html>";
+		body += R"(<p>More information about API requests is available in the <a href="https://docs.icinga.com/icinga2/latest" target="_blank">documentation</a>.</p></html>)";
 		response.WriteBody(body.CStr(), body.GetLength());
 	}
 

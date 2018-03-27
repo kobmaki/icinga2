@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define COMMAND_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/command.thpp"
+#include "icinga/command-ti.hpp"
 #include "remote/messageorigin.hpp"
 
 namespace icinga
@@ -32,14 +32,14 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API Command : public ObjectImpl<Command>
+class Command : public ObjectImpl<Command>
 {
 public:
 	DECLARE_OBJECT(Command);
 
 	//virtual Dictionary::Ptr Execute(const Object::Ptr& context) = 0;
 
-	virtual void Validate(int types, const ValidationUtils& utils) override;
+	void Validate(int types, const ValidationUtils& utils) override;
 };
 
 }

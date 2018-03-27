@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,21 +21,35 @@
 
 using namespace icinga;
 
-AvgAggregator::AvgAggregator(const String& attr)
-    : m_Avg(0), m_AvgCount(0), m_AvgAttr(attr)
+AvgAggregator::AvgAggregator(String attr)
+	: m_AvgAttr(std::move(attr))
 { }
 
-void AvgAggregator::Apply(const Table::Ptr& table, const Value& row)
+AvgAggregatorState *AvgAggregator::EnsureState(AggregatorState **state)
+{
+	if (!*state)
+		*state = new AvgAggregatorState();
+
+	return static_cast<AvgAggregatorState *>(*state);
+}
+
+void AvgAggregator::Apply(const Table::Ptr& table, const Value& row, AggregatorState **state)
 {
 	Column column = table->GetColumn(m_AvgAttr);
 
 	Value value = column.ExtractValue(row);
 
-	m_Avg += value;
-	m_AvgCount++;
+	AvgAggregatorState *pstate = EnsureState(state);
+
+	pstate->Avg += value;
+	pstate->AvgCount++;
 }
 
-double AvgAggregator::GetResult(void) const
+double AvgAggregator::GetResultAndFreeState(AggregatorState *state) const
 {
-	return (m_Avg / m_AvgCount);
+	AvgAggregatorState *pstate = EnsureState(&state);
+	double result = pstate->Avg / pstate->AvgCount;
+	delete pstate;
+
+	return result;
 }

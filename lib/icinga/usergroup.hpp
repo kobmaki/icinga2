@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define USERGROUP_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/usergroup.thpp"
+#include "icinga/usergroup-ti.hpp"
 #include "icinga/user.hpp"
 
 namespace icinga
@@ -34,19 +34,17 @@ class ConfigItem;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API UserGroup : public ObjectImpl<UserGroup>
+class UserGroup final : public ObjectImpl<UserGroup>
 {
 public:
 	DECLARE_OBJECT(UserGroup);
 	DECLARE_OBJECTNAME(UserGroup);
 
-	std::set<User::Ptr> GetMembers(void) const;
+	std::set<User::Ptr> GetMembers() const;
 	void AddMember(const User::Ptr& user);
 	void RemoveMember(const User::Ptr& user);
 
 	bool ResolveGroupMembership(const User::Ptr& user, bool add = true, int rstack = 0);
-
-	static void RegisterObjectRuleHandler(void);
 
 	static void EvaluateObjectRules(const User::Ptr& user);
 

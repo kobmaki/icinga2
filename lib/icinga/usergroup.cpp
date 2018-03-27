@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/usergroup.hpp"
-#include "icinga/usergroup.tcpp"
+#include "icinga/usergroup-ti.cpp"
 #include "config/objectrule.hpp"
 #include "config/configitem.hpp"
 #include "base/configtype.hpp"
@@ -26,18 +26,14 @@
 #include "base/logger.hpp"
 #include "base/context.hpp"
 #include "base/workqueue.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_TYPE(UserGroup);
 
-INITIALIZE_ONCE(&UserGroup::RegisterObjectRuleHandler);
-
-void UserGroup::RegisterObjectRuleHandler(void)
-{
+INITIALIZE_ONCE([]() {
 	ObjectRule::RegisterType("UserGroup");
-}
+});
 
 bool UserGroup::EvaluateObjectRule(const User::Ptr& user, const ConfigItem::Ptr& group)
 {
@@ -45,7 +41,7 @@ bool UserGroup::EvaluateObjectRule(const User::Ptr& user, const ConfigItem::Ptr&
 
 	CONTEXT("Evaluating rule for group '" + group_name + "'");
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (group->GetScope())
 		group->GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("user", user);
@@ -54,7 +50,7 @@ bool UserGroup::EvaluateObjectRule(const User::Ptr& user, const ConfigItem::Ptr&
 		return false;
 
 	Log(LogDebug, "UserGroup")
-	    << "Assigning membership for group '" << group_name << "' to user '" << user->GetName() << "'";
+		<< "Assigning membership for group '" << group_name << "' to user '" << user->GetName() << "'";
 
 	Array::Ptr groups = user->GetGroups();
 	groups->Add(group_name);
@@ -66,7 +62,7 @@ void UserGroup::EvaluateObjectRules(const User::Ptr& user)
 {
 	CONTEXT("Evaluating group membership for user '" + user->GetName() + "'");
 
-	BOOST_FOREACH(const ConfigItem::Ptr& group, ConfigItem::GetItems("UserGroup"))
+	for (const ConfigItem::Ptr& group : ConfigItem::GetItems(UserGroup::TypeInstance))
 	{
 		if (!group->GetFilter())
 			continue;
@@ -75,7 +71,7 @@ void UserGroup::EvaluateObjectRules(const User::Ptr& user)
 	}
 }
 
-std::set<User::Ptr> UserGroup::GetMembers(void) const
+std::set<User::Ptr> UserGroup::GetMembers() const
 {
 	boost::mutex::scoped_lock lock(m_UserGroupMutex);
 	return m_Members;
@@ -99,8 +95,8 @@ bool UserGroup::ResolveGroupMembership(const User::Ptr& user, bool add, int rsta
 
 	if (add && rstack > 20) {
 		Log(LogWarning, "UserGroup")
-		    << "Too many nested groups for group '" << GetName() << "': User '"
-		    << user->GetName() << "' membership assignment failed.";
+			<< "Too many nested groups for group '" << GetName() << "': User '"
+			<< user->GetName() << "' membership assignment failed.";
 
 		return false;
 	}
@@ -110,7 +106,7 @@ bool UserGroup::ResolveGroupMembership(const User::Ptr& user, bool add, int rsta
 	if (groups && groups->GetLength() > 0) {
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			UserGroup::Ptr group = UserGroup::GetByName(name);
 
 			if (group && !group->ResolveGroupMembership(user, add, rstack + 1))

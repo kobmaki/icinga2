@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -36,54 +36,57 @@ namespace icinga
  *
  * @ingroup config
  */
-class I2_CONFIG_API ConfigItem : public Object {
+class ConfigItem final : public Object {
 public:
 	DECLARE_PTR_TYPEDEFS(ConfigItem);
 
-	ConfigItem(const String& type, const String& name, bool abstract,
-	    const boost::shared_ptr<Expression>& exprl,
-	    const boost::shared_ptr<Expression>& filter,
-	    bool ignoreOnError, const DebugInfo& debuginfo,
-	    const Dictionary::Ptr& scope, const String& zone,
-	    const String& package);
+	ConfigItem(Type::Ptr type, String name, bool abstract,
+		std::shared_ptr<Expression> exprl,
+		std::shared_ptr<Expression> filter,
+		bool defaultTmpl, bool ignoreOnError, DebugInfo debuginfo,
+		Dictionary::Ptr scope, String zone,
+		String package);
 
-	String GetType(void) const;
-	String GetName(void) const;
-	bool IsAbstract(void) const;
-	bool GetIgnoreOnError(void) const;
+	Type::Ptr GetType() const;
+	String GetName() const;
+	bool IsAbstract() const;
+	bool IsDefaultTemplate() const;
+	bool IsIgnoreOnError() const;
 
-	std::vector<ConfigItem::Ptr> GetParents(void) const;
+	std::vector<ConfigItem::Ptr> GetParents() const;
 
-	boost::shared_ptr<Expression> GetExpression(void) const;
-	boost::shared_ptr<Expression> GetFilter(void) const;
+	std::shared_ptr<Expression> GetExpression() const;
+	std::shared_ptr<Expression> GetFilter() const;
 
-	void Register(void);
-	void Unregister(void);
+	void Register();
+	void Unregister();
 
-	DebugInfo GetDebugInfo(void) const;
-	Dictionary::Ptr GetScope(void) const;
+	DebugInfo GetDebugInfo() const;
+	Dictionary::Ptr GetScope() const;
 
-	ConfigObject::Ptr GetObject(void) const;
-	
-	static ConfigItem::Ptr GetByTypeAndName(const String& type,
-	    const String& name);
+	ConfigObject::Ptr GetObject() const;
 
-	static bool CommitItems(const ActivationContext::Ptr& context, WorkQueue& upq, std::vector<ConfigItem::Ptr>& newItems);
-	static bool ActivateItems(WorkQueue& upq, const std::vector<ConfigItem::Ptr>& newItems, bool runtimeCreated = false);
+	static ConfigItem::Ptr GetByTypeAndName(const Type::Ptr& type,
+		const String& name);
+
+	static bool CommitItems(const ActivationContext::Ptr& context, WorkQueue& upq, std::vector<ConfigItem::Ptr>& newItems, bool silent = false);
+	static bool ActivateItems(WorkQueue& upq, const std::vector<ConfigItem::Ptr>& newItems, bool runtimeCreated = false, bool silent = false, bool withModAttrs = false);
 
 	static bool RunWithActivationContext(const Function::Ptr& function);
 
-	static std::vector<ConfigItem::Ptr> GetItems(const String& type);
+	static std::vector<ConfigItem::Ptr> GetItems(const Type::Ptr& type);
+	static std::vector<ConfigItem::Ptr> GetDefaultTemplates(const Type::Ptr& type);
 
 	static void RemoveIgnoredItems(const String& allowedConfigPath);
 
 private:
-	String m_Type; /**< The object type. */
+	Type::Ptr m_Type; /**< The object type. */
 	String m_Name; /**< The name. */
 	bool m_Abstract; /**< Whether this is a template. */
 
-	boost::shared_ptr<Expression> m_Expression;
-	boost::shared_ptr<Expression> m_Filter;
+	std::shared_ptr<Expression> m_Expression;
+	std::shared_ptr<Expression> m_Filter;
+	bool m_DefaultTmpl;
 	bool m_IgnoreOnError;
 	DebugInfo m_DebugInfo; /**< Debug information. */
 	Dictionary::Ptr m_Scope; /**< variable scope. */
@@ -96,8 +99,9 @@ private:
 	static boost::mutex m_Mutex;
 
 	typedef std::map<String, ConfigItem::Ptr> ItemMap;
-	typedef std::map<String, ItemMap> TypeMap;
+	typedef std::map<Type::Ptr, ItemMap> TypeMap;
 	static TypeMap m_Items; /**< All registered configuration items. */
+	static TypeMap m_DefaultTemplates;
 
 	typedef std::vector<ConfigItem::Ptr> ItemList;
 	static ItemList m_UnnamedItems;
@@ -106,14 +110,11 @@ private:
 	static IgnoredItemList m_IgnoredItems;
 
 	static ConfigItem::Ptr GetObjectUnlocked(const String& type,
-	    const String& name);
+		const String& name);
 
 	ConfigObject::Ptr Commit(bool discard = true);
 
 	static bool CommitNewItems(const ActivationContext::Ptr& context, WorkQueue& upq, std::vector<ConfigItem::Ptr>& newItems);
-
-	void OnAllConfigLoadedHelper(void);
-	void CreateChildObjectsHelper(const Type::Ptr& type);
 };
 
 }

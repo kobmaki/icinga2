@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/servicegroup.hpp"
-#include "icinga/servicegroup.tcpp"
+#include "icinga/servicegroup-ti.cpp"
 #include "config/objectrule.hpp"
 #include "config/configitem.hpp"
 #include "base/configtype.hpp"
@@ -26,18 +26,14 @@
 #include "base/logger.hpp"
 #include "base/context.hpp"
 #include "base/workqueue.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_TYPE(ServiceGroup);
 
-INITIALIZE_ONCE(&ServiceGroup::RegisterObjectRuleHandler);
-
-void ServiceGroup::RegisterObjectRuleHandler(void)
-{
+INITIALIZE_ONCE([]() {
 	ObjectRule::RegisterType("ServiceGroup");
-}
+});
 
 bool ServiceGroup::EvaluateObjectRule(const Service::Ptr& service, const ConfigItem::Ptr& group)
 {
@@ -47,7 +43,7 @@ bool ServiceGroup::EvaluateObjectRule(const Service::Ptr& service, const ConfigI
 
 	Host::Ptr host = service->GetHost();
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (group->GetScope())
 		group->GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("host", host);
@@ -57,7 +53,7 @@ bool ServiceGroup::EvaluateObjectRule(const Service::Ptr& service, const ConfigI
 		return false;
 
 	Log(LogDebug, "ServiceGroup")
-	    << "Assigning membership for group '" << group_name << "' to service '" << service->GetName() << "'";
+		<< "Assigning membership for group '" << group_name << "' to service '" << service->GetName() << "'";
 
 	Array::Ptr groups = service->GetGroups();
 	groups->Add(group_name);
@@ -69,7 +65,7 @@ void ServiceGroup::EvaluateObjectRules(const Service::Ptr& service)
 {
 	CONTEXT("Evaluating group membership for service '" + service->GetName() + "'");
 
-	BOOST_FOREACH(const ConfigItem::Ptr& group, ConfigItem::GetItems("ServiceGroup"))
+	for (const ConfigItem::Ptr& group : ConfigItem::GetItems(ServiceGroup::TypeInstance))
 	{
 		if (!group->GetFilter())
 			continue;
@@ -78,7 +74,7 @@ void ServiceGroup::EvaluateObjectRules(const Service::Ptr& service)
 	}
 }
 
-std::set<Service::Ptr> ServiceGroup::GetMembers(void) const
+std::set<Service::Ptr> ServiceGroup::GetMembers() const
 {
 	boost::mutex::scoped_lock lock(m_ServiceGroupMutex);
 	return m_Members;
@@ -102,8 +98,8 @@ bool ServiceGroup::ResolveGroupMembership(const Service::Ptr& service, bool add,
 
 	if (add && rstack > 20) {
 		Log(LogWarning, "ServiceGroup")
-		    << "Too many nested groups for group '" << GetName() << "': Service '"
-		    << service->GetName() << "' membership assignment failed.";
+			<< "Too many nested groups for group '" << GetName() << "': Service '"
+			<< service->GetName() << "' membership assignment failed.";
 
 		return false;
 	}
@@ -113,7 +109,7 @@ bool ServiceGroup::ResolveGroupMembership(const Service::Ptr& service, bool add,
 	if (groups && groups->GetLength() > 0) {
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			ServiceGroup::Ptr group = ServiceGroup::GetByName(name);
 
 			if (group && !group->ResolveGroupMembership(service, add, rstack + 1))

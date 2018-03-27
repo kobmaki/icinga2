@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,7 +29,7 @@ using namespace icinga;
 
 boost::signals2::signal<void (const Checkable::Ptr&)> Checkable::OnEventCommandExecuted;
 
-EventCommand::Ptr Checkable::GetEventCommand(void) const
+EventCommand::Ptr Checkable::GetEventCommand() const
 {
 	return EventCommand::GetByName(GetEventCommandRaw());
 }
@@ -47,7 +47,7 @@ void Checkable::ExecuteEventHandler(const Dictionary::Ptr& resolvedMacros, bool 
 		return;
 
 	Log(LogNotice, "Checkable")
-	    << "Executing event handler '" << ec->GetName() << "' for service '" << GetName() << "'";
+		<< "Executing event handler '" << ec->GetName() << "' for service '" << GetName() << "'";
 
 	Dictionary::Ptr macros;
 	Endpoint::Ptr endpoint = GetCommandEndpoint();

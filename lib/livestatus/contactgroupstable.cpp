@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,36 +20,35 @@
 #include "livestatus/contactgroupstable.hpp"
 #include "icinga/usergroup.hpp"
 #include "base/configtype.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-ContactGroupsTable::ContactGroupsTable(void)
+ContactGroupsTable::ContactGroupsTable()
 {
 	AddColumns(this);
 }
 
 void ContactGroupsTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "name", Column(&ContactGroupsTable::NameAccessor, objectAccessor));
 	table->AddColumn(prefix + "alias", Column(&ContactGroupsTable::AliasAccessor, objectAccessor));
 	table->AddColumn(prefix + "members", Column(&ContactGroupsTable::MembersAccessor, objectAccessor));
 }
 
-String ContactGroupsTable::GetName(void) const
+String ContactGroupsTable::GetName() const
 {
 	return "contactgroups";
 }
 
-String ContactGroupsTable::GetPrefix(void) const
+String ContactGroupsTable::GetPrefix() const
 {
 	return "contactgroup";
 }
 
 void ContactGroupsTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const UserGroup::Ptr& ug, ConfigType::GetObjectsByType<UserGroup>()) {
+	for (const UserGroup::Ptr& ug : ConfigType::GetObjectsByType<UserGroup>()) {
 		if (!addRowFn(ug, LivestatusGroupByNone, Empty))
 			return;
 	}
@@ -82,11 +81,11 @@ Value ContactGroupsTable::MembersAccessor(const Value& row)
 	if (!user_group)
 		return Empty;
 
-	Array::Ptr members = new Array();
+	ArrayData result;
 
-	BOOST_FOREACH(const User::Ptr& user, user_group->GetMembers()) {
-		members->Add(user->GetName());
+	for (const User::Ptr& user : user_group->GetMembers()) {
+		result.push_back(user->GetName());
 	}
 
-	return members;
+	return new Array(std::move(result));
 }

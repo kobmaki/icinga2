@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,39 +28,39 @@ namespace icinga
 {
 
 enum LogEntryType {
-    LogEntryTypeHostAlert,
-    LogEntryTypeHostDowntimeAlert,
-    LogEntryTypeHostFlapping,
-    LogEntryTypeHostNotification,
-    LogEntryTypeHostInitialState,
-    LogEntryTypeHostCurrentState,
-    LogEntryTypeServiceAlert,
-    LogEntryTypeServiceDowntimeAlert,
-    LogEntryTypeServiceFlapping,
-    LogEntryTypeServiceNotification,
-    LogEntryTypeServiceInitialState,
-    LogEntryTypeServiceCurrentState,
-    LogEntryTypeTimeperiodTransition,
-    LogEntryTypeVersion,
-    LogEntryTypeInitialStates,
-    LogEntryTypeProgramStarting
+	LogEntryTypeHostAlert,
+	LogEntryTypeHostDowntimeAlert,
+	LogEntryTypeHostFlapping,
+	LogEntryTypeHostNotification,
+	LogEntryTypeHostInitialState,
+	LogEntryTypeHostCurrentState,
+	LogEntryTypeServiceAlert,
+	LogEntryTypeServiceDowntimeAlert,
+	LogEntryTypeServiceFlapping,
+	LogEntryTypeServiceNotification,
+	LogEntryTypeServiceInitialState,
+	LogEntryTypeServiceCurrentState,
+	LogEntryTypeTimeperiodTransition,
+	LogEntryTypeVersion,
+	LogEntryTypeInitialStates,
+	LogEntryTypeProgramStarting
 };
 
 enum LogEntryClass {
-    LogEntryClassInfo = 0,
-    LogEntryClassAlert = 1,
-    LogEntryClassProgram = 2,
-    LogEntryClassNotification = 3,
-    LogEntryClassPassive = 4,
-    LogEntryClassCommand = 5,
-    LogEntryClassState = 6,
-    LogEntryClassText = 7
+	LogEntryClassInfo = 0,
+	LogEntryClassAlert = 1,
+	LogEntryClassProgram = 2,
+	LogEntryClassNotification = 3,
+	LogEntryClassPassive = 4,
+	LogEntryClassCommand = 5,
+	LogEntryClassState = 6,
+	LogEntryClassText = 7
 };
 
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API LivestatusLogUtility
+class LivestatusLogUtility
 {
 public:
 	static void CreateLogIndex(const String& path, std::map<time_t, String>& index);
@@ -69,7 +69,7 @@ public:
 	static Dictionary::Ptr GetAttributes(const String& text);
 
 private:
-	LivestatusLogUtility(void);
+	LivestatusLogUtility();
 };
 
 }

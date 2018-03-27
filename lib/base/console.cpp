@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,9 +23,21 @@
 
 using namespace icinga;
 
-INITIALIZE_ONCE(&Console::DetectType);
-
 static ConsoleType l_ConsoleType = Console_Dumb;
+
+static void InitializeConsole()
+{
+	l_ConsoleType = Console_Dumb;
+
+#ifndef _WIN32
+	if (isatty(1))
+		l_ConsoleType = Console_VT100;
+#else /* _WIN32 */
+	l_ConsoleType = Console_Windows;
+#endif /* _WIN32 */
+}
+
+INITIALIZE_ONCE(InitializeConsole);
 
 ConsoleColorTag::ConsoleColorTag(int color, ConsoleType consoleType)
 	: m_Color(color), m_ConsoleType(consoleType)
@@ -44,18 +56,6 @@ std::ostream& icinga::operator<<(std::ostream& fp, const ConsoleColorTag& cct)
 #endif /* _WIN32 */
 
 	return fp;
-}
-
-void Console::DetectType(void)
-{
-	l_ConsoleType = Console_Dumb;
-
-#ifndef _WIN32
-	if (isatty(1))
-		l_ConsoleType = Console_VT100;
-#else /* _WIN32 */
-	l_ConsoleType = Console_Windows;
-#endif /* _WIN32 */
 }
 
 void Console::SetType(std::ostream& fp, ConsoleType type)

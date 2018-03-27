@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,7 +25,6 @@
 #include "remote/apiuser.hpp"
 #include "base/registry.hpp"
 #include <vector>
-#include <boost/function.hpp>
 
 namespace icinga
 {
@@ -35,7 +34,7 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API HttpHandler : public Object
+class HttpHandler : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(HttpHandler);
@@ -54,22 +53,18 @@ private:
  *
  * @ingroup remote
  */
-class I2_REMOTE_API RegisterHttpHandler
+class RegisterHttpHandler
 {
 public:
 	RegisterHttpHandler(const String& url, const HttpHandler& function);
 };
 
 #define REGISTER_URLHANDLER(url, klass) \
-	namespace { namespace UNIQUE_NAME(apif) { namespace apif ## name { \
-		void RegisterHandler(void) \
-		{ \
-			Url::Ptr uurl = new Url(url); \
-			HttpHandler::Ptr handler = new klass(); \
-			HttpHandler::Register(uurl, handler); \
-		} \
-		INITIALIZE_ONCE(RegisterHandler); \
-	} } }
+	INITIALIZE_ONCE([]() { \
+		Url::Ptr uurl = new Url(url); \
+		HttpHandler::Ptr handler = new klass(); \
+		HttpHandler::Register(uurl, handler); \
+	})
 
 }
 

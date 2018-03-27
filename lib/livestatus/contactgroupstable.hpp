@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,21 +30,21 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API ContactGroupsTable : public Table
+class ContactGroupsTable final : public Table
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ContactGroupsTable);
 
-	ContactGroupsTable(void);
+	ContactGroupsTable();
 
 	static void AddColumns(Table *table, const String& prefix = String(),
-	    const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
+		const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
 
-	virtual String GetName(void) const override;
-	virtual String GetPrefix(void) const override;
+	String GetName() const override;
+	String GetPrefix() const override;
 
 protected:
-	virtual void FetchRows(const AddRowFunction& addRowFn) override;
+	void FetchRows(const AddRowFunction& addRowFn) override;
 
 	static Value NameAccessor(const Value& row);
 	static Value AliasAccessor(const Value& row);

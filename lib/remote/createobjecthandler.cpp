@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,10 +20,11 @@
 #include "remote/createobjecthandler.hpp"
 #include "remote/configobjectutility.hpp"
 #include "remote/httputility.hpp"
+#include "remote/jsonrpcconnection.hpp"
 #include "remote/filterutility.hpp"
 #include "remote/apiaction.hpp"
+#include "remote/zone.hpp"
 #include "base/configtype.hpp"
-#include <boost/algorithm/string.hpp>
 #include <set>
 
 using namespace icinga;
@@ -41,7 +42,7 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	Type::Ptr type = FilterUtility::TypeFromPluralName(request.RequestUrl->GetPath()[2]);
 
 	if (!type) {
-		HttpUtility::SendJsonError(response, 400, "Invalid type specified.");
+		HttpUtility::SendJsonError(response, params, 400, "Invalid type specified.");
 		return true;
 	}
 
@@ -51,8 +52,26 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	Array::Ptr templates = params->Get("templates");
 	Dictionary::Ptr attrs = params->Get("attrs");
 
+	/* Put created objects into the local zone if not explicitly defined.
+	 * This allows additional zone members to sync the
+	 * configuration at some later point.
+	 */
+	Zone::Ptr localZone = Zone::GetLocalZone();
+	String localZoneName;
+
+	if (localZone) {
+		localZoneName = localZone->GetName();
+
+		if (!attrs) {
+			attrs = new Dictionary({
+				{ "zone", localZoneName }
+			});
+		} else if (!attrs->Contains("zone")) {
+			attrs->Set("zone", localZoneName);
+		}
+	}
+
 	Dictionary::Ptr result1 = new Dictionary();
-	int code;
 	String status;
 	Array::Ptr errors = new Array();
 
@@ -61,11 +80,9 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	if (params->Contains("ignore_on_error"))
 		ignoreOnError = HttpUtility::GetLastParameter(params, "ignore_on_error");
 
-	Array::Ptr results = new Array();
-	results->Add(result1);
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array({ result1 }) }
+	});
 
 	String config;
 
@@ -79,7 +96,7 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 		result1->Set("status", "Object could not be created.");
 
 		response.SetStatus(500, "Object could not be created");
-		HttpUtility::SendJsonBody(response, result);
+		HttpUtility::SendJsonBody(response, params, result);
 
 		return true;
 	}
@@ -90,14 +107,13 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 		result1->Set("status", "Object could not be created.");
 
 		response.SetStatus(500, "Object could not be created");
-		HttpUtility::SendJsonBody(response, result);
+		HttpUtility::SendJsonBody(response, params, result);
 
 		return true;
 	}
 
-	ConfigType::Ptr dtype = ConfigType::GetByName(type->GetName());
-
-	ConfigObject::Ptr obj = dtype->GetObject(name);
+	auto *ctype = dynamic_cast<ConfigType *>(type.get());
+	ConfigObject::Ptr obj = ctype->GetObject(name);
 
 	result1->Set("code", 200);
 
@@ -107,8 +123,7 @@ bool CreateObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 		result1->Set("status", "Object was not created but 'ignore_on_error' was set to true");
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
-

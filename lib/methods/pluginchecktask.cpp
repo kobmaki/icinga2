@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,17 +28,17 @@
 #include "base/utility.hpp"
 #include "base/process.hpp"
 #include "base/convert.hpp"
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(PluginCheck,  &PluginCheckTask::ScriptFunc);
+REGISTER_SCRIPTFUNCTION_NS(Internal, PluginCheck,  &PluginCheckTask::ScriptFunc, "checkable:cr:resolvedMacros:useResolvedMacros");
 
 void PluginCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr,
-    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
+	const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
 {
+	REQUIRE_NOT_NULL(checkable);
+	REQUIRE_NOT_NULL(cr);
+
 	CheckCommand::Ptr commandObj = checkable->GetCheckCommand();
 
 	Host::Ptr host;
@@ -47,14 +47,14 @@ void PluginCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckRes
 
 	MacroProcessor::ResolverList resolvers;
 	if (service)
-		resolvers.push_back(std::make_pair("service", service));
-	resolvers.push_back(std::make_pair("host", host));
-	resolvers.push_back(std::make_pair("command", commandObj));
-	resolvers.push_back(std::make_pair("icinga", IcingaApplication::GetInstance()));
+		resolvers.emplace_back("service", service);
+	resolvers.emplace_back("host", host);
+	resolvers.emplace_back("command", commandObj);
+	resolvers.emplace_back("icinga", IcingaApplication::GetInstance());
 
 	PluginUtility::ExecuteCommand(commandObj, checkable, checkable->GetLastCheckResult(),
-	    resolvers, resolvedMacros, useResolvedMacros,
-	    boost::bind(&PluginCheckTask::ProcessFinishedHandler, checkable, cr, _1, _2));
+		resolvers, resolvedMacros, useResolvedMacros,
+		std::bind(&PluginCheckTask::ProcessFinishedHandler, checkable, cr, _1, _2));
 
 	if (!resolvedMacros || useResolvedMacros)
 		Checkable::IncreasePendingChecks();
@@ -67,9 +67,9 @@ void PluginCheckTask::ProcessFinishedHandler(const Checkable::Ptr& checkable, co
 	if (pr.ExitStatus > 3) {
 		Process::Arguments parguments = Process::PrepareCommand(commandLine);
 		Log(LogWarning, "PluginCheckTask")
-		    << "Check command for object '" << checkable->GetName() << "' (PID: " << pr.PID
-		    << ", arguments: " << Process::PrettyPrintArguments(parguments) << ") terminated with exit code "
-		    << pr.ExitStatus << ", output: " << pr.Output;
+			<< "Check command for object '" << checkable->GetName() << "' (PID: " << pr.PID
+			<< ", arguments: " << Process::PrettyPrintArguments(parguments) << ") terminated with exit code "
+			<< pr.ExitStatus << ", output: " << pr.Output;
 	}
 
 	String output = pr.Output.Trim();

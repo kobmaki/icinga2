@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define APIUSER_H
 
 #include "remote/i2-remote.hpp"
-#include "remote/apiuser.thpp"
+#include "remote/apiuser-ti.hpp"
 
 namespace icinga
 {
@@ -29,13 +29,18 @@ namespace icinga
 /**
  * @ingroup remote
  */
-class I2_REMOTE_API ApiUser : public ObjectImpl<ApiUser>
+class ApiUser final : public ObjectImpl<ApiUser>
 {
 public:
 	DECLARE_OBJECT(ApiUser);
 	DECLARE_OBJECTNAME(ApiUser);
 
+	virtual void OnConfigLoaded(void) override;
+
 	static ApiUser::Ptr GetByClientCN(const String& cn);
+	static ApiUser::Ptr GetByAuthHeader(const String& auth_header);
+
+	Dictionary::Ptr GetPasswordDict(void) const;
 };
 
 }

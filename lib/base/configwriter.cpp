@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,13 +18,9 @@
  ******************************************************************************/
 
 #include "base/configwriter.hpp"
-#include "config/configcompiler.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 #include <set>
 #include <iterator>
 
@@ -64,7 +60,7 @@ void ConfigWriter::EmitArrayItems(std::ostream& fp, int indentLevel, const Array
 	bool first = true;
 
 	ObjectLock olock(val);
-	BOOST_FOREACH(const Value& item, val) {
+	for (const Value& item : val) {
 		if (first)
 			first = false;
 		else
@@ -75,13 +71,13 @@ void ConfigWriter::EmitArrayItems(std::ostream& fp, int indentLevel, const Array
 }
 
 void ConfigWriter::EmitScope(std::ostream& fp, int indentLevel, const Dictionary::Ptr& val,
-    const Array::Ptr& imports, bool splitDot)
+	const Array::Ptr& imports, bool splitDot)
 {
 	fp << "{";
 
 	if (imports && imports->GetLength() > 0) {
 		ObjectLock xlock(imports);
-		BOOST_FOREACH(const Value& import, imports) {
+		for (const Value& import : imports) {
 			fp << "\n";
 			EmitIndent(fp, indentLevel);
 			fp << "import \"" << import << "\"";
@@ -92,13 +88,12 @@ void ConfigWriter::EmitScope(std::ostream& fp, int indentLevel, const Dictionary
 
 	if (val) {
 		ObjectLock olock(val);
-		BOOST_FOREACH(const Dictionary::Pair& kv, val) {
+		for (const Dictionary::Pair& kv : val) {
 			fp << "\n";
 			EmitIndent(fp, indentLevel);
 
 			if (splitDot) {
-				std::vector<String> tokens;
-				boost::algorithm::split(tokens, kv.first, boost::is_any_of("."));
+				std::vector<String> tokens = kv.first.Split(".");
 
 				EmitIdentifier(fp, tokens[0], true);
 
@@ -178,7 +173,7 @@ void ConfigWriter::EmitIdentifier(std::ostream& fp, const String& identifier, bo
 }
 
 void ConfigWriter::EmitConfigItem(std::ostream& fp, const String& type, const String& name, bool isTemplate,
-    bool ignoreOnError, const Array::Ptr& imports, const Dictionary::Ptr& attrs)
+	bool ignoreOnError, const Array::Ptr& imports, const Dictionary::Ptr& attrs)
 {
 	if (isTemplate)
 		fp << "template ";
@@ -222,56 +217,60 @@ String ConfigWriter::EscapeIcingaString(const String& str)
 	return result;
 }
 
-const std::vector<String>& ConfigWriter::GetKeywords(void)
+const std::vector<String>& ConfigWriter::GetKeywords()
 {
 	static std::vector<String> keywords;
 	static boost::mutex mutex;
 	boost::mutex::scoped_lock lock(mutex);
 
 	if (keywords.empty()) {
-		keywords.push_back("object");
-		keywords.push_back("template");
-		keywords.push_back("include");
-		keywords.push_back("include_recursive");
-		keywords.push_back("include_zones");
-		keywords.push_back("library");
-		keywords.push_back("null");
-		keywords.push_back("true");
-		keywords.push_back("false");
-		keywords.push_back("const");
-		keywords.push_back("var");
-		keywords.push_back("this");
-		keywords.push_back("globals");
-		keywords.push_back("locals");
-		keywords.push_back("use");
-		keywords.push_back("ignore_on_error");
-		keywords.push_back("current_filename");
-		keywords.push_back("current_line");
-		keywords.push_back("apply");
-		keywords.push_back("to");
-		keywords.push_back("where");
-		keywords.push_back("import");
-		keywords.push_back("assign");
-		keywords.push_back("ignore");
-		keywords.push_back("function");
-		keywords.push_back("return");
-		keywords.push_back("break");
-		keywords.push_back("continue");
-		keywords.push_back("for");
-		keywords.push_back("if");
-		keywords.push_back("else");
-		keywords.push_back("while");
-		keywords.push_back("throw");
+		keywords.emplace_back("object");
+		keywords.emplace_back("template");
+		keywords.emplace_back("include");
+		keywords.emplace_back("include_recursive");
+		keywords.emplace_back("include_zones");
+		keywords.emplace_back("library");
+		keywords.emplace_back("null");
+		keywords.emplace_back("true");
+		keywords.emplace_back("false");
+		keywords.emplace_back("const");
+		keywords.emplace_back("var");
+		keywords.emplace_back("this");
+		keywords.emplace_back("globals");
+		keywords.emplace_back("locals");
+		keywords.emplace_back("use");
+		keywords.emplace_back("__using");
+		keywords.emplace_back("default");
+		keywords.emplace_back("ignore_on_error");
+		keywords.emplace_back("current_filename");
+		keywords.emplace_back("current_line");
+		keywords.emplace_back("apply");
+		keywords.emplace_back("to");
+		keywords.emplace_back("where");
+		keywords.emplace_back("import");
+		keywords.emplace_back("assign");
+		keywords.emplace_back("ignore");
+		keywords.emplace_back("function");
+		keywords.emplace_back("return");
+		keywords.emplace_back("break");
+		keywords.emplace_back("continue");
+		keywords.emplace_back("for");
+		keywords.emplace_back("if");
+		keywords.emplace_back("else");
+		keywords.emplace_back("while");
+		keywords.emplace_back("throw");
+		keywords.emplace_back("try");
+		keywords.emplace_back("except");
 	}
 
 	return keywords;
 }
 
-ConfigIdentifier::ConfigIdentifier(const String& identifier)
-    : m_Name(identifier)
+ConfigIdentifier::ConfigIdentifier(String identifier)
+	: m_Name(std::move(identifier))
 { }
 
-String ConfigIdentifier::GetName(void) const
+String ConfigIdentifier::GetName() const
 {
 	return m_Name;
 }

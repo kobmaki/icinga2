@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,7 @@
 #ifndef NOTIFICATIONCOMPONENT_H
 #define NOTIFICATIONCOMPONENT_H
 
-#include "notification/notificationcomponent.thpp"
+#include "notification/notificationcomponent-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/timer.hpp"
@@ -31,7 +31,7 @@ namespace icinga
 /**
  * @ingroup notification
  */
-class NotificationComponent : public ObjectImpl<NotificationComponent>
+class NotificationComponent final : public ObjectImpl<NotificationComponent>
 {
 public:
 	DECLARE_OBJECT(NotificationComponent);
@@ -39,14 +39,15 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	Timer::Ptr m_NotificationTimer;
 
-	void NotificationTimerHandler(void);
+	void NotificationTimerHandler();
 	void SendNotificationsHandler(const Checkable::Ptr& checkable, NotificationType type,
-	    const CheckResult::Ptr& cr, const String& author, const String& text);
+		const CheckResult::Ptr& cr, const String& author, const String& text);
 };
 
 }

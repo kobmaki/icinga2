@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,15 +32,15 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API JsonRpc
+class JsonRpc
 {
 public:
-	static void SendMessage(const Stream::Ptr& stream, const Dictionary::Ptr& message);
-	static StreamReadStatus ReadMessage(const Stream::Ptr& stream, String *message, StreamReadContext& src, bool may_wait = false);
+	static size_t SendMessage(const Stream::Ptr& stream, const Dictionary::Ptr& message);
+	static StreamReadStatus ReadMessage(const Stream::Ptr& stream, String *message, StreamReadContext& src, bool may_wait = false, ssize_t maxMessageLength = -1);
 	static Dictionary::Ptr DecodeMessage(const String& message);
 
 private:
-	JsonRpc(void);
+	JsonRpc();
 };
 
 }

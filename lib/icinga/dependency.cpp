@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,13 +18,10 @@
  ******************************************************************************/
 
 #include "icinga/dependency.hpp"
-#include "icinga/dependency.tcpp"
+#include "icinga/dependency-ti.cpp"
 #include "icinga/service.hpp"
 #include "base/logger.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 
 using namespace icinga;
 
@@ -49,8 +46,7 @@ String DependencyNameComposer::MakeName(const String& shortName, const Object::P
 
 Dictionary::Ptr DependencyNameComposer::ParseName(const String& name) const
 {
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, name, boost::is_any_of("!"));
+	std::vector<String> tokens = name.Split("!");
 
 	if (tokens.size() < 2)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid Dependency name."));
@@ -68,7 +64,7 @@ Dictionary::Ptr DependencyNameComposer::ParseName(const String& name) const
 	return result;
 }
 
-void Dependency::OnConfigLoaded(void)
+void Dependency::OnConfigLoaded()
 {
 	Value defaultFilter;
 
@@ -80,24 +76,19 @@ void Dependency::OnConfigLoaded(void)
 	SetStateFilter(FilterArrayToInt(GetStates(), Notification::GetStateFilterMap(), defaultFilter));
 }
 
-void Dependency::OnAllConfigLoaded(void)
+void Dependency::OnAllConfigLoaded()
 {
 	ObjectImpl<Dependency>::OnAllConfigLoaded();
 
 	Host::Ptr childHost = Host::GetByName(GetChildHostName());
 
 	if (childHost) {
-		if (GetChildServiceName().IsEmpty()) {
-			Log(LogDebug, "Dependency")
-			    << "Dependency '" << GetName() << "' child host '" << GetChildHostName() << ".";
+		if (GetChildServiceName().IsEmpty())
 			m_Child = childHost;
-		} else {
-			Log(LogDebug, "Dependency")
-			    << "Dependency '" << GetName() << "' child host '" << GetChildHostName() << "' service '" << GetChildServiceName() << "' .";
+		else
 			m_Child = childHost->GetServiceByShortName(GetChildServiceName());
-		}
 	}
-	
+
 	if (!m_Child)
 		BOOST_THROW_EXCEPTION(ScriptError("Dependency '" + GetName() + "' references a child host/service which doesn't exist.", GetDebugInfo()));
 
@@ -106,17 +97,12 @@ void Dependency::OnAllConfigLoaded(void)
 	Host::Ptr parentHost = Host::GetByName(GetParentHostName());
 
 	if (parentHost) {
-		if (GetParentServiceName().IsEmpty()) {
-			Log(LogDebug, "Dependency")
-			    << "Dependency '" << GetName() << "' parent host '" << GetParentHostName() << ".";
+		if (GetParentServiceName().IsEmpty())
 			m_Parent = parentHost;
-		} else {
-			Log(LogDebug, "Dependency")
-			    << "Dependency '" << GetName() << "' parent host '" << GetParentHostName() << "' service '" << GetParentServiceName() << "' .";
+		else
 			m_Parent = parentHost->GetServiceByShortName(GetParentServiceName());
-		}
 	}
-	
+
 	if (!m_Parent)
 		BOOST_THROW_EXCEPTION(ScriptError("Dependency '" + GetName() + "' references a parent host/service which doesn't exist.", GetDebugInfo()));
 
@@ -142,14 +128,14 @@ bool Dependency::IsAvailable(DependencyType dt) const
 	/* ignore if it's the same checkable object */
 	if (parent == GetChild()) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Parent and child " << (parentService ? "service" : "host") << " are identical.";
+			<< "Dependency '" << GetName() << "' passed: Parent and child " << (parentService ? "service" : "host") << " are identical.";
 		return true;
 	}
 
 	/* ignore pending  */
 	if (!parent->GetLastCheckResult()) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' hasn't been checked yet.";
+			<< "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' hasn't been checked yet.";
 		return true;
 	}
 
@@ -157,12 +143,12 @@ bool Dependency::IsAvailable(DependencyType dt) const
 		/* ignore soft states */
 		if (parent->GetStateType() == StateTypeSoft) {
 			Log(LogNotice, "Dependency")
-			    << "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' is in a soft state.";
+				<< "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' is in a soft state.";
 			return true;
 		}
 	} else {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' failed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' is in a soft state.";
+			<< "Dependency '" << GetName() << "' failed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' is in a soft state.";
 	}
 
 	int state;
@@ -175,7 +161,7 @@ bool Dependency::IsAvailable(DependencyType dt) const
 	/* check state */
 	if (state & GetStateFilter()) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' matches state filter.";
+			<< "Dependency '" << GetName() << "' passed: Parent " << (parentService ? "service" : "host") << " '" << parent->GetName() << "' matches state filter.";
 		return true;
 	}
 
@@ -183,53 +169,53 @@ bool Dependency::IsAvailable(DependencyType dt) const
 	TimePeriod::Ptr tp = GetPeriod();
 	if (tp && !tp->IsInside(Utility::GetTime())) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Outside time period.";
+			<< "Dependency '" << GetName() << "' passed: Outside time period.";
 		return true;
 	}
 
 	if (dt == DependencyCheckExecution && !GetDisableChecks()) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Checks are not disabled.";
+			<< "Dependency '" << GetName() << "' passed: Checks are not disabled.";
 		return true;
 	} else if (dt == DependencyNotification && !GetDisableNotifications()) {
 		Log(LogNotice, "Dependency")
-		    << "Dependency '" << GetName() << "' passed: Notifications are not disabled";
+			<< "Dependency '" << GetName() << "' passed: Notifications are not disabled";
 		return true;
 	}
 
 	Log(LogNotice, "Dependency")
-	    << "Dependency '" << GetName() << "' failed. Parent "
-	    << (parentService ? "service" : "host") << " '" << parent->GetName() << "' is "
-	    << (parentService ? Service::StateToString(parentService->GetState()) : Host::StateToString(parentHost->GetState()));
+		<< "Dependency '" << GetName() << "' failed. Parent "
+		<< (parentService ? "service" : "host") << " '" << parent->GetName() << "' is "
+		<< (parentService ? Service::StateToString(parentService->GetState()) : Host::StateToString(parentHost->GetState()));
 
 	return false;
 }
 
-Checkable::Ptr Dependency::GetChild(void) const
+Checkable::Ptr Dependency::GetChild() const
 {
 	return m_Child;
 }
 
-Checkable::Ptr Dependency::GetParent(void) const
+Checkable::Ptr Dependency::GetParent() const
 {
 	return m_Parent;
 }
 
-TimePeriod::Ptr Dependency::GetPeriod(void) const
+TimePeriod::Ptr Dependency::GetPeriod() const
 {
 	return TimePeriod::GetByName(GetPeriodRaw());
 }
 
-void Dependency::ValidateStates(const Array::Ptr& value, const ValidationUtils& utils)
+void Dependency::ValidateStates(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<Dependency>::ValidateStates(value, utils);
+	ObjectImpl<Dependency>::ValidateStates(lvalue, utils);
 
-	int sfilter = FilterArrayToInt(value, Notification::GetStateFilterMap(), 0);
+	int sfilter = FilterArrayToInt(lvalue(), Notification::GetStateFilterMap(), 0);
 
 	if (GetParentServiceName().IsEmpty() && (sfilter & ~(StateFilterUp | StateFilterDown)) != 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("states"), "State filter is invalid for host dependency."));
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "states" }, "State filter is invalid for host dependency."));
 
 	if (!GetParentServiceName().IsEmpty() && (sfilter & ~(StateFilterOK | StateFilterWarning | StateFilterCritical | StateFilterUnknown)) != 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("states"), "State filter is invalid for service dependency."));
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "states" }, "State filter is invalid for service dependency."));
 }
 

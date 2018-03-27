@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -36,11 +36,8 @@
 #include "base/logger.hpp"
 #include "base/application.hpp"
 #include "base/objectlock.hpp"
-#include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <fstream>
@@ -117,7 +114,7 @@ void StateHistTable::UpdateLogEntries(const Dictionary::Ptr& log_entry_attrs, in
 		state_hist_service_states->Add(state_hist_bag);
 
 		Log(LogDebug, "StateHistTable")
-		    << "statehist: Adding new object '" << checkable->GetName() << "' to services cache.";
+			<< "statehist: Adding new object '" << checkable->GetName() << "' to services cache.";
 	} else {
 		state_hist_service_states = m_CheckablesCache[checkable];
 		state_hist_bag = state_hist_service_states->Get(state_hist_service_states->GetLength()-1); /* fetch latest state from history */
@@ -127,7 +124,7 @@ void StateHistTable::UpdateLogEntries(const Dictionary::Ptr& log_entry_attrs, in
 		/* determine service notifications notification_period and compare against current timestamp */
 		bool in_notification_period = true;
 		String notification_period_name;
-		BOOST_FOREACH(const Notification::Ptr& notification, checkable->GetNotifications()) {
+		for (const Notification::Ptr& notification : checkable->GetNotifications()) {
 			TimePeriod::Ptr notification_period = notification->GetPeriod();
 
 			if (notification_period) {
@@ -174,7 +171,7 @@ void StateHistTable::UpdateLogEntries(const Dictionary::Ptr& log_entry_attrs, in
 					state_hist_service_states->Add(state_hist_bag_new);
 
 					Log(LogDebug, "StateHistTable")
-					    << "statehist: State change detected for object '" << checkable->GetName() << "' in '" << log_line << "'.";
+						<< "statehist: State change detected for object '" << checkable->GetName() << "' in '" << log_line << "'.";
 				}
 				break;
 			case LogEntryTypeHostFlapping:
@@ -211,7 +208,7 @@ void StateHistTable::UpdateLogEntries(const Dictionary::Ptr& log_entry_attrs, in
 }
 
 void StateHistTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "time", Column(&StateHistTable::TimeAccessor, objectAccessor));
 	table->AddColumn(prefix + "lineno", Column(&StateHistTable::LinenoAccessor, objectAccessor));
@@ -241,16 +238,16 @@ void StateHistTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "duration_unmonitored", Column(&StateHistTable::DurationUnmonitoredAccessor, objectAccessor));
 	table->AddColumn(prefix + "duration_part_unmonitored", Column(&StateHistTable::DurationPartUnmonitoredAccessor, objectAccessor));
 
-	HostsTable::AddColumns(table, "current_host_", boost::bind(&StateHistTable::HostAccessor, _1, objectAccessor));
-	ServicesTable::AddColumns(table, "current_service_", boost::bind(&StateHistTable::ServiceAccessor, _1, objectAccessor));
+	HostsTable::AddColumns(table, "current_host_", std::bind(&StateHistTable::HostAccessor, _1, objectAccessor));
+	ServicesTable::AddColumns(table, "current_service_", std::bind(&StateHistTable::ServiceAccessor, _1, objectAccessor));
 }
 
-String StateHistTable::GetName(void) const
+String StateHistTable::GetName() const
 {
 	return "log";
 }
 
-String StateHistTable::GetPrefix(void) const
+String StateHistTable::GetPrefix() const
 {
 	return "log";
 }
@@ -258,7 +255,7 @@ String StateHistTable::GetPrefix(void) const
 void StateHistTable::FetchRows(const AddRowFunction& addRowFn)
 {
 	Log(LogDebug, "StateHistTable")
-	    << "Pre-selecting log file from " << m_TimeFrom << " until " << m_TimeUntil;
+		<< "Pre-selecting log file from " << m_TimeFrom << " until " << m_TimeUntil;
 
 	/* create log file index */
 	LivestatusLogUtility::CreateLogIndex(m_CompatLogPath, m_LogFileIndex);
@@ -268,8 +265,8 @@ void StateHistTable::FetchRows(const AddRowFunction& addRowFn)
 
 	Checkable::Ptr checkable;
 
-	BOOST_FOREACH(boost::tie(checkable, boost::tuples::ignore), m_CheckablesCache) {
-		BOOST_FOREACH(const Dictionary::Ptr& state_hist_bag, m_CheckablesCache[checkable]) {
+	for (const auto& kv : m_CheckablesCache) {
+		for (const Dictionary::Ptr& state_hist_bag : kv.second) {
 			/* pass a dictionary from state history array */
 			if (!addRowFn(state_hist_bag, LivestatusGroupByNone, Empty))
 				return;
@@ -282,7 +279,7 @@ Object::Ptr StateHistTable::HostAccessor(const Value& row, const Column::ObjectA
 	String host_name = static_cast<Dictionary::Ptr>(row)->Get("host_name");
 
 	if (host_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	return Host::GetByName(host_name);
 }
@@ -293,7 +290,7 @@ Object::Ptr StateHistTable::ServiceAccessor(const Value& row, const Column::Obje
 	String service_description = static_cast<Dictionary::Ptr>(row)->Get("service_description");
 
 	if (service_description.IsEmpty() || host_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	return Service::GetByNamePair(host_name, service_description);
 }

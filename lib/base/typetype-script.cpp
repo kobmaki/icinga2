@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,32 +26,26 @@
 using namespace icinga;
 
 static void InvokeAttributeHandlerHelper(const Function::Ptr& callback,
-    const Object::Ptr& object, const Value& cookie)
+	const Object::Ptr& object, const Value& cookie)
 {
-	std::vector<Value> arguments;
-	arguments.push_back(object);
-	
-	ScriptFrame frame;
-	callback->Invoke(arguments);
+	callback->Invoke({ object });
 }
 
 static void TypeRegisterAttributeHandler(const String& fieldName, const Function::Ptr& callback)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Type::Ptr self = static_cast<Type::Ptr>(vframe->Self);
-	
+	REQUIRE_NOT_NULL(self);
+
 	int fid = self->GetFieldId(fieldName);
-	self->RegisterAttributeHandler(fid, boost::bind(&InvokeAttributeHandlerHelper, callback, _1, _2));
+	self->RegisterAttributeHandler(fid, std::bind(&InvokeAttributeHandlerHelper, callback, _1, _2));
 }
 
-Object::Ptr TypeType::GetPrototype(void)
+Object::Ptr TypeType::GetPrototype()
 {
-	static Dictionary::Ptr prototype;
-
-	if (!prototype) {
-		prototype = new Dictionary();
-		prototype->Set("register_attribute_handler", new Function(WrapFunction(TypeRegisterAttributeHandler), false));
-	}
+	static Dictionary::Ptr prototype = new Dictionary({
+		{ "register_attribute_handler", new Function("Type#register_attribute_handler", TypeRegisterAttributeHandler, { "field", "callback" }, false) }
+	});
 
 	return prototype;
 }

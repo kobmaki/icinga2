@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define DEPENDENCY_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/dependency.thpp"
+#include "icinga/dependency-ti.hpp"
 
 namespace icinga
 {
@@ -36,30 +36,28 @@ class Service;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API Dependency : public ObjectImpl<Dependency>
+class Dependency final : public ObjectImpl<Dependency>
 {
 public:
 	DECLARE_OBJECT(Dependency);
 	DECLARE_OBJECTNAME(Dependency);
 
-	intrusive_ptr<Checkable> GetParent(void) const;
-	intrusive_ptr<Checkable> GetChild(void) const;
+	intrusive_ptr<Checkable> GetParent() const;
+	intrusive_ptr<Checkable> GetChild() const;
 
-	TimePeriod::Ptr GetPeriod(void) const;
+	TimePeriod::Ptr GetPeriod() const;
 
 	bool IsAvailable(DependencyType dt) const;
 
-	static void RegisterApplyRuleHandler(void);
-
-	virtual void ValidateStates(const Array::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateStates(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 	static void EvaluateApplyRules(const intrusive_ptr<Host>& host);
 	static void EvaluateApplyRules(const intrusive_ptr<Service>& service);
 
 protected:
-	virtual void OnConfigLoaded(void) override;
-	virtual void OnAllConfigLoaded(void) override;
-	virtual void Stop(bool runtimeRemoved) override;
+	void OnConfigLoaded() override;
+	void OnAllConfigLoaded() override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	Checkable::Ptr m_Parent;

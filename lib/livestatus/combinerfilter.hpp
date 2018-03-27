@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,17 +30,17 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API CombinerFilter : public Filter
+class CombinerFilter : public Filter
 {
 public:
 	DECLARE_PTR_TYPEDEFS(CombinerFilter);
-
-	CombinerFilter(void);
 
 	void AddSubFilter(const Filter::Ptr& filter);
 
 protected:
 	std::vector<Filter::Ptr> m_Filters;
+
+	CombinerFilter() = default;
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,7 +32,7 @@ struct ChunkReadContext
 	int LengthIndicator;
 
 	ChunkReadContext(StreamReadContext& scontext)
-	    : StreamContext(scontext), LengthIndicator(-1)
+		: StreamContext(scontext), LengthIndicator(-1)
 	{ }
 };
 
@@ -41,10 +41,10 @@ struct ChunkReadContext
  *
  * @ingroup remote
  */
-struct I2_REMOTE_API HttpChunkedEncoding
+struct HttpChunkedEncoding
 {
 	static StreamReadStatus ReadChunkFromStream(const Stream::Ptr& stream,
-	    char **data, size_t *size, ChunkReadContext& ccontext, bool may_wait = false);
+		char **data, size_t *size, ChunkReadContext& ccontext, bool may_wait = false);
 	static void WriteChunkToStream(const Stream::Ptr& stream, const char *data, size_t count);
 
 };

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,6 +29,7 @@ static void ConfigObjectModifyAttribute(const String& attr, const Value& value)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	ConfigObject::Ptr self = vframe->Self;
+	REQUIRE_NOT_NULL(self);
 	return self->ModifyAttribute(attr, value);
 }
 
@@ -36,18 +37,16 @@ static void ConfigObjectRestoreAttribute(const String& attr)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	ConfigObject::Ptr self = vframe->Self;
+	REQUIRE_NOT_NULL(self);
 	return self->RestoreAttribute(attr);
 }
 
-Object::Ptr ConfigObject::GetPrototype(void)
+Object::Ptr ConfigObject::GetPrototype()
 {
-	static Dictionary::Ptr prototype;
-
-	if (!prototype) {
-		prototype = new Dictionary();
-		prototype->Set("modify_attribute", new Function(WrapFunction(ConfigObjectModifyAttribute), false));
-		prototype->Set("restore_attribute", new Function(WrapFunction(ConfigObjectRestoreAttribute), false));
-	}
+	static Dictionary::Ptr prototype = new Dictionary({
+		{ "modify_attribute", new Function("ConfigObject#modify_attribute", ConfigObjectModifyAttribute, { "attr", "value" }, false) },
+		{ "restore_attribute", new Function("ConfigObject#restore_attribute", ConfigObjectRestoreAttribute, { "attr", "value" }, false) }
+	});
 
 	return prototype;
 }

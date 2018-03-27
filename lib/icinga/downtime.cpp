@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,15 +18,14 @@
  ******************************************************************************/
 
 #include "icinga/downtime.hpp"
-#include "icinga/downtime.tcpp"
+#include "icinga/downtime-ti.cpp"
 #include "icinga/host.hpp"
+#include "icinga/scheduleddowntime.hpp"
 #include "remote/configobjectutility.hpp"
 #include "base/configtype.hpp"
 #include "base/utility.hpp"
 #include "base/timer.hpp"
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
+#include <boost/thread/once.hpp>
 
 using namespace icinga;
 
@@ -34,22 +33,14 @@ static int l_NextDowntimeID = 1;
 static boost::mutex l_DowntimeMutex;
 static std::map<int, String> l_LegacyDowntimesCache;
 static Timer::Ptr l_DowntimesExpireTimer;
+static Timer::Ptr l_DowntimesStartTimer;
 
 boost::signals2::signal<void (const Downtime::Ptr&)> Downtime::OnDowntimeAdded;
 boost::signals2::signal<void (const Downtime::Ptr&)> Downtime::OnDowntimeRemoved;
+boost::signals2::signal<void (const Downtime::Ptr&)> Downtime::OnDowntimeStarted;
 boost::signals2::signal<void (const Downtime::Ptr&)> Downtime::OnDowntimeTriggered;
 
-INITIALIZE_ONCE(&Downtime::StaticInitialize);
-
 REGISTER_TYPE(Downtime);
-
-void Downtime::StaticInitialize(void)
-{
-	l_DowntimesExpireTimer = new Timer();
-	l_DowntimesExpireTimer->SetInterval(60);
-	l_DowntimesExpireTimer->OnTimerExpired.connect(boost::bind(&Downtime::DowntimesExpireTimerHandler));
-	l_DowntimesExpireTimer->Start();
-}
 
 String DowntimeNameComposer::MakeName(const String& shortName, const Object::Ptr& context) const
 {
@@ -70,8 +61,7 @@ String DowntimeNameComposer::MakeName(const String& shortName, const Object::Ptr
 
 Dictionary::Ptr DowntimeNameComposer::ParseName(const String& name) const
 {
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, name, boost::is_any_of("!"));
+	std::vector<String> tokens = name.Split("!");
 
 	if (tokens.size() < 2)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid Downtime name."));
@@ -89,7 +79,7 @@ Dictionary::Ptr DowntimeNameComposer::ParseName(const String& name) const
 	return result;
 }
 
-void Downtime::OnAllConfigLoaded(void)
+void Downtime::OnAllConfigLoaded()
 {
 	ObjectImpl<Downtime>::OnAllConfigLoaded();
 
@@ -107,6 +97,20 @@ void Downtime::OnAllConfigLoaded(void)
 void Downtime::Start(bool runtimeCreated)
 {
 	ObjectImpl<Downtime>::Start(runtimeCreated);
+
+	static boost::once_flag once = BOOST_ONCE_INIT;
+
+	boost::call_once(once, [this]() {
+		l_DowntimesStartTimer = new Timer();
+		l_DowntimesStartTimer->SetInterval(5);
+		l_DowntimesStartTimer->OnTimerExpired.connect(std::bind(&Downtime::DowntimesStartTimerHandler));
+		l_DowntimesStartTimer->Start();
+
+		l_DowntimesExpireTimer = new Timer();
+		l_DowntimesExpireTimer->SetInterval(60);
+		l_DowntimesExpireTimer->OnTimerExpired.connect(std::bind(&Downtime::DowntimesExpireTimerHandler));
+		l_DowntimesExpireTimer->Start();
+	});
 
 	{
 		boost::mutex::scoped_lock lock(l_DowntimeMutex);
@@ -127,10 +131,10 @@ void Downtime::Start(bool runtimeCreated)
 	 * this downtime now *after* it has been added (important
 	 * for DB IDO, etc.)
 	 */
-	if (checkable->GetStateRaw() != ServiceOK) {
+	if (!checkable->IsStateOK(checkable->GetStateRaw())) {
 		Log(LogNotice, "Downtime")
-		    << "Checkable '" << checkable->GetName() << "' already in a NOT-OK state."
-		    << " Triggering downtime now.";
+			<< "Checkable '" << checkable->GetName() << "' already in a NOT-OK state."
+			<< " Triggering downtime now.";
 		TriggerDowntime();
 	}
 }
@@ -145,12 +149,12 @@ void Downtime::Stop(bool runtimeRemoved)
 	ObjectImpl<Downtime>::Stop(runtimeRemoved);
 }
 
-Checkable::Ptr Downtime::GetCheckable(void) const
+Checkable::Ptr Downtime::GetCheckable() const
 {
 	return static_pointer_cast<Checkable>(m_Checkable);
 }
 
-bool Downtime::IsInEffect(void) const
+bool Downtime::IsInEffect() const
 {
 	double now = Utility::GetTime();
 
@@ -169,7 +173,7 @@ bool Downtime::IsInEffect(void) const
 	return (now < triggerTime + GetDuration());
 }
 
-bool Downtime::IsTriggered(void) const
+bool Downtime::IsTriggered() const
 {
 	double now = Utility::GetTime();
 
@@ -178,12 +182,31 @@ bool Downtime::IsTriggered(void) const
 	return (triggerTime > 0 && triggerTime <= now);
 }
 
-bool Downtime::IsExpired(void) const
+bool Downtime::IsExpired() const
 {
-	return (GetEndTime() < Utility::GetTime());
+	double now = Utility::GetTime();
+
+	if (GetFixed())
+		return (GetEndTime() < now);
+	else {
+		/* triggered flexible downtime not in effect anymore */
+		if (IsTriggered() && !IsInEffect())
+			return true;
+		/* flexible downtime never triggered */
+		else if (!IsTriggered() && (GetEndTime() < now))
+			return true;
+		else
+			return false;
+	}
 }
 
-int Downtime::GetNextDowntimeID(void)
+bool Downtime::HasValidConfigOwner() const
+{
+	String configOwner = GetConfigOwner();
+	return configOwner.IsEmpty() || GetObject<ScheduledDowntime>(configOwner);
+}
+
+int Downtime::GetNextDowntimeID()
 {
 	boost::mutex::scoped_lock lock(l_DowntimeMutex);
 
@@ -191,10 +214,10 @@ int Downtime::GetNextDowntimeID(void)
 }
 
 String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& author,
-    const String& comment, double startTime, double endTime, bool fixed,
-    const String& triggeredBy, double duration,
-    const String& scheduledDowntime, const String& scheduledBy,
-    const String& id, const MessageOrigin::Ptr& origin)
+	const String& comment, double startTime, double endTime, bool fixed,
+	const String& triggeredBy, double duration,
+	const String& scheduledDowntime, const String& scheduledBy,
+	const String& id, const MessageOrigin::Ptr& origin)
 {
 	String fullName;
 
@@ -229,13 +252,13 @@ String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& auth
 	if (!zone.IsEmpty())
 		attrs->Set("zone", zone);
 
-	String config = ConfigObjectUtility::CreateObjectConfig(Downtime::TypeInstance, fullName, true, Array::Ptr(), attrs);
+	String config = ConfigObjectUtility::CreateObjectConfig(Downtime::TypeInstance, fullName, true, nullptr, attrs);
 
 	Array::Ptr errors = new Array();
 
 	if (!ConfigObjectUtility::CreateObject(Downtime::TypeInstance, fullName, config, errors)) {
 		ObjectLock olock(errors);
-		BOOST_FOREACH(const String& error, errors) {
+		for (const String& error : errors) {
 			Log(LogCritical, "Downtime", error);
 		}
 
@@ -243,22 +266,23 @@ String Downtime::AddDowntime(const Checkable::Ptr& checkable, const String& auth
 	}
 
 	if (!triggeredBy.IsEmpty()) {
-		Downtime::Ptr triggerDowntime = Downtime::GetByName(triggeredBy);
-		Array::Ptr triggers = triggerDowntime->GetTriggers();
+		Downtime::Ptr parentDowntime = Downtime::GetByName(triggeredBy);
+		Array::Ptr triggers = parentDowntime->GetTriggers();
 
-		if (!triggers->Contains(triggeredBy))
-			triggers->Add(triggeredBy);
+		ObjectLock olock(triggers);
+		if (!triggers->Contains(fullName))
+			triggers->Add(fullName);
 	}
 
 	Downtime::Ptr downtime = Downtime::GetByName(fullName);
 
 	if (!downtime)
-		BOOST_THROW_EXCEPTION(std::runtime_error("Could not create downtime."));
+		BOOST_THROW_EXCEPTION(std::runtime_error("Could not create downtime object."));
 
 	Log(LogNotice, "Downtime")
-	    << "Added downtime '" << downtime->GetName()
-	    << "' between '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", startTime)
-	    << "' and '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", endTime) << "'.";
+		<< "Added downtime '" << downtime->GetName()
+		<< "' between '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", startTime)
+		<< "' and '" << Utility::FormatDateTime("%Y-%m-%d %H:%M:%S", endTime) << "'.";
 
 	return fullName;
 }
@@ -267,27 +291,27 @@ void Downtime::RemoveDowntime(const String& id, bool cancelled, bool expired, co
 {
 	Downtime::Ptr downtime = Downtime::GetByName(id);
 
-	if (!downtime)
+	if (!downtime || downtime->GetPackage() != "_api")
 		return;
 
 	String config_owner = downtime->GetConfigOwner();
 
 	if (!config_owner.IsEmpty() && !expired) {
 		Log(LogWarning, "Downtime")
-		    << "Cannot remove downtime '" << downtime->GetName() << "'. It is owned by scheduled downtime object '" << config_owner << "'";
+			<< "Cannot remove downtime '" << downtime->GetName() << "'. It is owned by scheduled downtime object '" << config_owner << "'";
 		return;
 	}
 
 	downtime->SetWasCancelled(cancelled);
 
 	Log(LogNotice, "Downtime")
-	    << "Removed downtime '" << downtime->GetName() << "' from object '" << downtime->GetCheckable()->GetName() << "'.";
+		<< "Removed downtime '" << downtime->GetName() << "' from object '" << downtime->GetCheckable()->GetName() << "'.";
 
 	Array::Ptr errors = new Array();
 
 	if (!ConfigObjectUtility::DeleteObject(downtime, false, errors)) {
 		ObjectLock olock(errors);
-		BOOST_FOREACH(const String& error, errors) {
+		for (const String& error : errors) {
 			Log(LogCritical, "Downtime", error);
 		}
 
@@ -295,27 +319,26 @@ void Downtime::RemoveDowntime(const String& id, bool cancelled, bool expired, co
 	}
 }
 
-void Downtime::TriggerDowntime(void)
+bool Downtime::CanBeTriggered()
 {
-	if (IsInEffect() && IsTriggered()) {
-		Log(LogDebug, "Downtime")
-		    << "Not triggering downtime '" << GetName() << "': already triggered.";
-		return;
-	}
+	if (IsInEffect() && IsTriggered())
+		return false;
 
-	if (IsExpired()) {
-		Log(LogDebug, "Downtime")
-		    << "Not triggering downtime '" << GetName() << "': expired.";
-		return;
-	}
+	if (IsExpired())
+		return false;
 
 	double now = Utility::GetTime();
 
-	if (now < GetStartTime() || now > GetEndTime()) {
-		Log(LogDebug, "Downtime")
-		    << "Not triggering downtime '" << GetName() << "': current time is outside downtime window.";
+	if (now < GetStartTime() || now > GetEndTime())
+		return false;
+
+	return true;
+}
+
+void Downtime::TriggerDowntime()
+{
+	if (!CanBeTriggered())
 		return;
-	}
 
 	Log(LogNotice, "Downtime")
 		<< "Triggering downtime '" << GetName() << "'.";
@@ -327,7 +350,7 @@ void Downtime::TriggerDowntime(void)
 
 	{
 		ObjectLock olock(triggers);
-		BOOST_FOREACH(const String& triggerName, triggers) {
+		for (const String& triggerName : triggers) {
 			Downtime::Ptr downtime = Downtime::GetByName(triggerName);
 
 			if (!downtime)
@@ -344,7 +367,7 @@ String Downtime::GetDowntimeIDFromLegacyID(int id)
 {
 	boost::mutex::scoped_lock lock(l_DowntimeMutex);
 
-	std::map<int, String>::iterator it = l_LegacyDowntimesCache.find(id);
+	auto it = l_LegacyDowntimesCache.find(id);
 
 	if (it == l_LegacyDowntimesCache.end())
 		return Empty;
@@ -352,33 +375,49 @@ String Downtime::GetDowntimeIDFromLegacyID(int id)
 	return it->second;
 }
 
-void Downtime::DowntimesExpireTimerHandler(void)
+void Downtime::DowntimesStartTimerHandler()
+{
+	/* Start fixed downtimes. Flexible downtimes will be triggered on-demand. */
+	for (const Downtime::Ptr& downtime : ConfigType::GetObjectsByType<Downtime>()) {
+		if (downtime->IsActive() &&
+			downtime->CanBeTriggered() &&
+			downtime->GetFixed()) {
+			/* Send notifications. */
+			OnDowntimeStarted(downtime);
+
+			/* Trigger fixed downtime immediately. */
+			downtime->TriggerDowntime();
+		}
+	}
+}
+
+void Downtime::DowntimesExpireTimerHandler()
 {
 	std::vector<Downtime::Ptr> downtimes;
 
-	BOOST_FOREACH(const Downtime::Ptr& downtime, ConfigType::GetObjectsByType<Downtime>()) {
+	for (const Downtime::Ptr& downtime : ConfigType::GetObjectsByType<Downtime>()) {
 		downtimes.push_back(downtime);
 	}
 
-	BOOST_FOREACH(const Downtime::Ptr& downtime, downtimes) {
+	for (const Downtime::Ptr& downtime : downtimes) {
 		/* Only remove downtimes which are activated after daemon start. */
-		if (downtime->IsActive() && downtime->IsExpired())
+		if (downtime->IsActive() && (downtime->IsExpired() || !downtime->HasValidConfigOwner()))
 			RemoveDowntime(downtime->GetName(), false, true);
 	}
 }
 
-void Downtime::ValidateStartTime(const Timestamp& value, const ValidationUtils& utils)
+void Downtime::ValidateStartTime(const Lazy<Timestamp>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<Downtime>::ValidateStartTime(value, utils);
+	ObjectImpl<Downtime>::ValidateStartTime(lvalue, utils);
 
-	if (value <= 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("start_time"), "Start time must be greater than 0."));
+	if (lvalue() <= 0)
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "start_time" }, "Start time must be greater than 0."));
 }
 
-void Downtime::ValidateEndTime(const Timestamp& value, const ValidationUtils& utils)
+void Downtime::ValidateEndTime(const Lazy<Timestamp>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<Downtime>::ValidateEndTime(value, utils);
+	ObjectImpl<Downtime>::ValidateEndTime(lvalue, utils);
 
-	if (value <= 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("end_time"), "End time must be greater than 0."));
+	if (lvalue() <= 0)
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "end_time" }, "End time must be greater than 0."));
 }

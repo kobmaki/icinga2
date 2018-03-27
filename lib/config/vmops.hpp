@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,8 +33,6 @@
 #include "base/exception.hpp"
 #include "base/convert.hpp"
 #include "base/objectlock.hpp"
-#include <boost/foreach.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
 #include <map>
 #include <vector>
 
@@ -44,15 +42,32 @@ namespace icinga
 class VMOps
 {
 public:
-	static inline Value Variable(ScriptFrame& frame, const String& name, const DebugInfo& debugInfo = DebugInfo())
+	static inline bool FindVarImportRef(ScriptFrame& frame, const String& name, Value *result, const DebugInfo& debugInfo = DebugInfo())
 	{
-		Value value;
-		if (frame.Locals && frame.Locals->Get(name, &value))
-			return value;
-		else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(name))
-			return GetField(frame.Self, name, frame.Sandboxed, debugInfo);
-		else
-			return ScriptGlobal::Get(name);
+		Array::Ptr imports = ScriptFrame::GetImports();
+
+		ObjectLock olock(imports);
+		for (const Value& import : imports) {
+			Object::Ptr obj = import;
+			if (obj->HasOwnField(name)) {
+				*result = import;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	static inline bool FindVarImport(ScriptFrame& frame, const String& name, Value *result, const DebugInfo& debugInfo = DebugInfo())
+	{
+		Value parent;
+
+		if (FindVarImportRef(frame, name, &parent, debugInfo)) {
+			*result = GetField(parent, name, frame.Sandboxed, debugInfo);
+			return true;
+		}
+
+		return false;
 	}
 
 	static inline Value ConstructorCall(const Type::Ptr& type, const std::vector<Value>& args, const DebugInfo& debugInfo = DebugInfo())
@@ -86,45 +101,60 @@ public:
 
 	static inline Value FunctionCall(ScriptFrame& frame, const Value& self, const Function::Ptr& func, const std::vector<Value>& arguments)
 	{
-		ScriptFrame vframe;
-		
 		if (!self.IsEmpty() || self.IsString())
-			vframe.Self = self;
+			return func->InvokeThis(self, arguments);
+		else
+			return func->Invoke(arguments);
 
-		return func->Invoke(arguments);
 	}
 
-	static inline Value NewFunction(ScriptFrame& frame, const std::vector<String>& args,
-	    std::map<String, Expression *> *closedVars, const boost::shared_ptr<Expression>& expression)
+	static inline Value NewFunction(ScriptFrame& frame, const String& name, const std::vector<String>& argNames,
+		const std::map<String, std::unique_ptr<Expression> >& closedVars, const std::shared_ptr<Expression>& expression)
 	{
-		return new Function(boost::bind(&FunctionWrapper, _1, args,
-		    EvaluateClosedVars(frame, closedVars), expression));
+		auto evaluatedClosedVars = EvaluateClosedVars(frame, closedVars);
+
+		auto wrapper = [argNames, evaluatedClosedVars, expression](const std::vector<Value>& arguments) -> Value {
+			if (arguments.size() < argNames.size())
+				BOOST_THROW_EXCEPTION(std::invalid_argument("Too few arguments for function"));
+
+			ScriptFrame *frame = ScriptFrame::GetCurrentFrame();
+
+			frame->Locals = new Dictionary();
+
+			if (evaluatedClosedVars)
+				evaluatedClosedVars->CopyTo(frame->Locals);
+
+			for (std::vector<Value>::size_type i = 0; i < std::min(arguments.size(), argNames.size()); i++)
+				frame->Locals->Set(argNames[i], arguments[i]);
+
+			return expression->Evaluate(*frame);
+		};
+
+		return new Function(name, wrapper, argNames);
 	}
 
-	static inline Value NewApply(ScriptFrame& frame, const String& type, const String& target, const String& name, const boost::shared_ptr<Expression>& filter,
-		const String& package, const String& fkvar, const String& fvvar, const boost::shared_ptr<Expression>& fterm, std::map<String, Expression *> *closedVars,
-		bool ignoreOnError, const boost::shared_ptr<Expression>& expression, const DebugInfo& debugInfo = DebugInfo())
+	static inline Value NewApply(ScriptFrame& frame, const String& type, const String& target, const String& name, const std::shared_ptr<Expression>& filter,
+		const String& package, const String& fkvar, const String& fvvar, const std::shared_ptr<Expression>& fterm, const std::map<String, std::unique_ptr<Expression> >& closedVars,
+		bool ignoreOnError, const std::shared_ptr<Expression>& expression, const DebugInfo& debugInfo = DebugInfo())
 	{
 		ApplyRule::AddRule(type, target, name, expression, filter, package, fkvar,
-		    fvvar, fterm, ignoreOnError, debugInfo, EvaluateClosedVars(frame, closedVars));
+			fvvar, fterm, ignoreOnError, debugInfo, EvaluateClosedVars(frame, closedVars));
 
 		return Empty;
 	}
 
-	static inline Value NewObject(ScriptFrame& frame, bool abstract, const String& type, const String& name, const boost::shared_ptr<Expression>& filter,
-		const String& zone, const String& package, bool ignoreOnError, std::map<String, Expression *> *closedVars, const boost::shared_ptr<Expression>& expression, const DebugInfo& debugInfo = DebugInfo())
+	static inline Value NewObject(ScriptFrame& frame, bool abstract, const Type::Ptr& type, const String& name, const std::shared_ptr<Expression>& filter,
+		const String& zone, const String& package, bool defaultTmpl, bool ignoreOnError, const std::map<String, std::unique_ptr<Expression> >& closedVars, const std::shared_ptr<Expression>& expression, const DebugInfo& debugInfo = DebugInfo())
 	{
-		ConfigItemBuilder::Ptr item = new ConfigItemBuilder(debugInfo);
+		ConfigItemBuilder item{debugInfo};
 
 		String checkName = name;
 
 		if (!abstract) {
-			Type::Ptr ptype = Type::GetByName(type);
-
-			NameComposer *nc = dynamic_cast<NameComposer *>(ptype.get());
+			auto *nc = dynamic_cast<NameComposer *>(type.get());
 
 			if (nc)
-				checkName = nc->MakeName(name, Dictionary::Ptr());
+				checkName = nc->MakeName(name, nullptr);
 		}
 
 		if (!checkName.IsEmpty()) {
@@ -132,27 +162,37 @@ public:
 
 			if (oldItem) {
 				std::ostringstream msgbuf;
-				msgbuf << "Object '" << name << "' of type '" << type << "' re-defined: " << debugInfo << "; previous definition: " << oldItem->GetDebugInfo();
+				msgbuf << "Object '" << name << "' of type '" << type->GetName() << "' re-defined: " << debugInfo << "; previous definition: " << oldItem->GetDebugInfo();
 				BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), debugInfo));
 			}
 		}
 
-		item->SetType(type);
-		item->SetName(name);
+		if (filter && !ObjectRule::IsValidSourceType(type->GetName())) {
+			std::ostringstream msgbuf;
+			msgbuf << "Object '" << name << "' of type '" << type->GetName() << "' must not have 'assign where' and 'ignore where' rules: " << debugInfo;
+			BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), debugInfo));
+		}
 
-		item->AddExpression(new OwnedExpression(expression));
-		item->SetAbstract(abstract);
-		item->SetScope(EvaluateClosedVars(frame, closedVars));
-		item->SetZone(zone);
-		item->SetPackage(package);
-		item->SetFilter(filter);
-		item->SetIgnoreOnError(ignoreOnError);
-		item->Compile()->Register();
+		item.SetType(type);
+		item.SetName(name);
+
+		if (!abstract)
+			item.AddExpression(new ImportDefaultTemplatesExpression());
+
+		item.AddExpression(new OwnedExpression(expression));
+		item.SetAbstract(abstract);
+		item.SetScope(EvaluateClosedVars(frame, closedVars));
+		item.SetZone(zone);
+		item.SetPackage(package);
+		item.SetFilter(filter);
+		item.SetDefaultTemplate(defaultTmpl);
+		item.SetIgnoreOnError(ignoreOnError);
+		item.Compile()->Register();
 
 		return Empty;
 	}
 
-	static inline ExpressionResult For(ScriptFrame& frame, const String& fkvar, const String& fvvar, const Value& value, Expression *expression, const DebugInfo& debugInfo = DebugInfo())
+	static inline ExpressionResult For(ScriptFrame& frame, const String& fkvar, const String& fvvar, const Value& value, const std::unique_ptr<Expression>& expression, const DebugInfo& debugInfo = DebugInfo())
 	{
 		if (value.IsObjectType<Array>()) {
 			if (!fvvar.IsEmpty())
@@ -174,12 +214,12 @@ public:
 
 			{
 				ObjectLock olock(dict);
-				BOOST_FOREACH(const Dictionary::Pair& kv, dict) {
+				for (const Dictionary::Pair& kv : dict) {
 					keys.push_back(kv.first);
 				}
 			}
 
-			BOOST_FOREACH(const String& key, keys) {
+			for (const String& key : keys) {
 				frame.Locals->Set(fkvar, key);
 				frame.Locals->Set(fvvar, dict->Get(key));
 				ExpressionResult res = expression->Evaluate(frame);
@@ -213,37 +253,17 @@ public:
 	}
 
 private:
-	static inline Value FunctionWrapper(const std::vector<Value>& arguments,
-	    const std::vector<String>& funcargs, const Dictionary::Ptr& closedVars, const boost::shared_ptr<Expression>& expr)
+	static inline Dictionary::Ptr EvaluateClosedVars(ScriptFrame& frame, const std::map<String, std::unique_ptr<Expression> >& closedVars)
 	{
-		if (arguments.size() < funcargs.size())
-			BOOST_THROW_EXCEPTION(std::invalid_argument("Too few arguments for function"));
+		if (closedVars.empty())
+			return nullptr;
 
-		ScriptFrame *frame = ScriptFrame::GetCurrentFrame();
+		DictionaryData locals;
 
-		if (closedVars)
-			closedVars->CopyTo(frame->Locals);
+		for (const auto& cvar : closedVars)
+			locals.emplace_back(cvar.first, cvar.second->Evaluate(frame));
 
-		for (std::vector<Value>::size_type i = 0; i < std::min(arguments.size(), funcargs.size()); i++)
-			frame->Locals->Set(funcargs[i], arguments[i]);
-
-		return expr->Evaluate(*frame);
-	}
-
-	static inline Dictionary::Ptr EvaluateClosedVars(ScriptFrame& frame, std::map<String, Expression *> *closedVars)
-	{
-		Dictionary::Ptr locals;
-
-		if (closedVars) {
-			locals = new Dictionary();
-
-			typedef std::pair<String, Expression *> ClosedVar;
-			BOOST_FOREACH(const ClosedVar& cvar, *closedVars) {
-				locals->Set(cvar.first, cvar.second->Evaluate(frame));
-			}
-		}
-
-		return locals;
+		return new Dictionary(std::move(locals));
 	}
 };
 

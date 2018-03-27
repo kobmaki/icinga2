@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -38,13 +38,11 @@
 #include "base/dictionary.hpp"
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/tuple/tuple.hpp>
-#include <boost/foreach.hpp>
-#include <boost/bind.hpp>
 
 using namespace icinga;
 
 Table::Table(LivestatusGroupByType type)
-    : m_GroupByType(type), m_GroupByObject(Empty)
+	: m_GroupByType(type), m_GroupByObject(Empty)
 { }
 
 Table::Ptr Table::GetByName(const String& name, const String& compat_log_path, const unsigned long& from, const unsigned long& until)
@@ -86,14 +84,14 @@ Table::Ptr Table::GetByName(const String& name, const String& compat_log_path, c
 	else if (name == "zones")
 		return new ZonesTable();
 
-	return Table::Ptr();
+	return nullptr;
 }
 
 void Table::AddColumn(const String& name, const Column& column)
 {
 	std::pair<String, Column> item = std::make_pair(name, column);
 
-	std::pair<std::map<String, Column>::iterator, bool> ret = m_Columns.insert(item);
+	auto ret = m_Columns.insert(item);
 
 	if (!ret.second)
 		ret.first->second = column;
@@ -107,7 +105,7 @@ Column Table::GetColumn(const String& name) const
 	if (dname.Find(prefix) == 0)
 		dname = dname.SubStr(prefix.GetLength());
 
-	std::map<String, Column>::const_iterator it = m_Columns.find(dname);
+	auto it = m_Columns.find(dname);
 
 	if (it == m_Columns.end())
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Column '" + dname + "' does not exist in table '" + GetName() + "'."));
@@ -115,13 +113,12 @@ Column Table::GetColumn(const String& name) const
 	return it->second;
 }
 
-std::vector<String> Table::GetColumnNames(void) const
+std::vector<String> Table::GetColumnNames() const
 {
 	std::vector<String> names;
 
-	String name;
-	BOOST_FOREACH(boost::tie(name, boost::tuples::ignore), m_Columns) {
-		names.push_back(name);
+	for (const auto& kv : m_Columns) {
+		names.push_back(kv.first);
 	}
 
 	return names;
@@ -131,14 +128,14 @@ std::vector<LivestatusRowValue> Table::FilterRows(const Filter::Ptr& filter, int
 {
 	std::vector<LivestatusRowValue> rs;
 
-	FetchRows(boost::bind(&Table::FilteredAddRow, this, boost::ref(rs), filter, limit, _1, _2, _3));
+	FetchRows(std::bind(&Table::FilteredAddRow, this, std::ref(rs), filter, limit, _1, _2, _3));
 
 	return rs;
 }
 
 bool Table::FilteredAddRow(std::vector<LivestatusRowValue>& rs, const Filter::Ptr& filter, int limit, const Value& row, LivestatusGroupByType groupByType, const Object::Ptr& groupByObject)
 {
-	if (limit != -1 && rs.size() == limit)
+	if (limit != -1 && static_cast<int>(rs.size()) == limit)
 		return false;
 
 	if (!filter || filter->Apply(this, row)) {
@@ -147,8 +144,7 @@ bool Table::FilteredAddRow(std::vector<LivestatusRowValue>& rs, const Filter::Pt
 		rval.GroupByType = groupByType;
 		rval.GroupByObject = groupByObject;
 
-		rs.push_back(rval);
-
+		rs.emplace_back(std::move(rval));
 	}
 
 	return true;
@@ -179,7 +175,7 @@ Value Table::EmptyDictionaryAccessor(const Value&)
 	return new Dictionary();
 }
 
-LivestatusGroupByType Table::GetGroupByType(void) const
+LivestatusGroupByType Table::GetGroupByType() const
 {
 	return m_GroupByType;
 }

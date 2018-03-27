@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,16 +31,12 @@ static String JsonEncodeShim(const Value& value)
 	return JsonEncode(value);
 }
 
-static void InitializeJsonObj(void)
-{
-	Dictionary::Ptr jsonObj = new Dictionary();
-
-	/* Methods */
-	jsonObj->Set("encode", new Function(WrapFunction(JsonEncodeShim), true));
-	jsonObj->Set("decode", new Function(WrapFunction(JsonDecode), true));
+INITIALIZE_ONCE([]() {
+	Dictionary::Ptr jsonObj = new Dictionary({
+		/* Methods */
+		{ "encode", new Function("Json#encode", JsonEncodeShim, { "value" }, true) },
+		{ "decode", new Function("Json#decode", JsonDecode, { "value" }, true) }
+	});
 
 	ScriptGlobal::Set("Json", jsonObj);
-}
-
-INITIALIZE_ONCE(InitializeJsonObj);
-
+});

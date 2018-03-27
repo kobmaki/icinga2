@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,7 +28,7 @@
 #include "base/serializer.hpp"
 #include "base/timer.hpp"
 #include "base/initialize.hpp"
-#include <boost/algorithm/string.hpp>
+#include <boost/thread/once.hpp>
 #include <set>
 
 using namespace icinga;
@@ -40,7 +40,7 @@ static std::map<String, ApiScriptFrame> l_ApiScriptFrames;
 static Timer::Ptr l_FrameCleanupTimer;
 static boost::mutex l_ApiScriptMutex;
 
-static void ScriptFrameCleanupHandler(void)
+static void ScriptFrameCleanupHandler()
 {
 	boost::mutex::scoped_lock lock(l_ApiScriptMutex);
 
@@ -48,24 +48,26 @@ static void ScriptFrameCleanupHandler(void)
 
 	typedef std::pair<String, ApiScriptFrame> KVPair;
 
-	BOOST_FOREACH(const KVPair& kv, l_ApiScriptFrames) {
+	for (const KVPair& kv : l_ApiScriptFrames) {
 		if (kv.second.Seen < Utility::GetTime() - 1800)
 			cleanup_keys.push_back(kv.first);
 	}
 
-	BOOST_FOREACH(const String& key, cleanup_keys)
+	for (const String& key : cleanup_keys)
 		l_ApiScriptFrames.erase(key);
 }
 
-static void InitScriptFrameCleanup(void)
+static void EnsureFrameCleanupTimer()
 {
-	l_FrameCleanupTimer = new Timer();
-	l_FrameCleanupTimer->OnTimerExpired.connect(boost::bind(ScriptFrameCleanupHandler));
-	l_FrameCleanupTimer->SetInterval(30);
-	l_FrameCleanupTimer->Start();
-}
+	static boost::once_flag once = BOOST_ONCE_INIT;
 
-INITIALIZE_ONCE(InitScriptFrameCleanup);
+	boost::call_once(once, []() {
+		l_FrameCleanupTimer = new Timer();
+		l_FrameCleanupTimer->OnTimerExpired.connect(std::bind(ScriptFrameCleanupHandler));
+		l_FrameCleanupTimer->SetInterval(30);
+		l_FrameCleanupTimer->Start();
+	});
+}
 
 bool ConsoleHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
 {
@@ -91,19 +93,21 @@ bool ConsoleHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 	bool sandboxed = HttpUtility::GetLastParameter(params, "sandboxed");
 
 	if (methodName == "execute-script")
-		return ExecuteScriptHelper(request, response, command, session, sandboxed);
+		return ExecuteScriptHelper(request, response, params, command, session, sandboxed);
 	else if (methodName == "auto-complete-script")
-		return AutocompleteScriptHelper(request, response, command, session, sandboxed);
+		return AutocompleteScriptHelper(request, response, params, command, session, sandboxed);
 
-	HttpUtility::SendJsonError(response, 400, "Invalid method specified: " + methodName);
+	HttpUtility::SendJsonError(response, params, 400, "Invalid method specified: " + methodName);
 	return true;
 }
 
 bool ConsoleHandler::ExecuteScriptHelper(HttpRequest& request, HttpResponse& response,
-    const String& command, const String& session, bool sandboxed)
+	const Dictionary::Ptr& params, const String& command, const String& session, bool sandboxed)
 {
-	Log(LogInformation, "Console")
-	    << "Executing expression: " << command;
+	Log(LogNotice, "Console")
+		<< "Executing expression: " << command;
+
+	EnsureFrameCleanupTimer();
 
 	ApiScriptFrame& lsf = l_ApiScriptFrames[session];
 	lsf.Seen = Utility::GetTime();
@@ -116,67 +120,66 @@ bool ConsoleHandler::ExecuteScriptHelper(HttpRequest& request, HttpResponse& res
 
 	lsf.Lines[fileName] = command;
 
-	Array::Ptr results = new Array();
-	Dictionary::Ptr resultInfo = new Dictionary();
-	Expression *expr = NULL;
+	Dictionary::Ptr resultInfo;
+	std::unique_ptr<Expression> expr;
 	Value exprResult;
 
 	try {
 		expr = ConfigCompiler::CompileText(fileName, command);
 
-		ScriptFrame frame;
+		ScriptFrame frame(true);
 		frame.Locals = lsf.Locals;
 		frame.Self = lsf.Locals;
 		frame.Sandboxed = sandboxed;
 
 		exprResult = expr->Evaluate(frame);
 
-		resultInfo->Set("code", 200);
-		resultInfo->Set("status", "Executed successfully.");
-		resultInfo->Set("result", Serialize(exprResult, 0));
+		resultInfo = new Dictionary({
+			{ "code", 200 },
+			{ "status", "Executed successfully." },
+			{ "result", Serialize(exprResult, 0) }
+		});
 	} catch (const ScriptError& ex) {
 		DebugInfo di = ex.GetDebugInfo();
 
 		std::ostringstream msgbuf;
 
 		msgbuf << di.Path << ": " << lsf.Lines[di.Path] << "\n"
-		    << String(di.Path.GetLength() + 2, ' ')
-		    << String(di.FirstColumn, ' ') << String(di.LastColumn - di.FirstColumn + 1, '^') << "\n"
-		    << ex.what() << "\n";
+			<< String(di.Path.GetLength() + 2, ' ')
+			<< String(di.FirstColumn, ' ') << String(di.LastColumn - di.FirstColumn + 1, '^') << "\n"
+			<< ex.what() << "\n";
 
-		resultInfo->Set("code", 500);
-		resultInfo->Set("status", String(msgbuf.str()));
-		resultInfo->Set("incomplete_expression", ex.IsIncompleteExpression());
-
-		Dictionary::Ptr debugInfo = new Dictionary();
-		debugInfo->Set("path", di.Path);
-		debugInfo->Set("first_line", di.FirstLine);
-		debugInfo->Set("first_column", di.FirstColumn);
-		debugInfo->Set("last_line", di.LastLine);
-		debugInfo->Set("last_column", di.LastColumn);
-		resultInfo->Set("debug_info", debugInfo);
-	} catch (...) {
-		delete expr;
-		throw;
+		resultInfo = new Dictionary({
+			{ "code", 500 },
+			{ "status", String(msgbuf.str()) },
+			{ "incomplete_expression", ex.IsIncompleteExpression() },
+			{ "debug_info", new Dictionary({
+				{ "path", di.Path },
+				{ "first_line", di.FirstLine },
+				{ "first_column", di.FirstColumn },
+				{ "last_line", di.LastLine },
+				{ "last_column", di.LastColumn }
+			}) }
+		});
 	}
-	delete expr;
 
-	results->Add(resultInfo);
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array({ resultInfo }) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
 
 bool ConsoleHandler::AutocompleteScriptHelper(HttpRequest& request, HttpResponse& response,
-    const String& command, const String& session, bool sandboxed)
+	const Dictionary::Ptr& params, const String& command, const String& session, bool sandboxed)
 {
 	Log(LogInformation, "Console")
-	    << "Auto-completing expression: " << command;
+		<< "Auto-completing expression: " << command;
+
+	EnsureFrameCleanupTimer();
 
 	ApiScriptFrame& lsf = l_ApiScriptFrames[session];
 	lsf.Seen = Utility::GetTime();
@@ -184,25 +187,24 @@ bool ConsoleHandler::AutocompleteScriptHelper(HttpRequest& request, HttpResponse
 	if (!lsf.Locals)
 		lsf.Locals = new Dictionary();
 
-	Array::Ptr results = new Array();
-	Dictionary::Ptr resultInfo = new Dictionary();
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	frame.Locals = lsf.Locals;
 	frame.Self = lsf.Locals;
 	frame.Sandboxed = sandboxed;
 
-	resultInfo->Set("code", 200);
-	resultInfo->Set("status", "Auto-completed successfully.");
-	resultInfo->Set("suggestions", Array::FromVector(GetAutocompletionSuggestions(command, frame)));
+	Dictionary::Ptr result1 = new Dictionary({
+		{ "code", 200 },
+		{ "status", "Auto-completed successfully." },
+		{ "suggestions", Array::FromVector(GetAutocompletionSuggestions(command, frame)) }
+	});
 
-	results->Add(resultInfo);
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array({ result1 }) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
@@ -215,25 +217,74 @@ static void AddSuggestion(std::vector<String>& matches, const String& word, cons
 	matches.push_back(suggestion);
 }
 
+static void AddSuggestions(std::vector<String>& matches, const String& word, const String& pword, bool withFields, const Value& value)
+{
+	String prefix;
+
+	if (!pword.IsEmpty())
+		prefix = pword + ".";
+
+	if (value.IsObjectType<Dictionary>()) {
+		Dictionary::Ptr dict = value;
+
+		ObjectLock olock(dict);
+		for (const Dictionary::Pair& kv : dict) {
+			AddSuggestion(matches, word, prefix + kv.first);
+		}
+	}
+
+	if (withFields) {
+		Type::Ptr type = value.GetReflectionType();
+
+		for (int i = 0; i < type->GetFieldCount(); i++) {
+			Field field = type->GetFieldInfo(i);
+
+			AddSuggestion(matches, word, prefix + field.Name);
+		}
+
+		while (type) {
+			Object::Ptr prototype = type->GetPrototype();
+			Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(prototype);
+
+			if (dict) {
+				ObjectLock olock(dict);
+				for (const Dictionary::Pair& kv : dict) {
+					AddSuggestion(matches, word, prefix + kv.first);
+				}
+			}
+
+			type = type->GetBaseType();
+		}
+	}
+}
+
 std::vector<String> ConsoleHandler::GetAutocompletionSuggestions(const String& word, ScriptFrame& frame)
-{	
+{
 	std::vector<String> matches;
 
-	BOOST_FOREACH(const String& keyword, ConfigWriter::GetKeywords()) {
+	for (const String& keyword : ConfigWriter::GetKeywords()) {
 		AddSuggestion(matches, word, keyword);
 	}
 
 	{
 		ObjectLock olock(frame.Locals);
-		BOOST_FOREACH(const Dictionary::Pair& kv, frame.Locals) {
+		for (const Dictionary::Pair& kv : frame.Locals) {
 			AddSuggestion(matches, word, kv.first);
 		}
 	}
 
 	{
 		ObjectLock olock(ScriptGlobal::GetGlobals());
-		BOOST_FOREACH(const Dictionary::Pair& kv, ScriptGlobal::GetGlobals()) {
+		for (const Dictionary::Pair& kv : ScriptGlobal::GetGlobals()) {
 			AddSuggestion(matches, word, kv.first);
+		}
+	}
+
+	{
+		Array::Ptr imports = ScriptFrame::GetImports();
+		ObjectLock olock(imports);
+		for (const Value& import : imports) {
+			AddSuggestions(matches, word, "", false, import);
 		}
 	}
 
@@ -245,41 +296,12 @@ std::vector<String> ConsoleHandler::GetAutocompletionSuggestions(const String& w
 		Value value;
 
 		try {
-			Expression *expr = ConfigCompiler::CompileText("temp", pword);
+			std::unique_ptr<Expression> expr = ConfigCompiler::CompileText("temp", pword);
 
 			if (expr)
 				value = expr->Evaluate(frame);
 
-			if (value.IsObjectType<Dictionary>()) {
-				Dictionary::Ptr dict = value;
-
-				ObjectLock olock(dict);
-				BOOST_FOREACH(const Dictionary::Pair& kv, dict) {
-					AddSuggestion(matches, word, pword + "." + kv.first);
-				}
-			}
-
-			Type::Ptr type = value.GetReflectionType();
-
-			for (int i = 0; i < type->GetFieldCount(); i++) {
-				Field field = type->GetFieldInfo(i);
-
-				AddSuggestion(matches, word, pword + "." + field.Name);
-			}
-
-			while (type) {
-				Object::Ptr prototype = type->GetPrototype();
-				Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(prototype);
-
-				if (dict) {
-					ObjectLock olock(dict);
-					BOOST_FOREACH(const Dictionary::Pair& kv, dict) {
-						AddSuggestion(matches, word, pword + "." + kv.first);
-					}
-				}
-
-				type = type->GetBaseType();
-			}
+			AddSuggestions(matches, word, pword, true, value);
 		} catch (...) { /* Ignore the exception */ }
 	}
 

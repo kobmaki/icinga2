@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,19 +26,12 @@
 #include "base/logger.hpp"
 #include "base/context.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-INITIALIZE_ONCE(&ScheduledDowntime::RegisterApplyRuleHandler);
-
-void ScheduledDowntime::RegisterApplyRuleHandler(void)
-{
-	std::vector<String> targets;
-	targets.push_back("Host");
-	targets.push_back("Service");
-	ApplyRule::RegisterType("ScheduledDowntime", targets);
-}
+INITIALIZE_ONCE([]() {
+	ApplyRule::RegisterType("ScheduledDowntime", { "Host", "Service" });
+});
 
 bool ScheduledDowntime::EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, const String& name, ScriptFrame& frame, const ApplyRule& rule)
 {
@@ -47,34 +40,38 @@ bool ScheduledDowntime::EvaluateApplyRuleInstance(const Checkable::Ptr& checkabl
 
 	DebugInfo di = rule.GetDebugInfo();
 
+#ifdef _DEBUG
 	Log(LogDebug, "ScheduledDowntime")
 		<< "Applying scheduled downtime '" << rule.GetName() << "' to object '" << checkable->GetName() << "' for rule " << di;
+#endif /* _DEBUG */
 
-	ConfigItemBuilder::Ptr builder = new ConfigItemBuilder(di);
-	builder->SetType("ScheduledDowntime");
-	builder->SetName(name);
-	builder->SetScope(frame.Locals->ShallowClone());
-	builder->SetIgnoreOnError(rule.GetIgnoreOnError());
+	ConfigItemBuilder builder{di};
+	builder.SetType(ScheduledDowntime::TypeInstance);
+	builder.SetName(name);
+	builder.SetScope(frame.Locals->ShallowClone());
+	builder.SetIgnoreOnError(rule.GetIgnoreOnError());
 
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
 
 	if (service)
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
 
 	String zone = checkable->GetZoneName();
 
 	if (!zone.IsEmpty())
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
 
-	builder->AddExpression(new OwnedExpression(rule.GetExpression()));
+	builder.AddExpression(new OwnedExpression(rule.GetExpression()));
 
-	ConfigItem::Ptr downtimeItem = builder->Compile();
+	builder.AddExpression(new ImportDefaultTemplatesExpression());
+
+	ConfigItem::Ptr downtimeItem = builder.Compile();
 	downtimeItem->Register();
 
 	return true;
@@ -92,7 +89,7 @@ bool ScheduledDowntime::EvaluateApplyRule(const Checkable::Ptr& checkable, const
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (rule.GetScope())
 		rule.GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("host", host);
@@ -109,9 +106,7 @@ bool ScheduledDowntime::EvaluateApplyRule(const Checkable::Ptr& checkable, const
 			return false;
 		}
 	} else {
-		Array::Ptr instances = new Array();
-		instances->Add("");
-		vinstances = instances;
+		vinstances = new Array({ "" });
 	}
 
 	bool match = false;
@@ -121,10 +116,9 @@ bool ScheduledDowntime::EvaluateApplyRule(const Checkable::Ptr& checkable, const
 			BOOST_THROW_EXCEPTION(ScriptError("Dictionary iterator requires value to be a dictionary.", di));
 
 		Array::Ptr arr = vinstances;
-		Array::Ptr arrclone = arr->ShallowClone();
 
-		ObjectLock olock(arrclone);
-		BOOST_FOREACH(const Value& instance, arrclone) {
+		ObjectLock olock(arr);
+		for (const Value& instance : arr) {
 			String name = rule.GetName();
 
 			if (!rule.GetFKVar().IsEmpty()) {
@@ -138,10 +132,10 @@ bool ScheduledDowntime::EvaluateApplyRule(const Checkable::Ptr& checkable, const
 	} else if (vinstances.IsObjectType<Dictionary>()) {
 		if (rule.GetFVVar().IsEmpty())
 			BOOST_THROW_EXCEPTION(ScriptError("Array iterator requires value to be an array.", di));
-	
+
 		Dictionary::Ptr dict = vinstances;
 
-		BOOST_FOREACH(const String& key, dict->GetKeys()) {
+		for (const String& key : dict->GetKeys()) {
 			frame.Locals->Set(rule.GetFKVar(), key);
 			frame.Locals->Set(rule.GetFVVar(), dict->Get(key));
 
@@ -157,7 +151,7 @@ void ScheduledDowntime::EvaluateApplyRules(const Host::Ptr& host)
 {
 	CONTEXT("Evaluating 'apply' rules for host '" + host->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("ScheduledDowntime")) {
+	for (ApplyRule& rule : ApplyRule::GetRules("ScheduledDowntime")) {
 		if (rule.GetTargetType() != "Host")
 			continue;
 
@@ -170,7 +164,7 @@ void ScheduledDowntime::EvaluateApplyRules(const Service::Ptr& service)
 {
 	CONTEXT("Evaluating 'apply' rules for service '" + service->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("ScheduledDowntime")) {
+	for (ApplyRule& rule : ApplyRule::GetRules("ScheduledDowntime")) {
 		if (rule.GetTargetType() != "Service")
 			continue;
 

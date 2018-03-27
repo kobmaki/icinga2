@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -17,38 +17,31 @@
 
 mkembedconfig_target(methods-itl.conf methods-itl.cpp)
 
-if(MSVC)
-  set(WindowsSources clrchecktask.cpp)
-else()
-  set(WindowsSources "")
-endif()
-
 set(methods_SOURCES
-  clusterchecktask.cpp clusterzonechecktask.cpp
-  icingachecktask.cpp methods-itl.cpp nullchecktask.cpp nulleventtask.cpp
-  pluginchecktask.cpp plugineventtask.cpp pluginnotificationtask.cpp
-  randomchecktask.cpp timeperiodtask.cpp ${WindowsSources}
+  i2-methods.hpp methods-itl.cpp
+  clusterchecktask.cpp clusterchecktask.hpp
+  clusterzonechecktask.cpp clusterzonechecktask.hpp
+  dummychecktask.cpp dummychecktask.hpp
+  exceptionchecktask.cpp exceptionchecktask.hpp
+  icingachecktask.cpp icingachecktask.hpp
+  nullchecktask.cpp nullchecktask.hpp
+  nulleventtask.cpp nulleventtask.hpp
+  pluginchecktask.cpp pluginchecktask.hpp
+  plugineventtask.cpp plugineventtask.hpp
+  pluginnotificationtask.cpp pluginnotificationtask.hpp
+  randomchecktask.cpp randomchecktask.hpp
+  timeperiodtask.cpp timeperiodtask.hpp
 )
 
 if(ICINGA2_UNITY_BUILD)
-    mkunity_target(methods methods_SOURCES)
+  mkunity_target(methods methods methods_SOURCES)
 endif()
 
-add_library(methods SHARED ${methods_SOURCES})
+add_library(methods OBJECT ${methods_SOURCES})
 
-target_link_libraries(methods ${Boost_LIBRARIES} base config icinga)
+add_dependencies(methods base config icinga)
 
 set_target_properties (
   methods PROPERTIES
-  INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR}/icinga2
-  DEFINE_SYMBOL I2_METHODS_BUILD
   FOLDER Lib
 )
-
-install(
-  TARGETS methods
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
-)
-
-

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,8 +25,8 @@
 #include "base/timer.hpp"
 #include "base/logger.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/thread/recursive_mutex.hpp>
 
 using namespace icinga;
 
@@ -39,19 +39,9 @@ static Timer::Ptr l_ObjectCountTimer;
 #endif /* I2_LEAK_DEBUG */
 
 /**
- * Default constructor for the Object class.
- */
-Object::Object(void)
-	: m_References(0), m_Mutex(0)
-#ifdef I2_DEBUG
-	, m_LockOwner(0)
-#endif /* I2_DEBUG */
-{ }
-
-/**
  * Destructor for the Object class.
  */
-Object::~Object(void)
+Object::~Object()
 {
 	delete reinterpret_cast<boost::recursive_mutex *>(m_Mutex);
 }
@@ -59,7 +49,7 @@ Object::~Object(void)
 /**
  * Returns a string representation for the object.
  */
-String Object::ToString(void) const
+String Object::ToString() const
 {
 	return "Object of type '" + GetReflectionType()->GetName() + "'";
 }
@@ -70,7 +60,7 @@ String Object::ToString(void) const
  *
  * @returns True if the calling thread owns the lock, false otherwise.
  */
-bool Object::OwnsLock(void) const
+bool Object::OwnsLock() const
 {
 #ifdef _WIN32
 	DWORD tid = InterlockedExchangeAdd(&m_LockOwner, 0);
@@ -108,6 +98,22 @@ bool Object::HasOwnField(const String& field) const
 		return false;
 
 	return type->GetFieldId(field) != -1;
+}
+
+bool Object::GetOwnField(const String& field, Value *result) const
+{
+	Type::Ptr type = GetReflectionType();
+
+	if (!type)
+		return false;
+
+	int tid = type->GetFieldId(field);
+
+	if (tid == -1)
+		return false;
+
+	*result = GetField(tid);
+	return true;
 }
 
 Value Object::GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const
@@ -162,7 +168,7 @@ void Object::Validate(int types, const ValidationUtils& utils)
 	/* Nothing to do here. */
 }
 
-void Object::ValidateField(int id, const Value& value, const ValidationUtils& utils)
+void Object::ValidateField(int id, const Lazy<Value>& lvalue, const ValidationUtils& utils)
 {
 	/* Nothing to do here. */
 }
@@ -177,12 +183,12 @@ Object::Ptr Object::NavigateField(int id) const
 	BOOST_THROW_EXCEPTION(std::runtime_error("Invalid field ID."));
 }
 
-Object::Ptr Object::Clone(void) const
+Object::Ptr Object::Clone() const
 {
 	BOOST_THROW_EXCEPTION(std::runtime_error("Object cannot be cloned."));
 }
 
-Type::Ptr Object::GetReflectionType(void) const
+Type::Ptr Object::GetReflectionType() const
 {
 	return Object::TypeInstance;
 }
@@ -222,30 +228,71 @@ void icinga::TypeRemoveObject(Object *object)
 	l_ObjectCounts[typeName]--;
 }
 
-static void TypeInfoTimerHandler(void)
+static void TypeInfoTimerHandler()
 {
 	boost::mutex::scoped_lock lock(l_ObjectCountLock);
 
 	typedef std::map<String, int>::value_type kv_pair;
-	BOOST_FOREACH(kv_pair& kv, l_ObjectCounts) {
+	for (kv_pair& kv : l_ObjectCounts) {
 		if (kv.second == 0)
 			continue;
 
 		Log(LogInformation, "TypeInfo")
-		    << kv.second << " " << kv.first << " objects";
+			<< kv.second << " " << kv.first << " objects";
 
 		kv.second = 0;
 	}
 }
 
-static void StartTypeInfoTimer(void)
-{
+INITIALIZE_ONCE([]() {
 	l_ObjectCountTimer = new Timer();
 	l_ObjectCountTimer->SetInterval(10);
-	l_ObjectCountTimer->OnTimerExpired.connect(boost::bind(TypeInfoTimerHandler));
+	l_ObjectCountTimer->OnTimerExpired.connect(std::bind(TypeInfoTimerHandler));
 	l_ObjectCountTimer->Start();
-}
-
-INITIALIZE_ONCE(StartTypeInfoTimer);
+});
 #endif /* I2_LEAK_DEBUG */
 
+void icinga::intrusive_ptr_add_ref(Object *object)
+{
+#ifdef I2_LEAK_DEBUG
+	if (object->m_References == 0)
+		TypeAddObject(object);
+#endif /* I2_LEAK_DEBUG */
+
+#ifdef _WIN32
+	InterlockedIncrement(&object->m_References);
+#else /* _WIN32 */
+	__sync_add_and_fetch(&object->m_References, 1);
+#endif /* _WIN32 */
+}
+
+void icinga::intrusive_ptr_release(Object *object)
+{
+	uintptr_t refs;
+
+#ifdef _WIN32
+	refs = InterlockedDecrement(&object->m_References);
+#else /* _WIN32 */
+	refs = __sync_sub_and_fetch(&object->m_References, 1);
+#endif /* _WIN32 */
+
+	if (unlikely(refs == 0)) {
+#ifdef I2_LEAK_DEBUG
+		TypeRemoveObject(object);
+#endif /* I2_LEAK_DEBUG */
+
+		delete object;
+	}
+}
+
+void icinga::DefaultObjectFactoryCheckArgs(const std::vector<Value>& args)
+{
+	if (!args.empty())
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Constructor does not take any arguments."));
+}
+
+void icinga::RequireNotNullInternal(const intrusive_ptr<Object>& object, const char *description)
+{
+	if (!object)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Pointer must not be null: " + String(description)));
+}

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,6 +19,8 @@
 
 #include "base/scriptutils.hpp"
 #include "base/function.hpp"
+#include "base/scriptframe.hpp"
+#include "base/exception.hpp"
 #include "base/utility.hpp"
 #include "base/convert.hpp"
 #include "base/json.hpp"
@@ -27,7 +29,7 @@
 #include "base/configtype.hpp"
 #include "base/application.hpp"
 #include "base/dependencygraph.hpp"
-#include <boost/foreach.hpp>
+#include "base/initialize.hpp"
 #include <boost/regex.hpp>
 #include <algorithm>
 #include <set>
@@ -37,35 +39,56 @@
 
 using namespace icinga;
 
-REGISTER_SAFE_SCRIPTFUNCTION(regex, &ScriptUtils::Regex);
-REGISTER_SAFE_SCRIPTFUNCTION(match, &Utility::Match);
-REGISTER_SAFE_SCRIPTFUNCTION(cidr_match, &Utility::CidrMatch);
-REGISTER_SAFE_SCRIPTFUNCTION(len, &ScriptUtils::Len);
-REGISTER_SAFE_SCRIPTFUNCTION(union, &ScriptUtils::Union);
-REGISTER_SAFE_SCRIPTFUNCTION(intersection, &ScriptUtils::Intersection);
-REGISTER_SCRIPTFUNCTION(log, &ScriptUtils::Log);
-REGISTER_SCRIPTFUNCTION(range, &ScriptUtils::Range);
-REGISTER_SCRIPTFUNCTION(exit, &Application::Exit);
-REGISTER_SAFE_SCRIPTFUNCTION(typeof, &ScriptUtils::TypeOf);
-REGISTER_SAFE_SCRIPTFUNCTION(keys, &ScriptUtils::Keys);
-REGISTER_SAFE_SCRIPTFUNCTION(random, &Utility::Random);
-REGISTER_SAFE_SCRIPTFUNCTION(get_object, &ScriptUtils::GetObject);
-REGISTER_SAFE_SCRIPTFUNCTION(get_objects, &ScriptUtils::GetObjects);
-REGISTER_SCRIPTFUNCTION(assert, &ScriptUtils::Assert);
-REGISTER_SAFE_SCRIPTFUNCTION(string, &ScriptUtils::CastString);
-REGISTER_SAFE_SCRIPTFUNCTION(number, &ScriptUtils::CastNumber);
-REGISTER_SAFE_SCRIPTFUNCTION(bool, &ScriptUtils::CastBool);
-REGISTER_SAFE_SCRIPTFUNCTION(get_time, &Utility::GetTime);
-REGISTER_SAFE_SCRIPTFUNCTION(basename, &Utility::BaseName);
-REGISTER_SAFE_SCRIPTFUNCTION(dirname, &Utility::DirName);
-REGISTER_SAFE_SCRIPTFUNCTION(msi_get_component_path, &ScriptUtils::MsiGetComponentPathShim);
-REGISTER_SAFE_SCRIPTFUNCTION(track_parents, &ScriptUtils::TrackParents);
-REGISTER_SAFE_SCRIPTFUNCTION(escape_shell_cmd, &Utility::EscapeShellCmd);
-REGISTER_SAFE_SCRIPTFUNCTION(escape_shell_arg, &Utility::EscapeShellArg);
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, regex, &ScriptUtils::Regex, "pattern:text:mode");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, match, &ScriptUtils::Match, "pattern:text:mode");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, cidr_match, &ScriptUtils::CidrMatch, "pattern:ip:mode");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, len, &ScriptUtils::Len, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, union, &ScriptUtils::Union, "");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, intersection, &ScriptUtils::Intersection, "");
+REGISTER_SCRIPTFUNCTION_NS(System, log, &ScriptUtils::Log, "severity:facility:value");
+REGISTER_SCRIPTFUNCTION_NS(System, range, &ScriptUtils::Range, "start:end:increment");
+REGISTER_SCRIPTFUNCTION_NS(System, exit, &Application::Exit, "status");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, typeof, &ScriptUtils::TypeOf, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, keys, &ScriptUtils::Keys, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, random, &Utility::Random, "");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, get_object, &ScriptUtils::GetObject, "type:name");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, get_objects, &ScriptUtils::GetObjects, "type");
+REGISTER_SCRIPTFUNCTION_NS(System, assert, &ScriptUtils::Assert, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, string, &ScriptUtils::CastString, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, number, &ScriptUtils::CastNumber, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, bool, &ScriptUtils::CastBool, "value");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, get_time, &Utility::GetTime, "");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, basename, &Utility::BaseName, "path");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, dirname, &Utility::DirName, "path");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, msi_get_component_path, &ScriptUtils::MsiGetComponentPathShim, "component");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, track_parents, &ScriptUtils::TrackParents, "child");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, escape_shell_cmd, &Utility::EscapeShellCmd, "cmd");
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, escape_shell_arg, &Utility::EscapeShellArg, "arg");
 #ifdef _WIN32
-REGISTER_SAFE_SCRIPTFUNCTION(escape_create_process_arg, &Utility::EscapeCreateProcessArg);
+REGISTER_SAFE_SCRIPTFUNCTION_NS(System, escape_create_process_arg, &Utility::EscapeCreateProcessArg, "arg");
 #endif /* _WIN32 */
-REGISTER_SCRIPTFUNCTION(__ptr, &ScriptUtils::Ptr);
+REGISTER_SCRIPTFUNCTION_NS(System, ptr, &ScriptUtils::Ptr, "object");
+REGISTER_SCRIPTFUNCTION_NS(System, sleep, &Utility::Sleep, "interval");
+REGISTER_SCRIPTFUNCTION_NS(System, path_exists, &Utility::PathExists, "path");
+REGISTER_SCRIPTFUNCTION_NS(System, glob, &ScriptUtils::Glob, "pathspec:callback:type");
+REGISTER_SCRIPTFUNCTION_NS(System, glob_recursive, &ScriptUtils::GlobRecursive, "pathspec:callback:type");
+
+INITIALIZE_ONCE(&ScriptUtils::StaticInitialize);
+
+enum MatchType
+{
+	MatchAll,
+	MatchAny
+};
+
+void ScriptUtils::StaticInitialize()
+{
+	ScriptGlobal::Set("MatchAll", MatchAll);
+	ScriptGlobal::Set("MatchAny", MatchAny);
+
+	ScriptGlobal::Set("GlobFile", GlobFile);
+	ScriptGlobal::Set("GlobDirectory", GlobDirectory);
+}
 
 String ScriptUtils::CastString(const Value& value)
 {
@@ -81,18 +104,137 @@ bool ScriptUtils::CastBool(const Value& value)
 {
 	return value.ToBool();
 }
-bool ScriptUtils::Regex(const String& pattern, const String& text)
-{
-	bool res = false;
-	try {
-		boost::regex expr(pattern.GetData());
-		boost::smatch what;
-		res = boost::regex_search(text.GetData(), what, expr);
-	} catch (boost::exception&) {
-		res = false; /* exception means something went terribly wrong */
-	}
 
-	return res;
+bool ScriptUtils::Regex(const std::vector<Value>& args)
+{
+	if (args.size() < 2)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Regular expression and text must be specified."));
+
+	String pattern = args[0];
+	const Value& argTexts = args[1];
+	MatchType mode;
+
+	if (args.size() > 2)
+		mode = static_cast<MatchType>(static_cast<int>(args[2]));
+	else
+		mode = MatchAll;
+
+	boost::regex expr(pattern.GetData());
+
+	Array::Ptr texts;
+
+	if (argTexts.IsObject())
+		texts = argTexts;
+
+	if (texts) {
+		ObjectLock olock(texts);
+
+		if (texts->GetLength() == 0)
+			return false;
+
+		for (const String& text : texts) {
+			bool res = false;
+			try {
+				boost::smatch what;
+				res = boost::regex_search(text.GetData(), what, expr);
+			} catch (boost::exception&) {
+				res = false; /* exception means something went terribly wrong */
+			}
+
+			if (mode == MatchAny && res)
+				return true;
+			else if (mode == MatchAll && !res)
+				return false;
+		}
+
+		return true;
+	} else {
+		String text = argTexts;
+		boost::smatch what;
+		return boost::regex_search(text.GetData(), what, expr);
+	}
+}
+
+bool ScriptUtils::Match(const std::vector<Value>& args)
+{
+	if (args.size() < 2)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Pattern and text must be specified."));
+
+	String pattern = args[0];
+	const Value& argTexts = args[1];
+	MatchType mode;
+
+	if (args.size() > 2)
+		mode = static_cast<MatchType>(static_cast<int>(args[2]));
+	else
+		mode = MatchAll;
+
+	Array::Ptr texts;
+
+	if (argTexts.IsObject())
+		texts = argTexts;
+
+	if (texts) {
+		ObjectLock olock(texts);
+
+		if (texts->GetLength() == 0)
+			return false;
+
+		for (const String& text : texts) {
+			bool res = Utility::Match(pattern, text);
+
+			if (mode == MatchAny && res)
+				return true;
+			else if (mode == MatchAll && !res)
+				return false;
+		}
+
+		return true;
+	} else {
+		String text = argTexts;
+		return Utility::Match(pattern, argTexts);
+	}
+}
+
+bool ScriptUtils::CidrMatch(const std::vector<Value>& args)
+{
+	if (args.size() < 2)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("CIDR and IP address must be specified."));
+
+	String pattern = args[0];
+	const Value& argIps = args[1];
+	MatchType mode;
+
+	if (args.size() > 2)
+		mode = static_cast<MatchType>(static_cast<int>(args[2]));
+	else
+		mode = MatchAll;
+
+	Array::Ptr ips;
+
+	if (argIps.IsObject())
+		ips = argIps;
+
+	if (ips) {
+		ObjectLock olock(ips);
+
+		if (ips->GetLength() == 0)
+			return false;
+
+		for (const String& ip : ips) {
+			bool res = Utility::CidrMatch(pattern, ip);
+
+			if (mode == MatchAny && res)
+				return true;
+			else if (mode == MatchAll && !res)
+				return false;
+		}
+
+		return true;
+	} else {
+		String ip = argIps;
+		return Utility::CidrMatch(pattern, ip);
+	}
 }
 
 double ScriptUtils::Len(const Value& value)
@@ -114,23 +256,18 @@ Array::Ptr ScriptUtils::Union(const std::vector<Value>& arguments)
 {
 	std::set<Value> values;
 
-	BOOST_FOREACH(const Value& varr, arguments) {
+	for (const Value& varr : arguments) {
 		Array::Ptr arr = varr;
 
 		if (arr) {
 			ObjectLock olock(arr);
-			BOOST_FOREACH(const Value& value, arr) {
+			for (const Value& value : arr) {
 				values.insert(value);
 			}
 		}
 	}
 
-	Array::Ptr result = new Array();
-	BOOST_FOREACH(const Value& value, values) {
-		result->Add(value);
-	}
-
-	return result;
+	return Array::FromSet(values);
 }
 
 Array::Ptr ScriptUtils::Intersection(const std::vector<Value>& arguments)
@@ -168,7 +305,7 @@ Array::Ptr ScriptUtils::Intersection(const std::vector<Value>& arguments)
 		Array::SizeType len;
 		{
 			ObjectLock olock(arr1), xlock(arr2), ylock(result);
-			Array::Iterator it = std::set_intersection(arr1->Begin(), arr1->End(), arr2->Begin(), arr2->End(), result->Begin());
+			auto it = std::set_intersection(arr1->Begin(), arr1->End(), arr2->Begin(), arr2->End(), result->Begin());
 			len = it - result->Begin();
 		}
 		result->Resize(len);
@@ -192,7 +329,7 @@ void ScriptUtils::Log(const std::vector<Value>& arguments)
 		facility = "config";
 		message = arguments[0];
 	} else {
-		int sval = static_cast<int>(arguments[0]);
+		auto sval = static_cast<int>(arguments[0]);
 		severity = static_cast<LogSeverity>(sval);
 		facility = arguments[1];
 		message = arguments[2];
@@ -228,16 +365,16 @@ Array::Ptr ScriptUtils::Range(const std::vector<Value>& arguments)
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid number of arguments for range()"));
 	}
 
-	Array::Ptr result = new Array();
+	ArrayData result;
 
 	if ((start < end && increment <= 0) ||
-	    (start > end && increment >= 0))
-		return result;
+		(start > end && increment >= 0))
+		return new Array();
 
 	for (double i = start; (increment > 0 ? i < end : i > end); i += increment)
-		result->Add(i);
+		result.push_back(i);
 
-	return result;
+	return new Array(std::move(result));
 }
 
 Type::Ptr ScriptUtils::TypeOf(const Value& value)
@@ -247,48 +384,51 @@ Type::Ptr ScriptUtils::TypeOf(const Value& value)
 
 Array::Ptr ScriptUtils::Keys(const Dictionary::Ptr& dict)
 {
-	Array::Ptr result = new Array();
+	ArrayData result;
 
 	if (dict) {
 		ObjectLock olock(dict);
-		BOOST_FOREACH(const Dictionary::Pair& kv, dict) {
-			result->Add(kv.first);
+		for (const Dictionary::Pair& kv : dict) {
+			result.push_back(kv.first);
 		}
 	}
 
-	return result;
+	return new Array(std::move(result));
 }
 
 ConfigObject::Ptr ScriptUtils::GetObject(const Value& vtype, const String& name)
 {
-	String typeName;
+	Type::Ptr ptype;
 
 	if (vtype.IsObjectType<Type>())
-		typeName = static_cast<Type::Ptr>(vtype)->GetName();
+		ptype = vtype;
 	else
-		typeName = vtype;
+		ptype = Type::GetByName(vtype);
 
-	ConfigType::Ptr dtype = ConfigType::GetByName(typeName);
+	auto *ctype = dynamic_cast<ConfigType *>(ptype.get());
 
-	if (!dtype)
-		return ConfigObject::Ptr();
+	if (!ctype)
+		return nullptr;
 
-	return dtype->GetObject(name);
+	return ctype->GetObject(name);
 }
 
 Array::Ptr ScriptUtils::GetObjects(const Type::Ptr& type)
 {
-	ConfigType::Ptr dtype = ConfigType::GetByName(type->GetName());
+	if (!type)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid type: Must not be null"));
 
-	if (!dtype)
-		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid type name"));
+	auto *ctype = dynamic_cast<ConfigType *>(type.get());
 
-	Array::Ptr result = new Array();
+	if (!ctype)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid type: Type must inherit from 'ConfigObject'"));
 
-	BOOST_FOREACH(const ConfigObject::Ptr& object, dtype->GetObjects())
-		result->Add(object);
+	ArrayData result;
 
-	return result;
+	for (const ConfigObject::Ptr& object : ctype->GetObjects())
+		result.push_back(object);
+
+	return new Array(std::move(result));
 }
 
 void ScriptUtils::Assert(const Value& arg)
@@ -321,4 +461,45 @@ Array::Ptr ScriptUtils::TrackParents(const Object::Ptr& child)
 double ScriptUtils::Ptr(const Object::Ptr& object)
 {
 	return reinterpret_cast<intptr_t>(object.get());
+}
+
+static void GlobCallbackHelper(std::vector<String>& paths, const String& path)
+{
+	paths.push_back(path);
+}
+
+Value ScriptUtils::Glob(const std::vector<Value>& args)
+{
+	if (args.size() < 1)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Path must be specified."));
+
+	String pathSpec = args[0];
+	int type = GlobFile | GlobDirectory;
+
+	if (args.size() > 1)
+		type = args[1];
+
+	std::vector<String> paths;
+	Utility::Glob(pathSpec, std::bind(&GlobCallbackHelper, std::ref(paths), _1), type);
+
+	return Array::FromVector(paths);
+}
+
+Value ScriptUtils::GlobRecursive(const std::vector<Value>& args)
+{
+	if (args.size() < 2)
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Path and pattern must be specified."));
+
+	String path = args[0];
+	String pattern = args[1];
+
+	int type = GlobFile | GlobDirectory;
+
+	if (args.size() > 2)
+		type = args[2];
+
+	std::vector<String> paths;
+	Utility::GlobRecursive(path, pattern, std::bind(&GlobCallbackHelper, std::ref(paths), _1), type);
+
+	return Array::FromVector(paths);
 }

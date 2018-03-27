@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,6 +23,7 @@
 #include "remote/httprequest.hpp"
 #include "base/stream.hpp"
 #include "base/fifo.hpp"
+#include <vector>
 
 namespace icinga
 {
@@ -40,7 +41,7 @@ enum HttpResponseState
  *
  * @ingroup remote
  */
-struct I2_REMOTE_API HttpResponse
+struct HttpResponse
 {
 public:
 	bool Complete;
@@ -51,26 +52,30 @@ public:
 
 	Dictionary::Ptr Headers;
 
-	HttpResponse(const Stream::Ptr& stream, const HttpRequest& request);
+	HttpResponse(Stream::Ptr stream, const HttpRequest& request);
 
 	bool Parse(StreamReadContext& src, bool may_wait);
 	size_t ReadBody(char *data, size_t count);
+	size_t GetBodySize() const;
 
 	void SetStatus(int code, const String& message);
 	void AddHeader(const String& key, const String& value);
 	void WriteBody(const char *data, size_t count);
-	void Finish(void);
+	void Finish();
 
-	bool IsPeerConnected(void) const;
+	bool IsPeerConnected() const;
+
+	void RebindRequest(const HttpRequest& request);
 
 private:
 	HttpResponseState m_State;
-	boost::shared_ptr<ChunkReadContext> m_ChunkContext;
-	const HttpRequest& m_Request;
+	std::shared_ptr<ChunkReadContext> m_ChunkContext;
+	const HttpRequest *m_Request;
 	Stream::Ptr m_Stream;
 	FIFO::Ptr m_Body;
+	std::vector<String> m_Headers;
 
-	void FinishHeaders(void);
+	void FinishHeaders();
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define HOST_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/host.thpp"
+#include "icinga/host-ti.hpp"
 #include "icinga/macroresolver.hpp"
 #include "icinga/checkresult.hpp"
 
@@ -35,7 +35,7 @@ class Service;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API Host : public ObjectImpl<Host>, public MacroResolver
+class Host final : public ObjectImpl<Host>, public MacroResolver
 {
 public:
 	DECLARE_OBJECT(Host);
@@ -43,20 +43,21 @@ public:
 
 	intrusive_ptr<Service> GetServiceByShortName(const Value& name);
 
-	std::vector<intrusive_ptr<Service> > GetServices(void) const;
+	std::vector<intrusive_ptr<Service> > GetServices() const;
 	void AddService(const intrusive_ptr<Service>& service);
 	void RemoveService(const intrusive_ptr<Service>& service);
 
-	int GetTotalServices(void) const;
+	int GetTotalServices() const;
 
 	static HostState CalculateState(ServiceState state);
 
-	virtual HostState GetState(void) const override;
-	virtual HostState GetLastState(void) const override;
-	virtual HostState GetLastHardState(void) const override;
+	HostState GetState() const override;
+	HostState GetLastState() const override;
+	HostState GetLastHardState() const override;
+	int GetSeverity() const override;
 
-	virtual bool IsStateOK(ServiceState state) override;
-	virtual void SaveLastState(ServiceState state, double timestamp) override;
+	bool IsStateOK(ServiceState state) override;
+	void SaveLastState(ServiceState state, double timestamp) override;
 
 	static HostState StateFromString(const String& state);
 	static String StateToString(HostState state);
@@ -64,19 +65,19 @@ public:
 	static StateType StateTypeFromString(const String& state);
 	static String StateTypeToString(StateType state);
 
-	virtual bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
+	bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
 
 protected:
-	virtual void Stop(bool runtimeRemoved) override;
+	void Stop(bool runtimeRemoved) override;
 
-	virtual void OnAllConfigLoaded(void) override;
-	virtual void CreateChildObjects(const Type::Ptr& childType) override;
+	void OnAllConfigLoaded() override;
+	void CreateChildObjects(const Type::Ptr& childType) override;
 
 private:
 	mutable boost::mutex m_ServicesMutex;
 	std::map<String, intrusive_ptr<Service> > m_Services;
 
-	static void RefreshServicesCache(void);
+	static void RefreshServicesCache();
 };
 
 }

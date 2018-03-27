@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,16 +30,16 @@ namespace icinga
  *
  * @ingroup ido
  */
-struct I2_DB_IDO_API DbReference
+struct DbReference
 {
 public:
-	DbReference(void);
+	DbReference() = default;
 	DbReference(long id);
 
-	bool IsValid(void) const;
-	operator long(void) const;
+	bool IsValid() const;
+	operator long() const;
 private:
-	long m_Id;
+	long m_Id{-1};
 };
 
 }

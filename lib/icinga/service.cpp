@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,17 +18,13 @@
  ******************************************************************************/
 
 #include "icinga/service.hpp"
-#include "icinga/service.tcpp"
+#include "icinga/service-ti.cpp"
 #include "icinga/servicegroup.hpp"
 #include "icinga/scheduleddowntime.hpp"
 #include "icinga/pluginutility.hpp"
 #include "base/objectlock.hpp"
 #include "base/convert.hpp"
 #include "base/utility.hpp"
-#include <boost/foreach.hpp>
-#include <boost/bind/apply.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 
 using namespace icinga;
 
@@ -46,20 +42,18 @@ String ServiceNameComposer::MakeName(const String& shortName, const Object::Ptr&
 
 Dictionary::Ptr ServiceNameComposer::ParseName(const String& name) const
 {
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, name, boost::is_any_of("!"));
+	std::vector<String> tokens = name.Split("!");
 
 	if (tokens.size() < 2)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid Service name."));
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("host_name", tokens[0]);
-	result->Set("name", tokens[1]);
-
-	return result;
+	return new Dictionary({
+		{ "host_name", tokens[0] },
+		{ "name", tokens[1] }
+	});
 }
 
-void Service::OnAllConfigLoaded(void)
+void Service::OnAllConfigLoaded()
 {
 	ObjectImpl<Service>::OnAllConfigLoaded();
 
@@ -86,7 +80,7 @@ void Service::OnAllConfigLoaded(void)
 
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			ServiceGroup::Ptr sg = ServiceGroup::GetByName(name);
 
 			if (sg)
@@ -97,13 +91,13 @@ void Service::OnAllConfigLoaded(void)
 
 void Service::CreateChildObjects(const Type::Ptr& childType)
 {
-	if (childType->GetName() == "ScheduledDowntime")
+	if (childType == ScheduledDowntime::TypeInstance)
 		ScheduledDowntime::EvaluateApplyRules(this);
 
-	if (childType->GetName() == "Notification")
+	if (childType == Notification::TypeInstance)
 		Notification::EvaluateApplyRules(this);
 
-	if (childType->GetName() == "Dependency")
+	if (childType == Dependency::TypeInstance)
 		Dependency::EvaluateApplyRules(this);
 }
 
@@ -113,7 +107,7 @@ Service::Ptr Service::GetByNamePair(const String& hostName, const String& servic
 		Host::Ptr host = Host::GetByName(hostName);
 
 		if (!host)
-			return Service::Ptr();
+			return nullptr;
 
 		return host->GetServiceByShortName(serviceName);
 	} else {
@@ -121,9 +115,39 @@ Service::Ptr Service::GetByNamePair(const String& hostName, const String& servic
 	}
 }
 
-Host::Ptr Service::GetHost(void) const
+Host::Ptr Service::GetHost() const
 {
 	return m_Host;
+}
+
+/* keep in sync with Host::GetSeverity() */
+int Service::GetSeverity() const
+{
+	int severity = 0;
+
+	ObjectLock olock(this);
+	ServiceState state = GetStateRaw();
+
+	if (!HasBeenChecked())
+		severity |= SeverityFlagPending;
+	else if (state == ServiceWarning)
+		severity |= SeverityFlagWarning;
+	else if (state == ServiceUnknown)
+		severity |= SeverityFlagUnknown;
+	else if (state == ServiceCritical)
+		severity |= SeverityFlagCritical;
+
+	/* TODO: Add host reachability and handled */
+	if (IsInDowntime())
+		severity |= SeverityFlagDowntime;
+	else if (IsAcknowledged())
+		severity |= SeverityFlagAcknowledgement;
+	else
+		severity |= SeverityFlagUnhandled;
+
+	olock.Unlock();
+
+	return severity;
 }
 
 bool Service::IsStateOK(ServiceState state)
@@ -239,13 +263,13 @@ bool Service::ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Valu
 	return false;
 }
 
-boost::tuple<Host::Ptr, Service::Ptr> icinga::GetHostService(const Checkable::Ptr& checkable)
+std::pair<Host::Ptr, Service::Ptr> icinga::GetHostService(const Checkable::Ptr& checkable)
 {
 	Service::Ptr service = dynamic_pointer_cast<Service>(checkable);
 
 	if (service)
-		return boost::make_tuple(service->GetHost(), service);
+		return std::make_pair(service->GetHost(), service);
 	else
-		return boost::make_tuple(static_pointer_cast<Host>(checkable), Service::Ptr());
+		return std::make_pair(static_pointer_cast<Host>(checkable), nullptr);
 }
 

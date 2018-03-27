@@ -1,7 +1,7 @@
 %{
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -117,7 +117,7 @@ do {							\
 
 	while (*yptr)
 		yyextra->m_LexBuffer << *yptr++;
-		       	       }
+				}
 
 <STRING><<EOF>>			{
 	BOOST_THROW_EXCEPTION(ScriptError("End-of-file while in string literal", DebugInfoRange(yyextra->m_LocationBegin, *yylloc)));
@@ -180,7 +180,9 @@ this				return T_THIS;
 globals				return T_GLOBALS;
 locals				return T_LOCALS;
 use				return T_USE;
+__using				return T_USING;
 apply				return T_APPLY;
+default				return T_DEFAULT;
 to				return T_TO;
 where				return T_WHERE;
 import				return T_IMPORT;
@@ -195,6 +197,8 @@ if				return T_IF;
 else				return T_ELSE;
 while				return T_WHILE;
 throw				return T_THROW;
+try				return T_TRY;
+except				return T_EXCEPT;
 ignore_on_error			return T_IGNORE_ON_ERROR;
 current_filename		return T_CURRENT_FILENAME;
 current_line			return T_CURRENT_LINE;
@@ -250,13 +254,13 @@ in				return T_IN;
 
 %%
 
-void ConfigCompiler::InitializeScanner(void)
+void ConfigCompiler::InitializeScanner()
 {
 	yylex_init(&m_Scanner);
 	yyset_extra(this, m_Scanner);
 }
 
-void ConfigCompiler::DestroyScanner(void)
+void ConfigCompiler::DestroyScanner()
 {
 	yylex_destroy(m_Scanner);
 }

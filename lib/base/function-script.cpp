@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,18 +32,18 @@ static Value FunctionCall(const std::vector<Value>& args)
 
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Function::Ptr self = static_cast<Function::Ptr>(vframe->Self);
+	REQUIRE_NOT_NULL(self);
 
-	ScriptFrame uframe(args[0]);
 	std::vector<Value> uargs(args.begin() + 1, args.end());
-	return self->Invoke(uargs);
+	return self->InvokeThis(args[0], uargs);
 }
 
 static Value FunctionCallV(const Value& thisArg, const Array::Ptr& args)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Function::Ptr self = static_cast<Function::Ptr>(vframe->Self);
+	REQUIRE_NOT_NULL(self);
 
-	ScriptFrame uframe(thisArg);
 	std::vector<Value> uargs;
 
 	{
@@ -51,19 +51,16 @@ static Value FunctionCallV(const Value& thisArg, const Array::Ptr& args)
 		uargs = std::vector<Value>(args->Begin(), args->End());
 	}
 
-	return self->Invoke(uargs);
+	return self->InvokeThis(thisArg, uargs);
 }
 
 
-Object::Ptr Function::GetPrototype(void)
+Object::Ptr Function::GetPrototype()
 {
-	static Dictionary::Ptr prototype;
-
-	if (!prototype) {
-		prototype = new Dictionary();
-		prototype->Set("call", new Function(WrapFunction(FunctionCall)));
-		prototype->Set("callv", new Function(WrapFunction(FunctionCallV)));
-	}
+	static Dictionary::Ptr prototype = new Dictionary({
+		{ "call", new Function("Function#call", FunctionCall) },
+		{ "callv", new Function("Function#callv", FunctionCallV) }
+	});
 
 	return prototype;
 }

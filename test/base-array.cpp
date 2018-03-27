@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,8 +20,7 @@
 #include "base/array.hpp"
 #include "base/objectlock.hpp"
 #include "base/json.hpp"
-#include <boost/test/unit_test.hpp>
-#include <boost/foreach.hpp>
+#include <BoostTestTargetConfig.h>
 
 using namespace icinga;
 
@@ -92,7 +91,7 @@ BOOST_AUTO_TEST_CASE(remove)
 
 	{
 		ObjectLock olock(array);
-		Array::Iterator it = array->Begin();
+		auto it = array->Begin();
 		array->Remove(it);
 	}
 
@@ -114,7 +113,7 @@ BOOST_AUTO_TEST_CASE(foreach)
 
 	int n = 0;
 
-	BOOST_FOREACH(const Value& item, array) {
+	for (const Value& item : array) {
 		BOOST_CHECK(n != 0 || item == 7);
 		BOOST_CHECK(n != 1 || item == 2);
 		BOOST_CHECK(n != 2 || item == 5);

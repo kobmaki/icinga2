@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -16,48 +16,48 @@
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
 set(cli_SOURCES
-  apisetupcommand.cpp apisetuputility.cpp
-  nodeaddcommand.cpp nodeblackandwhitelistcommand.cpp nodelistcommand.cpp noderemovecommand.cpp
-  nodesetcommand.cpp nodesetupcommand.cpp nodeupdateconfigcommand.cpp nodewizardcommand.cpp nodeutility.cpp
-  clicommand.cpp
-  consolecommand.cpp
-  daemoncommand.cpp daemonutility.cpp
-  featureenablecommand.cpp featuredisablecommand.cpp featurelistcommand.cpp featureutility.cpp
-  objectlistcommand.cpp objectlistutility.cpp
-  pkinewcacommand.cpp pkinewcertcommand.cpp pkisigncsrcommand.cpp pkirequestcommand.cpp pkisavecertcommand.cpp pkiticketcommand.cpp
-  pkiutility.cpp
-  repositoryclearchangescommand.cpp repositorycommitcommand.cpp repositoryobjectcommand.cpp repositoryutility.cpp
-  variablegetcommand.cpp variablelistcommand.cpp variableutility.cpp
-  troubleshootcommand.cpp
+  i2-cli.hpp
+  apisetupcommand.cpp apisetupcommand.hpp
+  apiusercommand.cpp apiusercommand.hpp
+  apisetuputility.cpp apisetuputility.hpp
+  calistcommand.cpp calistcommand.hpp
+  casigncommand.cpp casigncommand.hpp
+  clicommand.cpp clicommand.hpp
+  consolecommand.cpp consolecommand.hpp
+  daemoncommand.cpp daemoncommand.hpp
+  daemonutility.cpp daemonutility.hpp
+  editline.hpp
+  featuredisablecommand.cpp featuredisablecommand.hpp
+  featureenablecommand.cpp featureenablecommand.hpp
+  featurelistcommand.cpp featurelistcommand.hpp
+  featureutility.cpp featureutility.hpp
+  internalsignalcommand.cpp internalsignalcommand.hpp
+  nodesetupcommand.cpp nodesetupcommand.hpp
+  nodeutility.cpp nodeutility.hpp
+  nodewizardcommand.cpp nodewizardcommand.hpp
+  objectlistcommand.cpp objectlistcommand.hpp
+  objectlistutility.cpp objectlistutility.hpp
+  pkinewcacommand.cpp pkinewcacommand.hpp
+  pkinewcertcommand.cpp pkinewcertcommand.hpp
+  pkirequestcommand.cpp pkirequestcommand.hpp
+  pkisavecertcommand.cpp pkisavecertcommand.hpp
+  pkisigncsrcommand.cpp pkisigncsrcommand.hpp
+  pkiticketcommand.cpp pkiticketcommand.hpp
+  troubleshootcommand.cpp troubleshootcommand.hpp
+  variablegetcommand.cpp variablegetcommand.hpp
+  variablelistcommand.cpp variablelistcommand.hpp
+  variableutility.cpp variableutility.hpp
 )
 
 if(ICINGA2_UNITY_BUILD)
-    mkunity_target(cli cli_SOURCES)
+  mkunity_target(cli cli cli_SOURCES)
 endif()
 
-add_library(cli SHARED ${cli_SOURCES})
+add_library(cli OBJECT ${cli_SOURCES})
 
-target_link_libraries(cli ${Boost_LIBRARIES} base config remote)
-
-if(EDITLINE_FOUND)
-  target_link_libraries(cli ${EDITLINE_LIBRARIES})
-  include_directories(${EDITLINE_INCLUDE_DIR})
-endif()
-
-if(TERMCAP_FOUND)
-  target_link_libraries(cli ${TERMCAP_LIBRARIES})
-  include_directories(${TERMCAP_INCLUDE_DIR})
-endif()
+add_dependencies(cli base config remote)
 
 set_target_properties (
   cli PROPERTIES
-  INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR}/icinga2
-  DEFINE_SYMBOL I2_CLI_BUILD
   FOLDER Lib
-)
-
-install(
-  TARGETS cli
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
 )

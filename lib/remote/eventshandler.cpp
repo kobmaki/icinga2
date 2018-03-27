@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,7 +24,6 @@
 #include "config/expression.hpp"
 #include "base/objectlock.hpp"
 #include "base/json.hpp"
-#include <boost/foreach.hpp>
 #include <boost/algorithm/string/replace.hpp>
 
 using namespace icinga;
@@ -40,20 +39,20 @@ bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request
 		return false;
 
 	if (request.ProtocolVersion == HttpVersion10) {
-		HttpUtility::SendJsonError(response, 400, "HTTP/1.0 not supported for event streams.");
+		HttpUtility::SendJsonError(response, params, 400, "HTTP/1.0 not supported for event streams.");
 		return true;
 	}
 
 	Array::Ptr types = params->Get("types");
 
 	if (!types) {
-		HttpUtility::SendJsonError(response, 400, "'types' query parameter is required.");
+		HttpUtility::SendJsonError(response, params, 400, "'types' query parameter is required.");
 		return true;
 	}
 
 	{
 		ObjectLock olock(types);
-		BOOST_FOREACH(const String& type, types) {
+		for (const String& type : types) {
 			FilterUtility::CheckPermission(user, "events/" + type);
 		}
 	}
@@ -61,13 +60,13 @@ bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request
 	String queueName = HttpUtility::GetLastParameter(params, "queue");
 
 	if (queueName.IsEmpty()) {
-		HttpUtility::SendJsonError(response, 400, "'queue' query parameter is required.");
+		HttpUtility::SendJsonError(response, params, 400, "'queue' query parameter is required.");
 		return true;
 	}
 
 	String filter = HttpUtility::GetLastParameter(params, "filter");
 
-	Expression *ufilter = NULL;
+	std::unique_ptr<Expression> ufilter;
 
 	if (!filter.IsEmpty())
 		ufilter = ConfigCompiler::CompileText("<API query>", filter);
@@ -76,12 +75,12 @@ bool EventsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request
 	EventQueue::Ptr queue = EventQueue::GetByName(queueName);
 
 	if (!queue) {
-		queue = new EventQueue();
+		queue = new EventQueue(queueName);
 		EventQueue::Register(queueName, queue);
 	}
 
 	queue->SetTypes(types->ToSet<String>());
-	queue->SetFilter(ufilter);
+	queue->SetFilter(std::move(ufilter));
 
 	queue->AddClient(&request);
 

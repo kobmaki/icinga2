@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,6 +22,7 @@
 
 #include <string>
 #include <istream>
+#include <utility>
 #include <vector>
 #include <algorithm>
 #include <map>
@@ -53,8 +54,8 @@ struct FieldAccessor
 	std::string Accessor;
 	bool Pure;
 
-	FieldAccessor(FieldAccessorType type, const std::string& accessor, bool pure)
-		: Type(type), Accessor(accessor), Pure(pure)
+	FieldAccessor(FieldAccessorType type, std::string accessor, bool pure)
+		: Type(type), Accessor(std::move(accessor)), Pure(pure)
 	{ }
 };
 
@@ -72,20 +73,19 @@ enum FieldAttribute
 	FARequired = 256,
 	FANavigation = 512,
 	FANoUserModify = 1024,
-	FANoUserView = 2048
+	FANoUserView = 2048,
+	FADeprecated = 4096,
+	FAGetVirtual = 8192,
+	FASetVirtual = 16384
 };
 
 struct FieldType
 {
-	bool IsName;
+	bool IsName{false};
 	std::string TypeName;
-	int ArrayRank;
+	int ArrayRank{0};
 
-	FieldType(void)
-		: IsName(false), ArrayRank(0)
-	{ }
-
-	inline std::string GetRealType(void) const
+	inline std::string GetRealType() const
 	{
 		if (ArrayRank > 0)
 			return "Array::Ptr";
@@ -96,7 +96,7 @@ struct FieldType
 		return TypeName;
 	}
 
-	inline std::string GetArgumentType(void) const
+	inline std::string GetArgumentType() const
 	{
 		std::string realType = GetRealType();
 
@@ -109,25 +109,21 @@ struct FieldType
 
 struct Field
 {
-	int Attributes;
+	int Attributes{0};
 	FieldType Type;
 	std::string Name;
 	std::string AlternativeName;
 	std::string GetAccessor;
-	bool PureGetAccessor;
+	bool PureGetAccessor{false};
 	std::string SetAccessor;
-	bool PureSetAccessor;
+	bool PureSetAccessor{false};
 	std::string DefaultAccessor;
 	std::string TrackAccessor;
 	std::string NavigationName;
 	std::string NavigateAccessor;
-	bool PureNavigateAccessor;
+	bool PureNavigateAccessor{false};
 
-	Field(void)
-		: Attributes(0), PureGetAccessor(false), PureSetAccessor(false), PureNavigateAccessor(false)
-	{ }
-
-	inline std::string GetFriendlyName(void) const
+	inline std::string GetFriendlyName() const
 	{
 		if (!AlternativeName.empty())
 			return AlternativeName;
@@ -135,14 +131,14 @@ struct Field
 		bool cap = true;
 		std::string name = Name;
 
-		for (size_t i = 0; i < name.size(); i++) {
-			if (name[i] == '_') {
+		for (char& ch : name) {
+			if (ch == '_') {
 				cap = true;
 				continue;
 			}
 
 			if (cap) {
-				name[i] = toupper(name[i]);
+				ch = toupper(ch);
 				cap = false;
 			}
 		}
@@ -204,17 +200,17 @@ struct Validator
 class ClassCompiler
 {
 public:
-	ClassCompiler(const std::string& path, std::istream& input, std::ostream& oimpl, std::ostream& oheader);
-	~ClassCompiler(void);
+	ClassCompiler(std::string path, std::istream& input, std::ostream& oimpl, std::ostream& oheader);
+	~ClassCompiler();
 
-	void Compile(void);
+	void Compile();
 
-	std::string GetPath(void) const;
+	std::string GetPath() const;
 
-	void InitializeScanner(void);
-	void DestroyScanner(void);
+	void InitializeScanner();
+	void DestroyScanner();
 
-	void *GetScanner(void);
+	void *GetScanner();
 
 	size_t ReadInput(char *buffer, size_t max_size);
 
@@ -228,15 +224,15 @@ public:
 	void HandleNamespaceEnd(const ClassDebugInfo& locp);
 	void HandleCode(const std::string& code, const ClassDebugInfo& locp);
 	void HandleLibrary(const std::string& library, const ClassDebugInfo& locp);
-	void HandleMissingValidators(void);
+	void HandleMissingValidators();
 
 	void CodeGenValidator(const std::string& name, const std::string& klass, const std::vector<Rule>& rules, const std::string& field, const FieldType& fieldType, ValidatorType validatorType);
 	void CodeGenValidatorSubrules(const std::string& name, const std::string& klass, const std::vector<Rule>& rules);
 
 	static void CompileFile(const std::string& inputpath, const std::string& implpath,
-	    const std::string& headerpath);
+		const std::string& headerpath);
 	static void CompileStream(const std::string& path, std::istream& input,
-	    std::ostream& oimpl, std::ostream& oheader);
+		std::ostream& oimpl, std::ostream& oheader);
 
 	static void OptimizeStructLayout(std::vector<Field>& fields);
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/host.hpp"
-#include "icinga/host.tcpp"
+#include "icinga/host-ti.cpp"
 #include "icinga/service.hpp"
 #include "icinga/hostgroup.hpp"
 #include "icinga/pluginutility.hpp"
@@ -28,13 +28,12 @@
 #include "base/utility.hpp"
 #include "base/debug.hpp"
 #include "base/json.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_TYPE(Host);
 
-void Host::OnAllConfigLoaded(void)
+void Host::OnAllConfigLoaded()
 {
 	ObjectImpl<Host>::OnAllConfigLoaded();
 
@@ -56,7 +55,7 @@ void Host::OnAllConfigLoaded(void)
 
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			HostGroup::Ptr hg = HostGroup::GetByName(name);
 
 			if (hg)
@@ -67,16 +66,16 @@ void Host::OnAllConfigLoaded(void)
 
 void Host::CreateChildObjects(const Type::Ptr& childType)
 {
-	if (childType->GetName() == "ScheduledDowntime")
+	if (childType == ScheduledDowntime::TypeInstance)
 		ScheduledDowntime::EvaluateApplyRules(this);
 
-	if (childType->GetName() == "Notification")
+	if (childType == Notification::TypeInstance)
 		Notification::EvaluateApplyRules(this);
 
-	if (childType->GetName() == "Dependency")
+	if (childType == Dependency::TypeInstance)
 		Dependency::EvaluateApplyRules(this);
 
-	if (childType->GetName() == "Service")
+	if (childType == Service::TypeInstance)
 		Service::EvaluateApplyRules(this);
 }
 
@@ -89,7 +88,7 @@ void Host::Stop(bool runtimeRemoved)
 	if (groups) {
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			HostGroup::Ptr hg = HostGroup::GetByName(name);
 
 			if (hg)
@@ -100,14 +99,14 @@ void Host::Stop(bool runtimeRemoved)
 	// TODO: unregister slave services/notifications?
 }
 
-std::vector<Service::Ptr> Host::GetServices(void) const
+std::vector<Service::Ptr> Host::GetServices() const
 {
 	boost::mutex::scoped_lock lock(m_ServicesMutex);
 
 	std::vector<Service::Ptr> services;
 	services.reserve(m_Services.size());
 	typedef std::pair<String, Service::Ptr> ServicePair;
-	BOOST_FOREACH(const ServicePair& kv, m_Services) {
+	for (const ServicePair& kv : m_Services) {
 		services.push_back(kv.second);
 	}
 
@@ -128,7 +127,7 @@ void Host::RemoveService(const Service::Ptr& service)
 	m_Services.erase(service->GetShortName());
 }
 
-int Host::GetTotalServices(void) const
+int Host::GetTotalServices() const
 {
 	return GetServices().size();
 }
@@ -139,13 +138,13 @@ Service::Ptr Host::GetServiceByShortName(const Value& name)
 		{
 			boost::mutex::scoped_lock lock(m_ServicesMutex);
 
-			std::map<String, Service::Ptr>::const_iterator it = m_Services.find(name);
+			auto it = m_Services.find(name);
 
 			if (it != m_Services.end())
 				return it->second;
 		}
 
-		return Service::Ptr();
+		return nullptr;
 	} else if (name.IsObjectType<Dictionary>()) {
 		Dictionary::Ptr dict = name;
 		String short_name;
@@ -167,19 +166,47 @@ HostState Host::CalculateState(ServiceState state)
 	}
 }
 
-HostState Host::GetState(void) const
+HostState Host::GetState() const
 {
 	return CalculateState(GetStateRaw());
 }
 
-HostState Host::GetLastState(void) const
+HostState Host::GetLastState() const
 {
 	return CalculateState(GetLastStateRaw());
 }
 
-HostState Host::GetLastHardState(void) const
+HostState Host::GetLastHardState() const
 {
 	return CalculateState(GetLastHardStateRaw());
+}
+
+/* keep in sync with Service::GetSeverity() */
+int Host::GetSeverity() const
+{
+	int severity = 0;
+
+	ObjectLock olock(this);
+	ServiceState state = GetStateRaw();
+
+	/* OK/Warning = Up, Critical/Unknownb = Down */
+	if (!HasBeenChecked())
+		severity |= SeverityFlagPending;
+	else if (state == ServiceUnknown)
+		severity |= SeverityFlagCritical;
+	else if (state == ServiceCritical)
+		severity |= SeverityFlagCritical;
+
+	if (IsInDowntime())
+		severity |= SeverityFlagDowntime;
+	else if (IsAcknowledged())
+		severity |= SeverityFlagAcknowledgement;
+	else
+		severity |= SeverityFlagUnhandled;
+
+	olock.Unlock();
+
+	return severity;
 }
 
 bool Host::IsStateOK(ServiceState state)
@@ -261,7 +288,7 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 		*result = Utility::GetTime() - GetLastStateChange();
 		return true;
 	} else if (macro == "num_services" || macro == "num_services_ok" || macro == "num_services_warning"
-		    || macro == "num_services_unknown" || macro == "num_services_critical") {
+			|| macro == "num_services_unknown" || macro == "num_services_critical") {
 			int filter = -1;
 			int count = 0;
 
@@ -274,7 +301,7 @@ bool Host::ResolveMacro(const String& macro, const CheckResult::Ptr&, Value *res
 			else if (macro == "num_services_critical")
 				filter = ServiceCritical;
 
-			BOOST_FOREACH(const Service::Ptr& service, GetServices()) {
+			for (const Service::Ptr& service : GetServices()) {
 				if (filter != -1 && service->GetState() != filter)
 					continue;
 

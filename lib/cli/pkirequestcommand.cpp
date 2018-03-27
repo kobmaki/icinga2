@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "cli/pkirequestcommand.hpp"
-#include "cli/pkiutility.hpp"
+#include "remote/pkiutility.hpp"
 #include "base/logger.hpp"
 #include "base/tlsutility.hpp"
 #include <iostream>
@@ -28,27 +28,27 @@ namespace po = boost::program_options;
 
 REGISTER_CLICOMMAND("pki/request", PKIRequestCommand);
 
-String PKIRequestCommand::GetDescription(void) const
+String PKIRequestCommand::GetDescription() const
 {
 	return "Sends a PKI request to Icinga 2.";
 }
 
-String PKIRequestCommand::GetShortDescription(void) const
+String PKIRequestCommand::GetShortDescription() const
 {
 	return "requests a certificate";
 }
 
 void PKIRequestCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
-	    ("key", po::value<std::string>(), "Key file path (input)")
-	    ("cert", po::value<std::string>(), "Certificate file path (input + output)")
-	    ("ca", po::value<std::string>(), "CA file path (output)")
-	    ("trustedcert", po::value<std::string>(), "Trusted certificate file path (input)")
-	    ("host", po::value<std::string>(), "Icinga 2 host")
-	    ("port", po::value<std::string>(), "Icinga 2 port")
-	    ("ticket", po::value<std::string>(), "Icinga 2 PKI ticket");
+		("key", po::value<std::string>(), "Key file path (input)")
+		("cert", po::value<std::string>(), "Certificate file path (input + output)")
+		("ca", po::value<std::string>(), "CA file path (output)")
+		("trustedcert", po::value<std::string>(), "Trusted certificate file path (input)")
+		("host", po::value<std::string>(), "Icinga 2 host")
+		("port", po::value<std::string>(), "Icinga 2 port")
+		("ticket", po::value<std::string>(), "Icinga 2 PKI ticket");
 }
 
 std::vector<String> PKIRequestCommand::GetArgumentSuggestions(const String& argument, const String& word) const
@@ -95,17 +95,16 @@ int PKIRequestCommand::Run(const boost::program_options::variables_map& vm, cons
 		return 1;
 	}
 
-	if (!vm.count("ticket")) {
-		Log(LogCritical, "cli", "Ticket (--ticket) must be specified.");
-		return 1;
-	}
-
 	String port = "5665";
+	String ticket;
 
 	if (vm.count("port"))
 		port = vm["port"].as<std::string>();
 
+	if (vm.count("ticket"))
+		ticket = vm["ticket"].as<std::string>();
+
 	return PkiUtility::RequestCertificate(vm["host"].as<std::string>(), port, vm["key"].as<std::string>(),
-	    vm["cert"].as<std::string>(), vm["ca"].as<std::string>(), GetX509Certificate(vm["trustedcert"].as<std::string>()),
-	    vm["ticket"].as<std::string>());
+		vm["cert"].as<std::string>(), vm["ca"].as<std::string>(), GetX509Certificate(vm["trustedcert"].as<std::string>()),
+		ticket);
 }

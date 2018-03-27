@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,19 +32,19 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API NetworkStream : public Stream
+class NetworkStream final : public Stream
 {
 public:
 	DECLARE_PTR_TYPEDEFS(NetworkStream);
 
-	NetworkStream(const Socket::Ptr& socket);
+	NetworkStream(Socket::Ptr socket);
 
-	virtual size_t Read(void *buffer, size_t count, bool allow_partial = false) override;
-	virtual void Write(const void *buffer, size_t count) override;
+	size_t Read(void *buffer, size_t count, bool allow_partial = false) override;
+	void Write(const void *buffer, size_t count) override;
 
-	virtual void Close(void) override;
+	void Close() override;
 
-	virtual bool IsEof(void) const override;
+	bool IsEof() const override;
 
 private:
 	Socket::Ptr m_Socket;

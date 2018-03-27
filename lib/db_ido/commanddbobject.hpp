@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,18 +31,15 @@ namespace icinga
  *
  * @ingroup ido
  */
-class CommandDbObject : public DbObject
+class CommandDbObject final : public DbObject
 {
 public:
 	DECLARE_PTR_TYPEDEFS(CommandDbObject);
 
 	CommandDbObject(const DbType::Ptr& type, const String& name1, const String& name2);
 
-	virtual Dictionary::Ptr GetConfigFields(void) const override;
-	virtual Dictionary::Ptr GetStatusFields(void) const override;
-
-protected:
-	virtual void OnConfigUpdate(void) override;
+	Dictionary::Ptr GetConfigFields() const override;
+	Dictionary::Ptr GetStatusFields() const override;
 };
 
 }

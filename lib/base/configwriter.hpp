@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,7 @@
 #include "base/object.hpp"
 #include "base/array.hpp"
 #include "base/dictionary.hpp"
-#include <fstream>
+#include <iosfwd>
 
 namespace icinga
 {
@@ -33,14 +33,14 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API ConfigIdentifier : public Object
+class ConfigIdentifier final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConfigIdentifier);
 
-	ConfigIdentifier(const String& name);
+	ConfigIdentifier(String name);
 
-	String GetName(void) const;
+	String GetName() const;
 
 private:
 	String m_Name;
@@ -51,7 +51,7 @@ private:
  *
  * @ingroup base
  */
-class I2_BASE_API ConfigWriter
+class ConfigWriter
 {
 public:
 	static void EmitBoolean(std::ostream& fp, bool val);
@@ -61,22 +61,22 @@ public:
 	static void EmitArray(std::ostream& fp, int indentLevel, const Array::Ptr& val);
 	static void EmitArrayItems(std::ostream& fp, int indentLevel, const Array::Ptr& val);
 	static void EmitScope(std::ostream& fp, int indentLevel, const Dictionary::Ptr& val,
-	    const Array::Ptr& imports = Array::Ptr(), bool splitDot = false);
+		const Array::Ptr& imports = nullptr, bool splitDot = false);
 	static void EmitValue(std::ostream& fp, int indentLevel, const Value& val);
 	static void EmitRaw(std::ostream& fp, const String& val);
 	static void EmitIndent(std::ostream& fp, int indentLevel);
 
 	static void EmitIdentifier(std::ostream& fp, const String& identifier, bool inAssignment);
 	static void EmitConfigItem(std::ostream& fp, const String& type, const String& name, bool isTemplate,
-	    bool ignoreOnError, const Array::Ptr& imports, const Dictionary::Ptr& attrs);
+		bool ignoreOnError, const Array::Ptr& imports, const Dictionary::Ptr& attrs);
 
 	static void EmitComment(std::ostream& fp, const String& text);
 	static void EmitFunctionCall(std::ostream& fp, const String& name, const Array::Ptr& arguments);
 
-	static const std::vector<String>& GetKeywords(void);
+	static const std::vector<String>& GetKeywords();
 private:
 	static String EscapeIcingaString(const String& str);
-	ConfigWriter(void);
+	ConfigWriter();
 };
 
 }

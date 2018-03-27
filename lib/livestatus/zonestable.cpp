@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,17 +20,16 @@
 #include "livestatus/zonestable.hpp"
 #include "remote/zone.hpp"
 #include "base/configtype.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-ZonesTable::ZonesTable(void)
+ZonesTable::ZonesTable()
 {
 	AddColumns(this);
 }
 
 void ZonesTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "name", Column(&ZonesTable::NameAccessor, objectAccessor));
 	table->AddColumn(prefix + "parent", Column(&ZonesTable::ParentAccessor, objectAccessor));
@@ -38,19 +37,19 @@ void ZonesTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "global", Column(&ZonesTable::GlobalAccessor, objectAccessor));
 }
 
-String ZonesTable::GetName(void) const
+String ZonesTable::GetName() const
 {
 	return "zones";
 }
 
-String ZonesTable::GetPrefix(void) const
+String ZonesTable::GetPrefix() const
 {
 	return "zone";
 }
 
 void ZonesTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const Zone::Ptr& zone, ConfigType::GetObjectsByType<Zone>()) {
+	for (const Zone::Ptr& zone : ConfigType::GetObjectsByType<Zone>()) {
 		if (!addRowFn(zone, LivestatusGroupByNone, Empty))
 			return;
 	}
@@ -90,16 +89,13 @@ Value ZonesTable::EndpointsAccessor(const Value& row)
 
 	std::set<Endpoint::Ptr> endpoints = zone->GetEndpoints();
 
-	Array::Ptr endpoint_names = new Array();
+	ArrayData result;
 
-	BOOST_FOREACH(const Endpoint::Ptr endpoint, endpoints) {
-		endpoint_names->Add(endpoint->GetName());
+	for (const Endpoint::Ptr& endpoint : endpoints) {
+		result.push_back(endpoint->GetName());
 	}
 
-	if (!endpoint_names)
-		return Empty;
-
-	return endpoint_names;
+	return new Array(std::move(result));
 }
 
 Value ZonesTable::GlobalAccessor(const Value& row)

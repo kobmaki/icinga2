@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,19 +27,12 @@
 #include "base/context.hpp"
 #include "base/workqueue.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-INITIALIZE_ONCE(&Dependency::RegisterApplyRuleHandler);
-
-void Dependency::RegisterApplyRuleHandler(void)
-{
-	std::vector<String> targets;
-	targets.push_back("Host");
-	targets.push_back("Service");
-	ApplyRule::RegisterType("Dependency", targets);
-}
+INITIALIZE_ONCE([]() {
+	ApplyRule::RegisterType("Dependency", { "Host", "Service" });
+});
 
 bool Dependency::EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, const String& name, ScriptFrame& frame, const ApplyRule& rule)
 {
@@ -48,35 +41,39 @@ bool Dependency::EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, cons
 
 	DebugInfo di = rule.GetDebugInfo();
 
+#ifdef _DEBUG
 	Log(LogDebug, "Dependency")
 		<< "Applying dependency '" << name << "' to object '" << checkable->GetName() << "' for rule " << di;
+#endif /* _DEBUG */
 
-	ConfigItemBuilder::Ptr builder = new ConfigItemBuilder(di);
-	builder->SetType("Dependency");
-	builder->SetName(name);
-	builder->SetScope(frame.Locals->ShallowClone());
-	builder->SetIgnoreOnError(rule.GetIgnoreOnError());
+	ConfigItemBuilder builder{di};
+	builder.SetType(Dependency::TypeInstance);
+	builder.SetName(name);
+	builder.SetScope(frame.Locals->ShallowClone());
+	builder.SetIgnoreOnError(rule.GetIgnoreOnError());
 
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "parent_host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "child_host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "parent_host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "child_host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
 
 	if (service)
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "child_service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "child_service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
 
 	String zone = checkable->GetZoneName();
 
 	if (!zone.IsEmpty())
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
-	
-	builder->AddExpression(new OwnedExpression(rule.GetExpression()));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
 
-	ConfigItem::Ptr dependencyItem = builder->Compile();
+	builder.AddExpression(new ImportDefaultTemplatesExpression());
+
+	builder.AddExpression(new OwnedExpression(rule.GetExpression()));
+
+	ConfigItem::Ptr dependencyItem = builder.Compile();
 	dependencyItem->Register();
 
 	return true;
@@ -94,7 +91,7 @@ bool Dependency::EvaluateApplyRule(const Checkable::Ptr& checkable, const ApplyR
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (rule.GetScope())
 		rule.GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("host", host);
@@ -111,9 +108,7 @@ bool Dependency::EvaluateApplyRule(const Checkable::Ptr& checkable, const ApplyR
 			return false;
 		}
 	} else {
-		Array::Ptr instances = new Array();
-		instances->Add("");
-		vinstances = instances;
+		vinstances = new Array({ "" });
 	}
 
 	bool match = false;
@@ -123,10 +118,9 @@ bool Dependency::EvaluateApplyRule(const Checkable::Ptr& checkable, const ApplyR
 			BOOST_THROW_EXCEPTION(ScriptError("Dictionary iterator requires value to be a dictionary.", di));
 
 		Array::Ptr arr = vinstances;
-		Array::Ptr arrclone = arr->ShallowClone();
 
-		ObjectLock olock(arrclone);
-		BOOST_FOREACH(const Value& instance, arrclone) {
+		ObjectLock olock(arr);
+		for (const Value& instance : arr) {
 			String name = rule.GetName();
 
 			if (!rule.GetFKVar().IsEmpty()) {
@@ -140,10 +134,10 @@ bool Dependency::EvaluateApplyRule(const Checkable::Ptr& checkable, const ApplyR
 	} else if (vinstances.IsObjectType<Dictionary>()) {
 		if (rule.GetFVVar().IsEmpty())
 			BOOST_THROW_EXCEPTION(ScriptError("Array iterator requires value to be an array.", di));
-	
+
 		Dictionary::Ptr dict = vinstances;
 
-		BOOST_FOREACH(const String& key, dict->GetKeys()) {
+		for (const String& key : dict->GetKeys()) {
 			frame.Locals->Set(rule.GetFKVar(), key);
 			frame.Locals->Set(rule.GetFVVar(), dict->Get(key));
 
@@ -159,7 +153,7 @@ void Dependency::EvaluateApplyRules(const Host::Ptr& host)
 {
 	CONTEXT("Evaluating 'apply' rules for host '" + host->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("Dependency")) {
+	for (ApplyRule& rule : ApplyRule::GetRules("Dependency")) {
 		if (rule.GetTargetType() != "Host")
 			continue;
 
@@ -172,7 +166,7 @@ void Dependency::EvaluateApplyRules(const Service::Ptr& service)
 {
 	CONTEXT("Evaluating 'apply' rules for service '" + service->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("Dependency")) {
+	for (ApplyRule& rule : ApplyRule::GetRules("Dependency")) {
 		if (rule.GetTargetType() != "Service")
 			continue;
 

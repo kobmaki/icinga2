@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,10 +23,7 @@
 
 int main(int argc, char **argv)
 {
-	int cols;
 	FILE *infp, *outfp;
-	int i;
-	char id[32];
 
 	if (argc < 3) {
 		fprintf(stderr, "Syntax: %s <in-file> <out-file>\n", argv[0]);
@@ -49,35 +46,20 @@ int main(int argc, char **argv)
 	}
 
 	fprintf(outfp, "/* This file has been automatically generated\n"
-	    "   from the input file \"%s\". */\n\n", argv[1]);
-	fputs("#include \"config/configfragment.hpp\"\n\nstatic const char g_ConfigFragment[] = {\n", outfp);
-	fputc('\t', outfp);
+		"   from the input file \"%s\". */\n\n", argv[1]);
+	fputs("#include \"config/configfragment.hpp\"\n\nnamespace {\n\nconst char *fragment = R\"CONFIG_FRAGMENT(", outfp);
 
-	cols = 0;
-	for (;;) {
-		int c = fgetc(infp);
+	while (!feof(infp)) {
+		char buf[1024];
+		size_t rc = fread(buf, 1, sizeof(buf), infp);
 
-		if (c == EOF)
+		if (rc == 0)
 			break;
 
-		if (cols > 16) {
-			fputs("\n\t", outfp);
-			cols = 0;
-		}
-
-		fprintf(outfp, "%d, ", c);
-		cols++;
+		fwrite(buf, rc, 1, outfp);
 	}
 
-	strncpy(id, argv[1], sizeof(id));
-	id[sizeof(id) - 1] = '\0';
-
-	for (i = 0; id[i]; i++) {
-		if ((id[i] < 'a' || id[i] > 'z') && (id[i] < 'A' || id[i] > 'Z'))
-			id[i] = '_';
-	}
-
-	fprintf(outfp, "0\n};\n\nREGISTER_CONFIG_FRAGMENT(%s, \"%s\", g_ConfigFragment);\n", id, argv[1]);
+	fprintf(outfp, ")CONFIG_FRAGMENT\";\n\nREGISTER_CONFIG_FRAGMENT(\"%s\", fragment);\n\n}", argv[1]);
 
 	fclose(outfp);
 	fclose(infp);

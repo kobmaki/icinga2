@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -41,6 +41,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <strings.h>
+#include <errno.h>
 
 typedef int SOCKET;
 #define INVALID_SOCKET (-1)
@@ -50,7 +51,8 @@ typedef int SOCKET;
 
 #ifndef SUN_LEN
 /* TODO: Ideally this should take into the account how
-   long the socket path really is. */
+ * long the socket path really is.
+ */
 #	define SUN_LEN(sun) (sizeof(sockaddr_un))
 #endif /* SUN_LEN */
 

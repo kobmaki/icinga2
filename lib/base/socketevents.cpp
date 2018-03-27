@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,6 @@
 #include "base/application.hpp"
 #include "base/scriptglobal.hpp"
 #include <boost/thread/once.hpp>
-#include <boost/foreach.hpp>
 #include <map>
 #ifdef __linux__
 #	include <sys/epoll.h>
@@ -36,7 +35,7 @@ static SocketEventEngine *l_SocketIOEngine;
 
 int SocketEvents::m_NextID = 0;
 
-void SocketEventEngine::Start(void)
+void SocketEventEngine::Start()
 {
 	for (int tid = 0; tid < SOCKET_IOTHREADS; tid++) {
 		Socket::SocketPair(m_EventFDs[tid]);
@@ -51,7 +50,7 @@ void SocketEventEngine::Start(void)
 
 		InitializeThread(tid);
 
-		m_Threads[tid] = boost::thread(boost::bind(&SocketEventEngine::ThreadProc, this, tid));
+		m_Threads[tid] = std::thread(std::bind(&SocketEventEngine::ThreadProc, this, tid));
 	}
 }
 
@@ -59,7 +58,7 @@ void SocketEventEngine::WakeUpThread(int sid, bool wait)
 {
 	int tid = sid % SOCKET_IOTHREADS;
 
-	if (boost::this_thread::get_id() == m_Threads[tid].get_id())
+	if (std::this_thread::get_id() == m_Threads[tid].get_id())
 		return;
 
 	if (wait) {
@@ -78,7 +77,7 @@ void SocketEventEngine::WakeUpThread(int sid, bool wait)
 	}
 }
 
-void SocketEvents::InitializeEngine(void)
+void SocketEvents::InitializeEngine()
 {
 	String eventEngine = ScriptGlobal::Get("EventEngine", &Empty);
 
@@ -97,7 +96,7 @@ void SocketEvents::InitializeEngine(void)
 #endif /* __linux__ */
 	else {
 		Log(LogWarning, "SocketEvents")
-		    << "Invalid event engine selected: " << eventEngine << " - Falling back to 'poll'";
+			<< "Invalid event engine selected: " << eventEngine << " - Falling back to 'poll'";
 
 		eventEngine = "poll";
 
@@ -113,14 +112,14 @@ void SocketEvents::InitializeEngine(void)
  * Constructor for the SocketEvents class.
  */
 SocketEvents::SocketEvents(const Socket::Ptr& socket, Object *lifesupportObject)
-	: m_ID(m_NextID++), m_FD(socket->GetFD()), m_EnginePrivate(NULL)
+	: m_ID(m_NextID++), m_FD(socket->GetFD()), m_EnginePrivate(nullptr)
 {
 	boost::call_once(l_SocketIOOnceFlag, &SocketEvents::InitializeEngine);
 
 	Register(lifesupportObject);
 }
 
-SocketEvents::~SocketEvents(void)
+SocketEvents::~SocketEvents()
 {
 	VERIFY(m_FD == INVALID_SOCKET);
 }
@@ -130,7 +129,7 @@ void SocketEvents::Register(Object *lifesupportObject)
 	l_SocketIOEngine->Register(this, lifesupportObject);
 }
 
-void SocketEvents::Unregister(void)
+void SocketEvents::Unregister()
 {
 	l_SocketIOEngine->Unregister(this);
 }
@@ -145,7 +144,7 @@ boost::mutex& SocketEventEngine::GetMutex(int tid)
 	return m_EventMutex[tid];
 }
 
-bool SocketEvents::IsHandlingEvents(void) const
+bool SocketEvents::IsHandlingEvents() const
 {
 	int tid = m_ID % SOCKET_IOTHREADS;
 	boost::mutex::scoped_lock lock(l_SocketIOEngine->GetMutex(tid));

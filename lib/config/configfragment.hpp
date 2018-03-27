@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,19 +23,20 @@
 #include "config/configcompiler.hpp"
 #include "base/initialize.hpp"
 #include "base/debug.hpp"
+#include "base/exception.hpp"
+#include "base/application.hpp"
 
-#define REGISTER_CONFIG_FRAGMENT(id, name, fragment) \
-	namespace { \
-		void RegisterConfigFragment(void) \
-		{ \
-			icinga::Expression *expression = icinga::ConfigCompiler::CompileText(name, fragment); \
-			VERIFY(expression); \
-			icinga::ScriptFrame frame; \
+#define REGISTER_CONFIG_FRAGMENT(name, fragment) \
+	INITIALIZE_ONCE_WITH_PRIORITY([]() { \
+		std::unique_ptr<icinga::Expression> expression = icinga::ConfigCompiler::CompileText(name, fragment); \
+		VERIFY(expression); \
+		try { \
+			icinga::ScriptFrame frame(true); \
 			expression->Evaluate(frame); \
-			delete expression; \
+		} catch (const std::exception& ex) { \
+			std::cerr << icinga::DiagnosticInformation(ex) << std::endl; \
+			icinga::Application::Exit(1); \
 		} \
-		\
-		INITIALIZE_ONCE_WITH_PRIORITY(RegisterConfigFragment, 5); \
-	}
+	}, 5)
 
 #endif /* CONFIGFRAGMENT_H */

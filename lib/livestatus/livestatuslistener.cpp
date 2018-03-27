@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,9 +18,9 @@
  ******************************************************************************/
 
 #include "livestatus/livestatuslistener.hpp"
-#include "livestatus/livestatuslistener.tcpp"
-#include "icinga/perfdatavalue.hpp"
+#include "livestatus/livestatuslistener-ti.cpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/objectlock.hpp"
 #include "base/configtype.hpp"
 #include "base/logger.hpp"
@@ -45,18 +45,17 @@ REGISTER_STATSFUNCTION(LivestatusListener, &LivestatusListener::StatsFunc);
 
 void LivestatusListener::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const LivestatusListener::Ptr& livestatuslistener, ConfigType::GetObjectsByType<LivestatusListener>()) {
-		Dictionary::Ptr stats = new Dictionary();
-		stats->Set("connections", l_Connections);
-
-		nodes->Set(livestatuslistener->GetName(), stats);
+	for (const LivestatusListener::Ptr& livestatuslistener : ConfigType::GetObjectsByType<LivestatusListener>()) {
+		nodes.emplace_back(livestatuslistener->GetName(), new Dictionary({
+			{ "connections", l_Connections }
+		}));
 
 		perfdata->Add(new PerfdataValue("livestatuslistener_" + livestatuslistener->GetName() + "_connections", l_Connections));
 	}
 
-	status->Set("livestatuslistener", nodes);
+	status->Set("livestatuslistener", new Dictionary(std::move(nodes)));
 }
 
 /**
@@ -66,6 +65,9 @@ void LivestatusListener::Start(bool runtimeCreated)
 {
 	ObjectImpl<LivestatusListener>::Start(runtimeCreated);
 
+	Log(LogInformation, "LivestatusListener")
+		<< "'" << GetName() << "' started.";
+
 	if (GetSocketType() == "tcp") {
 		TcpSocket::Ptr socket = new TcpSocket();
 
@@ -73,16 +75,16 @@ void LivestatusListener::Start(bool runtimeCreated)
 			socket->Bind(GetBindHost(), GetBindPort(), AF_UNSPEC);
 		} catch (std::exception&) {
 			Log(LogCritical, "LivestatusListener")
-			    << "Cannot bind TCP socket on host '" << GetBindHost() << "' port '" << GetBindPort() << "'.";
+				<< "Cannot bind TCP socket on host '" << GetBindHost() << "' port '" << GetBindPort() << "'.";
 			return;
 		}
 
 		m_Listener = socket;
 
-		m_Thread = boost::thread(boost::bind(&LivestatusListener::ServerThreadProc, this));
+		m_Thread = std::thread(std::bind(&LivestatusListener::ServerThreadProc, this));
 
 		Log(LogInformation, "LivestatusListener")
-		    << "Created TCP socket listening on host '" << GetBindHost() << "' port '" << GetBindPort() << "'.";
+			<< "Created TCP socket listening on host '" << GetBindHost() << "' port '" << GetBindPort() << "'.";
 	}
 	else if (GetSocketType() == "unix") {
 #ifndef _WIN32
@@ -92,7 +94,7 @@ void LivestatusListener::Start(bool runtimeCreated)
 			socket->Bind(GetSocketPath());
 		} catch (std::exception&) {
 			Log(LogCritical, "LivestatusListener")
-			    << "Cannot bind UNIX socket to '" << GetSocketPath() << "'.";
+				<< "Cannot bind UNIX socket to '" << GetSocketPath() << "'.";
 			return;
 		}
 
@@ -101,16 +103,16 @@ void LivestatusListener::Start(bool runtimeCreated)
 
 		if (chmod(GetSocketPath().CStr(), mode) < 0) {
 			Log(LogCritical, "LivestatusListener")
-			    << "chmod() on unix socket '" << GetSocketPath() << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+				<< "chmod() on unix socket '" << GetSocketPath() << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 			return;
 		}
 
 		m_Listener = socket;
 
-		m_Thread = boost::thread(boost::bind(&LivestatusListener::ServerThreadProc, this));
+		m_Thread = std::thread(std::bind(&LivestatusListener::ServerThreadProc, this));
 
 		Log(LogInformation, "LivestatusListener")
-		    << "Created UNIX socket in '" << GetSocketPath() << "'.";
+			<< "Created UNIX socket in '" << GetSocketPath() << "'.";
 #else
 		/* no UNIX sockets on windows */
 		Log(LogCritical, "LivestatusListener", "Unix sockets are not supported on Windows.");
@@ -123,27 +125,30 @@ void LivestatusListener::Stop(bool runtimeRemoved)
 {
 	ObjectImpl<LivestatusListener>::Stop(runtimeRemoved);
 
+	Log(LogInformation, "LivestatusListener")
+		<< "'" << GetName() << "' stopped.";
+
 	m_Listener->Close();
 
 	if (m_Thread.joinable())
 		m_Thread.join();
 }
 
-int LivestatusListener::GetClientsConnected(void)
+int LivestatusListener::GetClientsConnected()
 {
 	boost::mutex::scoped_lock lock(l_ComponentMutex);
 
 	return l_ClientsConnected;
 }
 
-int LivestatusListener::GetConnections(void)
+int LivestatusListener::GetConnections()
 {
 	boost::mutex::scoped_lock lock(l_ComponentMutex);
 
 	return l_Connections;
 }
 
-void LivestatusListener::ServerThreadProc(void)
+void LivestatusListener::ServerThreadProc()
 {
 	m_Listener->Listen();
 
@@ -154,7 +159,7 @@ void LivestatusListener::ServerThreadProc(void)
 			if (m_Listener->Poll(true, false, &tv)) {
 				Socket::Ptr client = m_Listener->Accept();
 				Log(LogNotice, "LivestatusListener", "Client connected");
-				Utility::QueueAsyncCallback(boost::bind(&LivestatusListener::ClientHandler, this, client), LowLatencyScheduler);
+				Utility::QueueAsyncCallback(std::bind(&LivestatusListener::ClientHandler, this, client), LowLatencyScheduler);
 			}
 
 			if (!IsActive())
@@ -214,10 +219,10 @@ void LivestatusListener::ClientHandler(const Socket::Ptr& client)
 }
 
 
-void LivestatusListener::ValidateSocketType(const String& value, const ValidationUtils& utils)
+void LivestatusListener::ValidateSocketType(const Lazy<String>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<LivestatusListener>::ValidateSocketType(value, utils);
+	ObjectImpl<LivestatusListener>::ValidateSocketType(lvalue, utils);
 
-	if (value != "unix" && value != "tcp")
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("socket_type"), "Socket type '" + value + "' is invalid."));
+	if (lvalue() != "unix" && lvalue() != "tcp")
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "socket_type" }, "Socket type '" + lvalue() + "' is invalid."));
 }

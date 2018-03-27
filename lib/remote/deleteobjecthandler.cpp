@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,8 +24,7 @@
 #include "remote/apiaction.hpp"
 #include "config/configitem.hpp"
 #include "base/exception.hpp"
-#include "base/serializer.hpp"
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 #include <set>
 
 using namespace icinga;
@@ -43,7 +42,7 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	Type::Ptr type = FilterUtility::TypeFromPluralName(request.RequestUrl->GetPath()[2]);
 
 	if (!type) {
-		HttpUtility::SendJsonError(response, 400, "Invalid type specified.");
+		HttpUtility::SendJsonError(response, params, 400, "Invalid type specified.");
 		return true;
 	}
 
@@ -64,46 +63,51 @@ bool DeleteObjectHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& r
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user);
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No objects found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No objects found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
 	bool cascade = HttpUtility::GetLastParameter(params, "cascade");
 
-	Array::Ptr results = new Array();
+	ArrayData results;
 
 	bool success = true;
 
-	BOOST_FOREACH(const ConfigObject::Ptr& obj, objs) {
-		Dictionary::Ptr result1 = new Dictionary();
-		result1->Set("type", type->GetName());
-		result1->Set("name", obj->GetName());
-		results->Add(result1);
-
+	for (const ConfigObject::Ptr& obj : objs) {
+		int code;
+		String status;
 		Array::Ptr errors = new Array();
 
 		if (!ConfigObjectUtility::DeleteObject(obj, cascade, errors)) {
-			result1->Set("code", 500);
-			result1->Set("status", "Object could not be deleted.");
-			result1->Set("errors", errors);
+			code = 500;
+			status = "Object could not be deleted.";
 			success = false;
 		} else {
-			result1->Set("code", 200);
-			result1->Set("status", "Object was deleted.");
+			code = 200;
+			status = "Object was deleted.";
 		}
+
+		results.push_back(new Dictionary({
+			{ "type", type->GetName() },
+			{ "name", obj->GetName() },
+			{ "code", code },
+			{ "status", status },
+			{ "errors", errors }
+		}));
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	if (!success)
 		response.SetStatus(500, "One or more objects could not be deleted");
 	else
 		response.SetStatus(200, "OK");
 
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }

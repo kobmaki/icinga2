@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,12 +30,14 @@
 namespace icinga
 {
 
+typedef std::vector<std::pair<String, Value> > DictionaryData;
+
 /**
  * A container that holds key-value pairs.
  *
  * @ingroup base
  */
-class I2_BASE_API Dictionary : public Object
+class Dictionary final : public Object
 {
 public:
 	DECLARE_OBJECT(Dictionary);
@@ -47,111 +49,57 @@ public:
 
 	typedef std::map<String, Value>::size_type SizeType;
 
-	typedef std::pair<String, Value> Pair;
+	typedef std::map<String, Value>::value_type Pair;
 
-	inline Dictionary(void)
-	{ }
-
-	inline ~Dictionary(void)
-	{ }
+	Dictionary() = default;
+	Dictionary(const DictionaryData& other);
+	Dictionary(DictionaryData&& other);
+	Dictionary(std::initializer_list<Pair> init);
 
 	Value Get(const String& key) const;
 	bool Get(const String& key, Value *result) const;
-	void Set(const String& key, const Value& value);
+	void Set(const String& key, Value value);
 	bool Contains(const String& key) const;
 
-	/**
-	 * Returns an iterator to the beginning of the dictionary.
-	 *
-	 * Note: Caller must hold the object lock while using the iterator.
-	 *
-	 * @returns An iterator.
-	 */
-	inline Iterator Begin(void)
-	{
-		ASSERT(OwnsLock());
+	Iterator Begin();
+	Iterator End();
 
-		return m_Data.begin();
-	}
-
-	/**
-	 * Returns an iterator to the end of the dictionary.
-	 *
-	 * Note: Caller must hold the object lock while using the iterator.
-	 *
-	 * @returns An iterator.
-	 */
-	inline Iterator End(void)
-	{
-		ASSERT(OwnsLock());
-
-		return m_Data.end();
-	}
-
-	size_t GetLength(void) const;
+	size_t GetLength() const;
 
 	void Remove(const String& key);
 
-	/**
-	 * Removes the item specified by the iterator from the dictionary.
-	 *
-	 * @param it The iterator.
-	 */
-	inline void Remove(Iterator it)
-	{
-		ASSERT(OwnsLock());
+	void Remove(Iterator it);
 
-		m_Data.erase(it);
-	}
-
-	void Clear(void);
+	void Clear();
 
 	void CopyTo(const Dictionary::Ptr& dest) const;
-	Dictionary::Ptr ShallowClone(void) const;
+	Dictionary::Ptr ShallowClone() const;
 
-	std::vector<String> GetKeys(void) const;
+	std::vector<String> GetKeys() const;
 
-	static Object::Ptr GetPrototype(void);
-	
-	virtual Object::Ptr Clone(void) const override;
+	static Object::Ptr GetPrototype();
 
-	virtual String ToString(void) const override;
+	Object::Ptr Clone() const override;
 
-	virtual Value GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const override;
-	virtual void SetFieldByName(const String& field, const Value& value, const DebugInfo& debugInfo) override;
-	virtual bool HasOwnField(const String& field) const override;
+	String ToString() const override;
+
+	void Freeze();
+
+	Value GetFieldByName(const String& field, bool sandboxed, const DebugInfo& debugInfo) const override;
+	void SetFieldByName(const String& field, const Value& value, const DebugInfo& debugInfo) override;
+	bool HasOwnField(const String& field) const override;
+	bool GetOwnField(const String& field, Value *result) const override;
 
 private:
 	std::map<String, Value> m_Data; /**< The data for the dictionary. */
+	bool m_Frozen{false};
 };
 
-inline Dictionary::Iterator range_begin(Dictionary::Ptr x)
-{
-	return x->Begin();
-}
-
-inline Dictionary::Iterator range_end(Dictionary::Ptr x)
-{
-	return x->End();
-}
+Dictionary::Iterator begin(const Dictionary::Ptr& x);
+Dictionary::Iterator end(const Dictionary::Ptr& x);
 
 }
 
-namespace boost
-{
-
-template<>
-struct range_mutable_iterator<icinga::Dictionary::Ptr>
-{
-	typedef icinga::Dictionary::Iterator type;
-};
-
-template<>
-struct range_const_iterator<icinga::Dictionary::Ptr>
-{
-	typedef icinga::Dictionary::Iterator type;
-};
-
-}
+extern template class std::map<icinga::String, icinga::Value>;
 
 #endif /* DICTIONARY_H */

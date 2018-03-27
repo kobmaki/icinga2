@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,8 +15,8 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-cmake_minimum_required(VERSION 2.6)
-set(BOOST_MIN_VERSION "1.41.0")
+cmake_minimum_required(VERSION 2.8.8)
+set(BOOST_MIN_VERSION "1.48.0")
 
 project(icinga2)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -24,21 +24,23 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third-party/cmake")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING
-      "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
-      FORCE)
+    "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+    FORCE)
 endif()
 
 option(ICINGA2_WITH_MYSQL "Build the MySQL IDO module" ON)
 option(ICINGA2_WITH_PGSQL "Build the PostgreSQL IDO module" ON)
 option(ICINGA2_WITH_CHECKER "Build the checker module" ON)
 option(ICINGA2_WITH_COMPAT "Build the compat module" ON)
-option(ICINGA2_WITH_DEMO "Build the demo module" OFF)
-option(ICINGA2_WITH_HELLO "Build the hello module" OFF)
 option(ICINGA2_WITH_LIVESTATUS "Build the Livestatus module" ON)
 option(ICINGA2_WITH_NOTIFICATION "Build the notification module" ON)
 option(ICINGA2_WITH_PERFDATA "Build the perfdata module" ON)
-option(ICINGA2_WITH_STUDIO "Build the Icinga Studio application" OFF)
 option(ICINGA2_WITH_TESTS "Run unit tests" ON)
+
+option (USE_SYSTEMD
+ "Configure icinga as native systemd service instead of a SysV initscript" OFF)
+
+set(HAVE_SYSTEMD ${USE_SYSTEMD})
 
 file(STRINGS icinga2.spec VERSION_LINE REGEX "^Version: ")
 string(REPLACE "Version: " "" ICINGA2_VERSION ${VERSION_LINE})
@@ -55,10 +57,27 @@ set(ICINGA2_GIT_VERSION_INFO ON CACHE BOOL "Whether to use git describe")
 set(ICINGA2_UNITY_BUILD ON CACHE BOOL "Whether to perform a unity build")
 set(ICINGA2_LTO_BUILD OFF CACHE BOOL "Whether to use LTO")
 
+site_name(ICINGA2_BUILD_HOST_NAME)
+set(ICINGA2_BUILD_COMPILER_NAME "${CMAKE_CXX_COMPILER_ID}")
+
+if(NOT CMAKE_CXX_COMPILER_VERSION)
+  execute_process(COMMAND ${CMAKE_CXX_COMPILER} -dumpversion
+    OUTPUT_VARIABLE CMAKE_CXX_COMPILER_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+
+set(ICINGA2_BUILD_COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/COPYING" ICINGA2_LICENSE_GPL)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/COPYING.Exceptions" ICINGA2_LICENSE_ADDITIONS)
 set(ICINGA2_LICENSE "${ICINGA2_LICENSE_GPL}\n\n---\n\n${ICINGA2_LICENSE_ADDITIONS}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt" ${ICINGA2_LICENSE})
+
+file(STRINGS icinga2.spec SPEC_VERSION REGEX "^Version:")
+string(LENGTH "${SPEC_VERSION}" SPEC_VERSION_LENGTH)
+math(EXPR SPEC_VERSION_LENGTH "${SPEC_VERSION_LENGTH} - 9")
+string(SUBSTRING ${SPEC_VERSION} 9 ${SPEC_VERSION_LENGTH} SPEC_VERSION)
+
+configure_file(icinga-spec-version.h.cmake icinga-spec-version.h)
 
 include(GetGitRevisionDescription)
 git_describe(GIT_VERSION --tags)
@@ -66,11 +85,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/icinga-version.h.force)
   configure_file(icinga-version.h.force ${CMAKE_CURRENT_BINARY_DIR}/icinga-version.h COPYONLY)
 else()
   if(NOT ICINGA2_GIT_VERSION_INFO OR GIT_VERSION MATCHES "-NOTFOUND$")
-    file(STRINGS icinga2.spec SPEC_VERSION REGEX "^Version:")
-    string(LENGTH "${SPEC_VERSION}" SPEC_VERSION_LENGTH)
-    math(EXPR SPEC_VERSION_LENGTH "${SPEC_VERSION_LENGTH} - 9")
-    string(SUBSTRING ${SPEC_VERSION} 9 ${SPEC_VERSION_LENGTH} SPEC_VERSION)
-
     file(STRINGS icinga2.spec SPEC_REVISION REGEX "^%define revision ")
     string(LENGTH "${SPEC_REVISION}" SPEC_REVISION_LENGTH)
     math(EXPR SPEC_REVISION_LENGTH "${SPEC_REVISION_LENGTH} - 17")
@@ -84,12 +98,14 @@ endif()
 if(WIN32)
   set(Boost_USE_STATIC_LIBS ON)
   add_definitions(-DBOOST_ALL_NO_LIB)
-  add_definitions(/bigobj)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 endif()
 
 if(NOT DEFINED LOGROTATE_HAS_SU)
   set(LOGROTATE_HAS_SU OFF)
-  execute_process(COMMAND "/usr/sbin/logrotate" ERROR_VARIABLE LOGROTATE_OUTPUT)
+  find_program(LOGROTATE_BINARY logrotate)
+  execute_process(COMMAND ${LOGROTATE_BINARY} ERROR_VARIABLE LOGROTATE_OUTPUT)
   if(LOGROTATE_OUTPUT)
     string(REGEX REPLACE "^logrotate ([0-9.]*).*" "\\1" LOGROTATE_VERSION
       ${LOGROTATE_OUTPUT})
@@ -111,12 +127,17 @@ include_directories(${Boost_INCLUDE_DIRS})
 find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
+set(base_DEPS ${CMAKE_DL_LIBS} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
+set(base_OBJS $<TARGET_OBJECTS:mmatch> $<TARGET_OBJECTS:socketpair> $<TARGET_OBJECTS:base>)
+
 find_package(YAJL)
 
 if(NOT YAJL_FOUND)
   include_directories(${icinga2_BINARY_DIR}/third-party/yajl/include)
   link_directories(${icinga2_BINARY_DIR}/third-party/yajl)
-  set(YAJL_LIBRARIES "yajl")
+  list(APPEND base_OBJS $<TARGET_OBJECTS:yajl>)
+else()
+  list(APPEND base_DEPS ${YAJL_LIBRARIES})
 endif()
 
 find_package(Editline)
@@ -130,16 +151,45 @@ include_directories(
   ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/lib
 )
 
-#set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+if(HAVE_LIBEXECINFO)
+  list(APPEND base_DEPS execinfo)
+endif()
 
-if(APPLE)
-  set(CMAKE_INSTALL_NAME_DIR "@executable_path/..")
-  set(CMAKE_MACOSX_RPATH 0)
-endif(APPLE)
+if(UNIX OR CYGWIN)
+  list(APPEND base_OBJS $<TARGET_OBJECTS:execvpe>)
+endif()
+
+if(HAVE_SYSTEMD)
+  list(APPEND base_DEPS systemd)
+endif()
+
+
+if(EDITLINE_FOUND)
+  list(APPEND base_DEPS ${EDITLINE_LIBRARIES})
+  include_directories(${EDITLINE_INCLUDE_DIR})
+endif()
+
+if(TERMCAP_FOUND)
+  list(APPEND base_DEPS ${TERMCAP_LIBRARIES})
+  include_directories(${TERMCAP_INCLUDE_DIR})
+endif()
+
+if(WIN32)
+  list(APPEND base_DEPS ws2_32 dbghelp shlwapi msi)
+endif()
+
+set(CMAKE_MACOSX_RPATH 1)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Qunused-arguments -g")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Qunused-arguments -g")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Qunused-arguments -fcolor-diagnostics")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Qunused-arguments -fcolor-diagnostics")
+
+  # Clang on Fedora requires -pthread, Apple Clang does not
+  # AppleClang is available since CMake 3.0.0
+  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "SunPro")
@@ -156,31 +206,80 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -pthread")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lpthread")
+    set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -lpthread")
   else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -pthread")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -pthread")
   endif()
+endif()
 
-  if(NOT CMAKE_SYSTEM_NAME MATCHES AIX AND NOT CMAKE_SYSTEM_NAME MATCHES OpenBSD AND NOT CMAKE_SYSTEM_NAME MATCHES SunOS)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections -Wl,--no-export-dynamic -Bsymbolic-functions -Wl,--dynamic-list-cpp-typeinfo -Wl,--dynamic-list-data")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,--no-export-dynamic -Bsymbolic-functions -Wl,--dynamic-list-cpp-typeinfo -Wl,--dynamic-list-data")
-  endif()
+include(CheckCXXCompilerFlag)
+
+function(check_cxx_linker_flag flag var)
+  set(CMAKE_REQUIRED_FLAGS ${flag})
+  set(result 0)
+  check_cxx_compiler_flag(${flag} result)
+  set(${var} ${result} PARENT_SCOPE)
+endfunction()
+
+check_cxx_linker_flag("-Wl,--gc-sections" LD_GC_SECTIONS)
+
+if(LD_GC_SECTIONS)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections")
+endif()
+
+check_cxx_linker_flag("-Wl,--no-export-dynamic" LD_NO_EXPORT_DYNAMIC)
+
+if(LD_NO_EXPORT_DYNAMIC)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-export-dynamic")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-export-dynamic")
+endif()
+
+check_cxx_linker_flag("-Bsymbolic-functions" LD_SYMBOLIC_FUNCTIONS)
+
+if(LD_SYMBOLIC_FUNCTIONS)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Bsymbolic-functions")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Bsymbolic-functions")
+endif()
+
+check_cxx_linker_flag("-Wl,--dynamic-list-cpp-typeinfo" LD_DYNAMIC_LIST_CPP_TYPEINFO)
+
+if(LD_DYNAMIC_LIST_CPP_TYPEINFO)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--dynamic-list-cpp-typeinfo")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--dynamic-list-cpp-typeinfo")
+endif()
+
+check_cxx_linker_flag("-Wl,--dynamic-list-data" LD_DYNAMIC_LIST_DATA)
+
+if(LD_DYNAMIC_LIST_DATA)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--dynamic-list-data")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--dynamic-list-data")
+endif()
+
+check_cxx_compiler_flag("-Winvalid-pch" CXX_INVALID_PCH)
+
+if(CXX_INVALID_PCH)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Winvalid-pch")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Winvalid-pch")
 endif()
 
 if(ICINGA2_LTO_BUILD)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto -fno-fat-lto-objects")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -fno-fat-lto-objects")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -flto")
-endif()
+  check_cxx_compiler_flag("-flto" CXX_FLAG_LTO)
 
-include(CheckCCompilerFlag)
+  if(NOT CXX_FLAG_LTO)
+    message(WARNING "Compiler does not support LTO, falling back to non-LTO build")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
 
-check_c_compiler_flag(-fvisibility-inlines-hidden HAVE_VISIBILITY_INLINES_HIDDEN)
-
-if(HAVE_VISIBILITY_INLINES_HIDDEN)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility-inlines-hidden")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9.0) AND NOT OPENBSD)
+      set(CMAKE_AR "gcc-ar")
+      set(CMAKE_RANLIB "gcc-ranlib")
+    endif()
+  endif()
 endif()
 
 if(MSVC)
@@ -197,9 +296,8 @@ include(CheckIncludeFileCXX)
 
 check_symbol_exists(__COUNTER__ "" HAVE_COUNTER_MACRO)
 
-if(NOT HAVE_COUNTER_MACRO AND ICINGA2_UNITY_BUILD)
-  message(STATUS "Your C/C++ compiler does not support the __COUNTER__ macro. Disabling unity build.")
-  set(ICINGA2_UNITY_BUILD FALSE)
+if(NOT HAVE_COUNTER_MACRO)
+message(FATAL_ERROR "Your C/C++ compiler does not support the __COUNTER__ macro.")
 endif()
 
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DI2_DEBUG")
@@ -217,42 +315,21 @@ if(HAVE_LIBEXECINFO)
   set(HAVE_BACKTRACE_SYMBOLS TRUE)
 endif()
 
-set(_ICINGA2_CXX11 OFF)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  exec_program(${CMAKE_CXX_COMPILER}
+    ARGS -dumpversion
+    OUTPUT_VARIABLE _ICINGA2_COMPILER_VERSION
+  )
 
-if(UNIX)
-  include(CheckCXXCompilerFlag)
-  check_cxx_compiler_flag("-std=c++11" CXX_FLAG_CXX11)
-
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    exec_program(${CMAKE_CXX_COMPILER}
-      ARGS -dumpversion
-      OUTPUT_VARIABLE _ICINGA2_COMPILER_VERSION
-    )
-
-    if("${_ICINGA2_COMPILER_VERSION}" VERSION_LESS "4.7.0")
-      message(STATUS "Your version of GCC is too old for building Icinga 2 in C++11 mode.")
-      set(CXX_FLAG_CXX11 OFF)
-    endif()
-  endif()
-
-  if(CXX_FLAG_CXX11)
-    set(_ICINGA2_CXX11 ON)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-  endif()
-
-  check_cxx_compiler_flag("-Wno-inconsistent-missing-override" CXX_FLAG_NO_OVERRIDE_WARNING)
-  if(CXX_FLAG_NO_OVERRIDE_WARNING)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-inconsistent-missing-override")
+  if("${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS "4.7.0")
+    message(FATAL_ERROR "Your version of GCC (${CMAKE_CXX_COMPILER_VERSION}) is too old for building Icinga 2 (GCC >= 4.7.0 is required).")
   endif()
 endif()
 
 if(NOT MSVC)
-  set(CXX_FEATURE_OVERRIDE OFF)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 
-  if(_ICINGA2_CXX11)
-    include(CheckCXXSourceCompiles)
-    check_cxx_source_compiles("class Base { public: virtual void test(void) { } }; class Derived : public Base { virtual void test(void) override { } }; int main(){}" CXX_FEATURE_OVERRIDE)
-  endif()
+  check_cxx_source_compiles("class Base { public: virtual void test(void) { } }; class Derived : public Base { virtual void test(void) override { } }; int main(){}" CXX_FEATURE_OVERRIDE)
 
   if(NOT CXX_FEATURE_OVERRIDE)
     add_definitions("-Doverride=")
@@ -262,7 +339,7 @@ endif()
 configure_file(config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h ESCAPE_QUOTES)
 
 install(
-  FILES README.md COPYING COPYING.Exceptions AUTHORS ChangeLog NEWS
+  FILES README.md COPYING COPYING.Exceptions AUTHORS CHANGELOG.md NEWS
   DESTINATION ${CMAKE_INSTALL_DOCDIR}
 )
 
@@ -280,13 +357,10 @@ add_subdirectory(itl)
 add_subdirectory(doc)
 add_subdirectory(agent)
 add_subdirectory(plugins)
+add_subdirectory(choco)
 
 if(MSVC)
   add_subdirectory(icinga-installer)
-endif()
-
-if(ICINGA2_WITH_STUDIO)
-  add_subdirectory(icinga-studio)
 endif()
 
 if(ICINGA2_WITH_TESTS)
@@ -300,7 +374,7 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY "ICINGA2")
 set(CPACK_PACKAGE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icinga-app\\\\icinga.ico")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_BINARY_DIR}/LICENSE.txt")
 
-set(CPACK_PACKAGE_EXECUTABLES "Icinga2SetupAgent;Icinga 2 Agent Wizard;icinga-studio;Icinga Studio")
+set(CPACK_PACKAGE_EXECUTABLES "Icinga2SetupAgent;Icinga 2 Agent Wizard")
 set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icinga-app\\\\icinga.ico")
 set(CPACK_WIX_UPGRADE_GUID "52F2BEAA-4DF0-4C3E-ABDC-C0F61DE4DF8A")
 set(CPACK_WIX_EXTENSIONS "WixUtilExtension")
@@ -309,32 +383,42 @@ set(CPACK_WIX_UI_DIALOG "${CMAKE_CURRENT_SOURCE_DIR}/icinga-installer/dlgbmp.bmp
 set(CPACK_WIX_PATCH_FILE "${CMAKE_CURRENT_BINARY_DIR}/icinga-installer/icinga2.wixpatch.Debug")
 set(CPACK_WIX_PATCH_FILE "${CMAKE_CURRENT_BINARY_DIR}/icinga-installer/icinga2.wixpatch")
 
-set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "sbin")
+set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
 include(InstallRequiredSystemLibraries)
 
 if(WIN32)
   if(CMAKE_VS_PLATFORM_NAME STREQUAL "x64")
-    set(NSCP_URL "https://github.com/mickem/nscp/releases/download/0.4.4.19/NSCP-0.4.4.19-x64.msi")
-    set(NSCP_SHA256 "36c487777e9488cbf7a15db3a87f63ff6d6af46398d6f36b25734041e3e13900")
+    set(NSCP_URL "https://github.com/mickem/nscp/releases/download/0.5.0.62/NSCP-0.5.0.62-x64.msi")
+    set(NSCP_SHA256 "1854de86ad4fda3391f273de0f9985b702c014bdec01b26ad28a1343177f537f")
   else()
-    set(NSCP_URL "https://github.com/mickem/nscp/releases/download/0.4.4.19/NSCP-0.4.4.19-Win32.msi")
-    set(NSCP_SHA256 "f05bc00712966901531d5a9354c57e95c34eb65b4748cf3ebc305ccc8fa29cce")
+    set(NSCP_URL "https://github.com/mickem/nscp/releases/download/0.5.0.62/NSCP-0.5.0.62-Win32.msi")
+    set(NSCP_SHA256 "2186b60d588fa0811344ce709332f9c63670019c62ae92eae49698bf76205a95")
   endif()
 
   set(NSCP_SHA256SUM "")
   if (EXISTS ${CMAKE_CURRENT_BINARY_DIR}/NSCP.msi)
     file(SHA256 ${CMAKE_CURRENT_BINARY_DIR}/NSCP.msi NSCP_SHA256SUM)
   endif()
-    
+
   if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/NSCP.msi OR NOT ${NSCP_SHA256SUM} STREQUAL ${NSCP_SHA256})
     file(DOWNLOAD ${NSCP_URL} ${CMAKE_CURRENT_BINARY_DIR}/NSCP.msi SHOW_PROGRESS)
   endif()
 
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/NSCP.msi DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
+  if (OPENSSL_VERSION_MINOR GREATER_EQUAL 1)
+    if (CMAKE_VS_PLATFORM_NAME STREQUAL "x64")
+      list (APPEND ICINGA2_OPENSSL_DLLS ${OPENSSL_INCLUDE_DIR}/../bin/libcrypto-1_1-x64.dll ${OPENSSL_INCLUDE_DIR}/../bin/libssl-1_1-x64.dll)
+    else()
+      list (APPEND ICINGA2_OPENSSL_DLLS ${OPENSSL_INCLUDE_DIR}/../bin/libcrypto-1_1.dll ${OPENSSL_INCLUDE_DIR}/../bin/libssl-1_1.dll)
+    endif()
+  else()
+      list (APPEND ICINGA2_OPENSSL_DLLS ${OPENSSL_INCLUDE_DIR}/../bin/libeay32.dll ${OPENSSL_INCLUDE_DIR}/../bin/ssleay32.dll)
+  endif()
+
   install(
-    PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
-      ${OPENSSL_INCLUDE_DIR}/../bin/libeay32.dll ${OPENSSL_INCLUDE_DIR}/../bin/ssleay32.dll
+    PROGRAMS ${ICINGA2_OPENSSL_DLLS}
     DESTINATION ${CMAKE_INSTALL_SBINDIR}
   )
 endif()

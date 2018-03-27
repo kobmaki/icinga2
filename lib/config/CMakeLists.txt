@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -25,8 +25,8 @@ flex_target(config_lexer config_lexer.ll ${CMAKE_CURRENT_BINARY_DIR}/config_lexe
 set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/config_lexer.cc PROPERTY EXCLUDE_UNITY_BUILD TRUE)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/config_parser.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register")
-  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/config_lexer.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register")
+  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/config_parser.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register -Wno-parentheses-equality -Wno-unused-function")
+  set_property(SOURCE ${CMAKE_CURRENT_BINARY_DIR}/config_lexer.cc PROPERTY COMPILE_FLAGS "-Wno-deprecated-register -Wno-null-conversion")
 endif()
 
 add_flex_bison_dependency(config_lexer config_parser)
@@ -34,36 +34,29 @@ add_flex_bison_dependency(config_lexer config_parser)
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(config_SOURCES
-  activationcontext.cpp applyrule.cpp
-  configcompilercontext.cpp configcompiler.cpp configitembuilder.cpp
-  configitem.cpp ${FLEX_config_lexer_OUTPUTS} ${BISON_config_parser_OUTPUTS}
-  expression.cpp objectrule.cpp
+  i2-config.hpp
+  activationcontext.cpp activationcontext.hpp
+  applyrule.cpp applyrule.hpp
+  configcompiler.cpp configcompiler.hpp
+  configcompilercontext.cpp configcompilercontext.hpp
+  configfragment.hpp
+  configitem.cpp configitem.hpp
+  configitembuilder.cpp configitembuilder.hpp
+  expression.cpp expression.hpp
+  objectrule.cpp objectrule.hpp
+  vmops.hpp
+  ${FLEX_config_lexer_OUTPUTS} ${BISON_config_parser_OUTPUTS}
 )
 
 if(ICINGA2_UNITY_BUILD)
-    mkunity_target(config config_SOURCES)
+  mkunity_target(config config config_SOURCES)
 endif()
 
-add_library(config SHARED ${config_SOURCES})
+add_library(config OBJECT ${config_SOURCES})
 
-target_link_libraries(config ${Boost_LIBRARIES} base) 
+add_dependencies(config base)
 
 set_target_properties (
   config PROPERTIES
-  INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR}/icinga2
-  DEFINE_SYMBOL I2_CONFIG_BUILD
   FOLDER Lib
 )
-
-install(
-  TARGETS config
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
-)
-
-if(APPLE)
-  install(
-    TARGETS config
-    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/icinga-studio.app/Contents
-  )
-endif()

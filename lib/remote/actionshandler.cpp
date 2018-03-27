@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,9 +22,7 @@
 #include "remote/filterutility.hpp"
 #include "remote/apiaction.hpp"
 #include "base/exception.hpp"
-#include "base/serializer.hpp"
 #include "base/logger.hpp"
-#include <boost/algorithm/string.hpp>
 #include <set>
 
 using namespace icinga;
@@ -44,7 +42,7 @@ bool ActionsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 	ApiAction::Ptr action = ApiAction::GetByName(actionName);
 
 	if (!action) {
-		HttpUtility::SendJsonError(response, 404, "Action '" + actionName + "' does not exist.");
+		HttpUtility::SendJsonError(response, params, 404, "Action '" + actionName + "' does not exist.");
 		return true;
 	}
 
@@ -62,40 +60,43 @@ bool ActionsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 		try {
 			objs = FilterUtility::GetFilterTargets(qd, params, user);
 		} catch (const std::exception& ex) {
-			HttpUtility::SendJsonError(response, 404,
-			    "No objects found.",
-			    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+			HttpUtility::SendJsonError(response, params, 404,
+				"No objects found.",
+				HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 			return true;
 		}
 	} else {
 		FilterUtility::CheckPermission(user, permission);
-		objs.push_back(ConfigObject::Ptr());
+		objs.emplace_back(nullptr);
 	}
 
-	Array::Ptr results = new Array();
+	ArrayData results;
 
 	Log(LogNotice, "ApiActionHandler")
-	    << "Running action " << actionName;
+		<< "Running action " << actionName;
 
-	BOOST_FOREACH(const ConfigObject::Ptr& obj, objs) {
+	for (const ConfigObject::Ptr& obj : objs) {
 		try {
-			results->Add(action->Invoke(obj, params));
+			results.emplace_back(action->Invoke(obj, params));
 		} catch (const std::exception& ex) {
-			Dictionary::Ptr fail = new Dictionary();
-			fail->Set("code", 500);
-			fail->Set("status", "Action execution failed: '" + DiagnosticInformation(ex, false) + "'.");
+			Dictionary::Ptr fail = new Dictionary({
+				{ "code", 500 },
+				{ "status", "Action execution failed: '" + DiagnosticInformation(ex, false) + "'." }
+			});
+
 			if (HttpUtility::GetLastParameter(params, "verboseErrors"))
 				fail->Set("diagnostic information", DiagnosticInformation(ex));
-			results->Add(fail);
+
+			results.emplace_back(std::move(fail));
 		}
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
-

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,8 @@
 #define SCHEDULEDDOWNTIME_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/scheduleddowntime.thpp"
+#include "icinga/scheduleddowntime-ti.hpp"
 #include "icinga/checkable.hpp"
-#include <utility>
 
 namespace icinga
 {
@@ -38,32 +37,28 @@ class Service;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API ScheduledDowntime : public ObjectImpl<ScheduledDowntime>
+class ScheduledDowntime final : public ObjectImpl<ScheduledDowntime>
 {
 public:
 	DECLARE_OBJECT(ScheduledDowntime);
 	DECLARE_OBJECTNAME(ScheduledDowntime);
 
-	static void StaticInitialize(void);
-
-	Checkable::Ptr GetCheckable(void) const;
-
-	static void RegisterApplyRuleHandler(void);
+	Checkable::Ptr GetCheckable() const;
 
 	static void EvaluateApplyRules(const intrusive_ptr<Host>& host);
 	static void EvaluateApplyRules(const intrusive_ptr<Service>& service);
 
-	virtual void ValidateRanges(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateRanges(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void OnAllConfigLoaded(void) override;
-	virtual void Start(bool runtimeCreated) override;
+	void OnAllConfigLoaded() override;
+	void Start(bool runtimeCreated) override;
 
 private:
-	static void TimerProc(void);
+	static void TimerProc();
 
-	std::pair<double, double> FindNextSegment(void);
-	void CreateNextDowntime(void);
+	std::pair<double, double> FindNextSegment();
+	void CreateNextDowntime();
 
 	static bool EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, const String& name, ScriptFrame& frame, const ApplyRule& rule);
 	static bool EvaluateApplyRule(const Checkable::Ptr& checkable, const ApplyRule& rule);

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,14 +23,14 @@
 #ifndef _WIN32
 using namespace icinga;
 
-UnixSocket::UnixSocket(void)
+UnixSocket::UnixSocket()
 {
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
 	if (fd < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("socket")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("socket")
+			<< boost::errinfo_errno(errno));
 	}
 
 	SetFD(fd);
@@ -48,8 +48,8 @@ void UnixSocket::Bind(const String& path)
 
 	if (bind(GetFD(), (sockaddr *)&s_un, SUN_LEN(&s_un)) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("bind")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("bind")
+			<< boost::errinfo_errno(errno));
 	}
 }
 
@@ -63,8 +63,8 @@ void UnixSocket::Connect(const String& path)
 
 	if (connect(GetFD(), (sockaddr *)&s_un, SUN_LEN(&s_un)) < 0 && errno != EINPROGRESS) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("connect")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("connect")
+			<< boost::errinfo_errno(errno));
 	}
 }
 #endif /* _WIN32 */

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,33 +32,33 @@ namespace icinga
  *
  * @ingroup cli
  */
-class ConsoleCommand : public CLICommand
+class ConsoleCommand final : public CLICommand
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConsoleCommand);
 
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
-	virtual String GetDescription(void) const override;
-	virtual String GetShortDescription(void) const override;
-	virtual ImpersonationLevel GetImpersonationLevel(void) const override;
-	virtual void InitParameters(boost::program_options::options_description& visibleDesc,
-	    boost::program_options::options_description& hiddenDesc) const override;
-	virtual int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
+	String GetDescription() const override;
+	String GetShortDescription() const override;
+	ImpersonationLevel GetImpersonationLevel() const override;
+	void InitParameters(boost::program_options::options_description& visibleDesc,
+		boost::program_options::options_description& hiddenDesc) const override;
+	int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
 
 	static int RunScriptConsole(ScriptFrame& scriptFrame, const String& addr = String(),
-	    const String& session = String(), const String& commandOnce = String());
+		const String& session = String(), const String& commandOnce = String(), const String& commandOnceFileName = String(),
+		bool syntaxOnly = false);
 
 private:
 	mutable boost::mutex m_Mutex;
 	mutable boost::condition_variable m_CV;
-	mutable bool m_CommandReady;
 
 	static void ExecuteScriptCompletionHandler(boost::mutex& mutex, boost::condition_variable& cv,
-	    bool& ready, boost::exception_ptr eptr, const Value& result, Value& resultOut,
-	    boost::exception_ptr& eptrOut);
+		bool& ready, const boost::exception_ptr& eptr, const Value& result, Value& resultOut,
+		boost::exception_ptr& eptrOut);
 	static void AutocompleteScriptCompletionHandler(boost::mutex& mutex, boost::condition_variable& cv,
-	    bool& ready, boost::exception_ptr eptr, const Array::Ptr& result, Array::Ptr& resultOut);
+		bool& ready, const boost::exception_ptr& eptr, const Array::Ptr& result, Array::Ptr& resultOut);
 
 #ifdef HAVE_EDITLINE
 	static char *ConsoleCompleteHelper(const char *word, int state);

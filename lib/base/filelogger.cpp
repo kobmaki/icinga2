@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "base/filelogger.hpp"
-#include "base/filelogger.tcpp"
+#include "base/filelogger-ti.cpp"
 #include "base/configtype.hpp"
 #include "base/statsfunction.hpp"
 #include "base/application.hpp"
@@ -32,13 +32,13 @@ REGISTER_STATSFUNCTION(FileLogger, &FileLogger::StatsFunc);
 
 void FileLogger::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const FileLogger::Ptr& filelogger, ConfigType::GetObjectsByType<FileLogger>()) {
-		nodes->Set(filelogger->GetName(), 1); //add more stats
+	for (const FileLogger::Ptr& filelogger : ConfigType::GetObjectsByType<FileLogger>()) {
+		nodes.emplace_back(filelogger->GetName(), 1); //add more stats
 	}
 
-	status->Set("filelogger", nodes);
+	status->Set("filelogger", new Dictionary(std::move(nodes)));
 }
 
 /**
@@ -46,16 +46,16 @@ void FileLogger::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
  */
 void FileLogger::Start(bool runtimeCreated)
 {
-	ObjectImpl<FileLogger>::Start(runtimeCreated);
-
 	ReopenLogFile();
 
-	Application::OnReopenLogs.connect(boost::bind(&FileLogger::ReopenLogFile, this));
+	Application::OnReopenLogs.connect(std::bind(&FileLogger::ReopenLogFile, this));
+
+	ObjectImpl<FileLogger>::Start(runtimeCreated);
 }
 
-void FileLogger::ReopenLogFile(void)
+void FileLogger::ReopenLogFile()
 {
-	std::ofstream *stream = new std::ofstream();
+	auto *stream = new std::ofstream();
 
 	String path = GetPath();
 

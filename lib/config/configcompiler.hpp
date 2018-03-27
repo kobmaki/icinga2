@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,7 +26,7 @@
 #include "base/registry.hpp"
 #include "base/initialize.hpp"
 #include "base/singleton.hpp"
-#include <boost/function.hpp>
+#include <future>
 #include <iostream>
 #include <stack>
 
@@ -46,7 +46,7 @@ struct CompilerDebugInfo
 	int LastLine;
 	int LastColumn;
 
-	operator DebugInfo(void) const
+	operator DebugInfo() const
 	{
 		DebugInfo di;
 		di.Path = Path;
@@ -83,44 +83,44 @@ struct ZoneFragment
  *
  * @ingroup config
  */
-class I2_CONFIG_API ConfigCompiler
+class ConfigCompiler
 {
 public:
-	explicit ConfigCompiler(const String& path, std::istream *input,
-	    const String& zone = String(), const String& package = String());
-	virtual ~ConfigCompiler(void);
+	explicit ConfigCompiler(String path, std::istream *input,
+		String zone = String(), String package = String());
+	virtual ~ConfigCompiler();
 
-	Expression *Compile(void);
+	std::unique_ptr<Expression> Compile();
 
-	static Expression *CompileStream(const String& path, std::istream *stream,
-	    const String& zone = String(), const String& package = String());
-	static Expression *CompileFile(const String& path, const String& zone = String(),
-	    const String& package = String());
-	static Expression *CompileText(const String& path, const String& text,
-	    const String& zone = String(), const String& package = String());
+	static std::unique_ptr<Expression>CompileStream(const String& path, std::istream *stream,
+		const String& zone = String(), const String& package = String());
+	static std::unique_ptr<Expression>CompileFile(const String& path, const String& zone = String(),
+		const String& package = String());
+	static std::unique_ptr<Expression>CompileText(const String& path, const String& text,
+		const String& zone = String(), const String& package = String());
 
 	static void AddIncludeSearchDir(const String& dir);
 
-	const char *GetPath(void) const;
+	const char *GetPath() const;
 
 	void SetZone(const String& zone);
-	String GetZone(void) const;
-	
+	String GetZone() const;
+
 	void SetPackage(const String& package);
-	String GetPackage(void) const;
+	String GetPackage() const;
 
-	static void CollectIncludes(std::vector<Expression *>& expressions,
-	    const String& file, const String& zone, const String& package);
+	static void CollectIncludes(std::vector<std::unique_ptr<Expression> >& expressions,
+		const String& file, const String& zone, const String& package);
 
-	static Expression *HandleInclude(const String& relativeBase, const String& path, bool search,
-	    const String& zone, const String& package, const DebugInfo& debuginfo = DebugInfo());
-	static Expression *HandleIncludeRecursive(const String& relativeBase, const String& path,
-	    const String& pattern, const String& zone, const String& package, const DebugInfo& debuginfo = DebugInfo());
-	static Expression *HandleIncludeZones(const String& relativeBase, const String& tag,
-	    const String& path, const String& pattern, const String& package, const DebugInfo& debuginfo = DebugInfo());
+	static std::unique_ptr<Expression> HandleInclude(const String& relativeBase, const String& path, bool search,
+		const String& zone, const String& package, const DebugInfo& debuginfo = DebugInfo());
+	static std::unique_ptr<Expression> HandleIncludeRecursive(const String& relativeBase, const String& path,
+		const String& pattern, const String& zone, const String& package, const DebugInfo& debuginfo = DebugInfo());
+	static std::unique_ptr<Expression> HandleIncludeZones(const String& relativeBase, const String& tag,
+		const String& path, const String& pattern, const String& package, const DebugInfo& debuginfo = DebugInfo());
 
 	size_t ReadInput(char *buffer, size_t max_bytes);
-	void *GetScanner(void) const;
+	void *GetScanner() const;
 
 	static std::vector<ZoneFragment> GetZoneDirs(const String& zone);
 	static void RegisterZoneDir(const String& tag, const String& ppath, const String& zoneName);
@@ -128,7 +128,7 @@ public:
 	static bool HasZoneConfigAuthority(const String& zoneName);
 
 private:
-	boost::promise<boost::shared_ptr<Expression> > m_Promise;
+	std::promise<std::shared_ptr<Expression> > m_Promise;
 
 	String m_Path;
 	std::istream *m_Input;
@@ -141,10 +141,12 @@ private:
 	static boost::mutex m_ZoneDirsMutex;
 	static std::map<String, std::vector<ZoneFragment> > m_ZoneDirs;
 
-	void InitializeScanner(void);
-	void DestroyScanner(void);
+	void InitializeScanner();
+	void DestroyScanner();
 
-	static void HandleIncludeZone(const String& relativeBase, const String& tag, const String& path, const String& pattern, const String& package, std::vector<Expression *>& expressions);
+	static void HandleIncludeZone(const String& relativeBase, const String& tag, const String& path, const String& pattern, const String& package, std::vector<std::unique_ptr<Expression> >& expressions);
+
+	static bool IsAbsolutePath(const String& path);
 
 public:
 	bool m_Eof;

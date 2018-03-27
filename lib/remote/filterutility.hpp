@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -35,21 +35,21 @@ class TargetProvider : public Object
 public:
 	DECLARE_PTR_TYPEDEFS(TargetProvider);
 
-	virtual void FindTargets(const String& type, const boost::function<void (const Value&)>& addTarget) const = 0;
+	virtual void FindTargets(const String& type, const std::function<void (const Value&)>& addTarget) const = 0;
 	virtual Value GetTargetByName(const String& type, const String& name) const = 0;
 	virtual bool IsValidType(const String& type) const = 0;
 	virtual String GetPluralName(const String& type) const = 0;
 };
 
-class ConfigObjectTargetProvider : public TargetProvider
+class ConfigObjectTargetProvider final : public TargetProvider
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConfigObjectTargetProvider);
 
-	virtual void FindTargets(const String& type, const boost::function<void (const Value&)>& addTarget) const override;
-	virtual Value GetTargetByName(const String& type, const String& name) const override;
-	virtual bool IsValidType(const String& type) const override;
-	virtual String GetPluralName(const String& type) const override;
+	void FindTargets(const String& type, const std::function<void (const Value&)>& addTarget) const override;
+	Value GetTargetByName(const String& type, const String& name) const override;
+	bool IsValidType(const String& type) const override;
+	String GetPluralName(const String& type) const override;
 };
 
 struct QueryDescription
@@ -64,15 +64,15 @@ struct QueryDescription
  *
  * @ingroup remote
  */
-class I2_REMOTE_API FilterUtility
+class FilterUtility
 {
 public:
 	static Type::Ptr TypeFromPluralName(const String& pluralName);
-	static void CheckPermission(const ApiUser::Ptr& user, const String& permission, Expression **filter = NULL);
+	static void CheckPermission(const ApiUser::Ptr& user, const String& permission, Expression **filter = nullptr);
 	static std::vector<Value> GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query,
-	    const ApiUser::Ptr& user, const String& variableName = String());
+		const ApiUser::Ptr& user, const String& variableName = String());
 	static bool EvaluateFilter(ScriptFrame& frame, Expression *filter,
-	    const Object::Ptr& target, const String& variableName = String());
+		const Object::Ptr& target, const String& variableName = String());
 };
 
 }

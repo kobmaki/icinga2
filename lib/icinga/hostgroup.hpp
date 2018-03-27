@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define HOSTGROUP_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/hostgroup.thpp"
+#include "icinga/hostgroup-ti.hpp"
 #include "icinga/host.hpp"
 
 namespace icinga
@@ -34,19 +34,17 @@ class ConfigItem;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API HostGroup : public ObjectImpl<HostGroup>
+class HostGroup final : public ObjectImpl<HostGroup>
 {
 public:
 	DECLARE_OBJECT(HostGroup);
 	DECLARE_OBJECTNAME(HostGroup);
 
-	std::set<Host::Ptr> GetMembers(void) const;
+	std::set<Host::Ptr> GetMembers() const;
 	void AddMember(const Host::Ptr& host);
 	void RemoveMember(const Host::Ptr& host);
 
 	bool ResolveGroupMembership(const Host::Ptr& host, bool add = true, int rstack = 0);
-
-	static void RegisterObjectRuleHandler(void);
 
 	static void EvaluateObjectRules(const Host::Ptr& host);
 

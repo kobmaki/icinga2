@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,18 +31,20 @@ class String;
 /**
  * Helper functions for reading/writing messages in the netstring format.
  *
- * @see http://cr.yp.to/proto/netstrings.txt
+ * @see https://cr.yp.to/proto/netstrings.txt
  *
  * @ingroup base
  */
-class I2_BASE_API NetString
+class NetString
 {
 public:
-	static StreamReadStatus ReadStringFromStream(const Stream::Ptr& stream, String *message, StreamReadContext& context, bool may_wait = false);
-	static void WriteStringToStream(const Stream::Ptr& stream, const String& message);
+	static StreamReadStatus ReadStringFromStream(const Stream::Ptr& stream, String *message, StreamReadContext& context,
+		bool may_wait = false, ssize_t maxMessageLength = -1);
+	static size_t WriteStringToStream(const Stream::Ptr& stream, const String& message);
+	static void WriteStringToStream(std::ostream& stream, const String& message);
 
 private:
-	NetString(void);
+	NetString();
 };
 
 }

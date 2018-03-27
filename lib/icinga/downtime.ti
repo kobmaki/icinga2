@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,7 +27,7 @@ namespace icinga
 {
 
 code {{{
-class I2_ICINGA_API DowntimeNameComposer : public NameComposer
+class DowntimeNameComposer : public NameComposer
 {
 public:
 	virtual String MakeName(const String& shortName, const Object::Ptr& context) const;
@@ -59,7 +59,7 @@ class Downtime : ConfigObject < DowntimeNameComposer
 		}}}
 		navigate {{{
 			if (GetServiceName().IsEmpty())
-				return Service::Ptr();
+				return nullptr;
 
 			Host::Ptr host = Host::GetByName(GetHostName());
 			return host->GetServiceByShortName(GetServiceName());
@@ -76,7 +76,7 @@ class Downtime : ConfigObject < DowntimeNameComposer
 	[state] Timestamp trigger_time;
 	[config] bool fixed;
 	[config] Timestamp duration;
-	[config] name(Downtime) triggered_by;
+	[config] String triggered_by;
 	[config] String scheduled_by;
 	[state] Array::Ptr triggers {
 		default {{{ return new Array(); }}}

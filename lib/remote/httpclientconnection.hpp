@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,40 +34,40 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API HttpClientConnection : public Object
+class HttpClientConnection final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(HttpClientConnection);
 
-	HttpClientConnection(const String& host, const String& port, bool tls = true);
+	HttpClientConnection(String host, String port, bool tls = true);
 
-	void Start(void);
+	void Start();
 
-	Stream::Ptr GetStream(void) const;
-	String GetHost(void) const;
-	String GetPort(void) const;
-	bool GetTls(void) const;
+	Stream::Ptr GetStream() const;
+	String GetHost() const;
+	String GetPort() const;
+	bool GetTls() const;
 
-	void Disconnect(void);
+	void Disconnect();
 
-	boost::shared_ptr<HttpRequest> NewRequest(void);
+	std::shared_ptr<HttpRequest> NewRequest();
 
-	typedef boost::function<void(HttpRequest&, HttpResponse&)> HttpCompletionCallback;
-	void SubmitRequest(const boost::shared_ptr<HttpRequest>& request, const HttpCompletionCallback& callback);
+	typedef std::function<void(HttpRequest&, HttpResponse&)> HttpCompletionCallback;
+	void SubmitRequest(const std::shared_ptr<HttpRequest>& request, const HttpCompletionCallback& callback);
 
 private:
 	String m_Host;
 	String m_Port;
 	bool m_Tls;
 	Stream::Ptr m_Stream;
-	std::deque<std::pair<boost::shared_ptr<HttpRequest>, HttpCompletionCallback> > m_Requests;
-	boost::shared_ptr<HttpResponse> m_CurrentResponse;
+	std::deque<std::pair<std::shared_ptr<HttpRequest>, HttpCompletionCallback> > m_Requests;
+	std::shared_ptr<HttpResponse> m_CurrentResponse;
 	boost::mutex m_DataHandlerMutex;
 
 	StreamReadContext m_Context;
 
-	void Reconnect(void);
-	bool ProcessMessage(void);
+	void Reconnect();
+	bool ProcessMessage();
 	void DataAvailableHandler(const Stream::Ptr& stream);
 
 	void ProcessMessageAsync(HttpRequest& request);

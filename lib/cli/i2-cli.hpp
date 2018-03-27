@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,11 +27,5 @@
  */
 
 #include "base/i2-base.hpp"
-
-#ifdef I2_CLI_BUILD
-#	define I2_CLI_API I2_EXPORT
-#else /* I2_REMOTE_BUILD */
-#	define I2_CLI_API I2_IMPORT
-#endif /* I2_REMOTE_BUILD */
 
 #endif /* I2CLI_H */

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,24 +23,30 @@
 #include "icinga/i2-icinga.hpp"
 #include "icinga/command.hpp"
 #include "base/string.hpp"
-#include <boost/function.hpp>
 #include <boost/signals2.hpp>
 #include <vector>
 
 namespace icinga
 {
 
-class I2_ICINGA_API ExternalCommandProcessor {
+typedef std::function<void (double, const std::vector<String>& arguments)> ExternalCommandCallback;
+
+struct ExternalCommandInfo
+{
+	ExternalCommandCallback Callback;
+	size_t MinArgs;
+	size_t MaxArgs;
+};
+
+class ExternalCommandProcessor {
 public:
 	static void Execute(const String& line);
 	static void Execute(double time, const String& command, const std::vector<String>& arguments);
 
-	static void StaticInitialize(void);
-
 	static boost::signals2::signal<void(double, const String&, const std::vector<String>&)> OnNewExternalCommand;
 
 private:
-	ExternalCommandProcessor(void);
+	ExternalCommandProcessor();
 
 	static void ExecuteFromFile(const String& line, std::deque< std::vector<String> >& file_queue);
 
@@ -82,6 +88,8 @@ private:
 	static void ScheduleSvcDowntime(double time, const std::vector<String>& arguments);
 	static void DelSvcDowntime(double time, const std::vector<String>& arguments);
 	static void ScheduleHostDowntime(double time, const std::vector<String>& arguments);
+	static void ScheduleAndPropagateHostDowntime(double, const std::vector<String>& arguments);
+	static void ScheduleAndPropagateTriggeredHostDowntime(double, const std::vector<String>& arguments);
 	static void DelHostDowntime(double time, const std::vector<String>& arguments);
 	static void DelDowntimeByHostName(double, const std::vector<String>& arguments);
 	static void ScheduleHostSvcDowntime(double time, const std::vector<String>& arguments);
@@ -164,6 +172,13 @@ private:
 
 private:
 	static void ChangeCustomCommandVarInternal(const Command::Ptr& command, const String& name, const Value& value);
+
+	static void RegisterCommand(const String& command, const ExternalCommandCallback& callback, size_t minArgs = 0, size_t maxArgs = UINT_MAX);
+	static void RegisterCommands();
+
+	static boost::mutex& GetMutex();
+	static std::map<String, ExternalCommandInfo>& GetCommands();
+
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "compat/externalcommandlistener.hpp"
-#include "compat/externalcommandlistener.tcpp"
+#include "compat/externalcommandlistener-ti.cpp"
 #include "icinga/externalcommandprocessor.hpp"
 #include "base/configtype.hpp"
 #include "base/logger.hpp"
@@ -34,13 +34,13 @@ REGISTER_STATSFUNCTION(ExternalCommandListener, &ExternalCommandListener::StatsF
 
 void ExternalCommandListener::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const ExternalCommandListener::Ptr& externalcommandlistener, ConfigType::GetObjectsByType<ExternalCommandListener>()) {
-		nodes->Set(externalcommandlistener->GetName(), 1); //add more stats
+	for (const ExternalCommandListener::Ptr& externalcommandlistener : ConfigType::GetObjectsByType<ExternalCommandListener>()) {
+		nodes.emplace_back(externalcommandlistener->GetName(), 1); //add more stats
 	}
 
-	status->Set("externalcommandlistener", nodes);
+	status->Set("externalcommandlistener", new Dictionary(std::move(nodes)));
 }
 
 /**
@@ -50,10 +50,24 @@ void ExternalCommandListener::Start(bool runtimeCreated)
 {
 	ObjectImpl<ExternalCommandListener>::Start(runtimeCreated);
 
+	Log(LogInformation, "ExternalCommandListener")
+		<< "'" << GetName() << "' started.";
+
 #ifndef _WIN32
-	m_CommandThread = boost::thread(boost::bind(&ExternalCommandListener::CommandPipeThread, this, GetCommandPath()));
+	m_CommandThread = std::thread(std::bind(&ExternalCommandListener::CommandPipeThread, this, GetCommandPath()));
 	m_CommandThread.detach();
 #endif /* _WIN32 */
+}
+
+/**
+ * Stops the component.
+ */
+void ExternalCommandListener::Stop(bool runtimeRemoved)
+{
+	Log(LogInformation, "ExternalCommandListener")
+		<< "'" << GetName() << "' stopped.";
+
+	ObjectImpl<ExternalCommandListener>::Stop(runtimeRemoved);
 }
 
 #ifndef _WIN32
@@ -70,9 +84,9 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 		} else {
 			if (unlink(commandPath.CStr()) < 0) {
 				BOOST_THROW_EXCEPTION(posix_error()
-				    << boost::errinfo_api_function("unlink")
-				    << boost::errinfo_errno(errno)
-				    << boost::errinfo_file_name(commandPath));
+					<< boost::errinfo_api_function("unlink")
+					<< boost::errinfo_errno(errno)
+					<< boost::errinfo_file_name(commandPath));
 			}
 		}
 	}
@@ -81,7 +95,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 
 	if (!fifo_ok && mkfifo(commandPath.CStr(), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP) < 0) {
 		Log(LogCritical, "ExternalCommandListener")
-		    << "mkfifo() for fifo path '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+			<< "mkfifo() for fifo path '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 		return;
 	}
 
@@ -89,7 +103,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 	 * fifo to get the right mask. */
 	if (chmod(commandPath.CStr(), mode) < 0) {
 		Log(LogCritical, "ExternalCommandListener")
-		    << "chmod() on fifo '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+			<< "chmod() on fifo '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 		return;
 	}
 
@@ -98,7 +112,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 
 		if (fd < 0) {
 			Log(LogCritical, "ExternalCommandListener")
-			    << "open() for fifo path '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+				<< "open() for fifo path '" << commandPath << "' failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 			return;
 		}
 
@@ -120,7 +134,7 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 					continue;
 
 				Log(LogWarning, "ExternalCommandListener")
-				    << "Cannot read from command pipe." << DiagnosticInformation(ex);
+					<< "Cannot read from command pipe." << DiagnosticInformation(ex);
 				break;
 			}
 
@@ -139,12 +153,14 @@ void ExternalCommandListener::CommandPipeThread(const String& commandPath)
 
 				try {
 					Log(LogInformation, "ExternalCommandListener")
-					    << "Executing external command: " << command;
+						<< "Executing external command: " << command;
 
 					ExternalCommandProcessor::Execute(command);
 				} catch (const std::exception& ex) {
 					Log(LogWarning, "ExternalCommandListener")
-					    << "External command failed: " << DiagnosticInformation(ex);
+						<< "External command failed: " << DiagnosticInformation(ex, false);
+					Log(LogNotice, "ExternalCommandListener")
+						<< "External command failed: " << DiagnosticInformation(ex, true);
 				}
 			}
 		}

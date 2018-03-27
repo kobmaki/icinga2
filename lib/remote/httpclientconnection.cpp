@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,9 +18,9 @@
  ******************************************************************************/
 
 #include "remote/httpclientconnection.hpp"
-#include "remote/base64.hpp"
 #include "base/configtype.hpp"
 #include "base/objectlock.hpp"
+#include "base/base64.hpp"
 #include "base/utility.hpp"
 #include "base/logger.hpp"
 #include "base/exception.hpp"
@@ -28,20 +28,19 @@
 #include "base/tcpsocket.hpp"
 #include "base/tlsstream.hpp"
 #include "base/networkstream.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 
 using namespace icinga;
 
-HttpClientConnection::HttpClientConnection(const String& host, const String& port, bool tls)
-	: m_Host(host), m_Port(port), m_Tls(tls)
+HttpClientConnection::HttpClientConnection(String host, String port, bool tls)
+	: m_Host(std::move(host)), m_Port(std::move(port)), m_Tls(tls)
 { }
 
-void HttpClientConnection::Start(void)
+void HttpClientConnection::Start()
 {
 	/* Nothing to do here atm. */
 }
 
-void HttpClientConnection::Reconnect(void)
+void HttpClientConnection::Reconnect()
 {
 	if (m_Stream)
 		m_Stream->Close();
@@ -60,42 +59,43 @@ void HttpClientConnection::Reconnect(void)
 	else
 		ASSERT(!"Non-TLS HTTP connections not supported.");
 		/* m_Stream = new NetworkStream(socket);
-		   -- does not currently work because the NetworkStream class doesn't support async I/O */
+		 * -- does not currently work because the NetworkStream class doesn't support async I/O
+		 */
 
 	/* the stream holds an owning reference to this object through the callback we're registering here */
-	m_Stream->RegisterDataHandler(boost::bind(&HttpClientConnection::DataAvailableHandler, HttpClientConnection::Ptr(this), _1));
+	m_Stream->RegisterDataHandler(std::bind(&HttpClientConnection::DataAvailableHandler, HttpClientConnection::Ptr(this), _1));
 	if (m_Stream->IsDataAvailable())
 		DataAvailableHandler(m_Stream);
 }
 
-Stream::Ptr HttpClientConnection::GetStream(void) const
+Stream::Ptr HttpClientConnection::GetStream() const
 {
 	return m_Stream;
 }
 
-String HttpClientConnection::GetHost(void) const
+String HttpClientConnection::GetHost() const
 {
 	return m_Host;
 }
 
-String HttpClientConnection::GetPort(void) const
+String HttpClientConnection::GetPort() const
 {
 	return m_Port;
 }
 
-bool HttpClientConnection::GetTls(void) const
+bool HttpClientConnection::GetTls() const
 {
 	return m_Tls;
 }
 
-void HttpClientConnection::Disconnect(void)
+void HttpClientConnection::Disconnect()
 {
 	Log(LogDebug, "HttpClientConnection", "Http client disconnected");
 
 	m_Stream->Shutdown();
 }
 
-bool HttpClientConnection::ProcessMessage(void)
+bool HttpClientConnection::ProcessMessage()
 {
 	bool res;
 
@@ -104,19 +104,19 @@ bool HttpClientConnection::ProcessMessage(void)
 		return false;
 	}
 
-	const std::pair<boost::shared_ptr<HttpRequest>, HttpCompletionCallback>& currentRequest = *m_Requests.begin();
+	const std::pair<std::shared_ptr<HttpRequest>, HttpCompletionCallback>& currentRequest = *m_Requests.begin();
 	HttpRequest& request = *currentRequest.first.get();
 	const HttpCompletionCallback& callback = currentRequest.second;
 
 	if (!m_CurrentResponse)
-		m_CurrentResponse = boost::make_shared<HttpResponse>(m_Stream, request);
+		m_CurrentResponse = std::make_shared<HttpResponse>(m_Stream, request);
 
-	boost::shared_ptr<HttpResponse> currentResponse = m_CurrentResponse;
+	std::shared_ptr<HttpResponse> currentResponse = m_CurrentResponse;
 	HttpResponse& response = *currentResponse.get();
 
 	try {
 		res = response.Parse(m_Context, false);
-	} catch (const std::exception& ex) {
+	} catch (const std::exception&) {
 		callback(request, response);
 
 		m_Stream->Shutdown();
@@ -149,7 +149,7 @@ void HttpClientConnection::DataAvailableHandler(const Stream::Ptr& stream)
 				; /* empty loop body */
 		} catch (const std::exception& ex) {
 			Log(LogWarning, "HttpClientConnection")
-			    << "Error while reading Http response: " << DiagnosticInformation(ex);
+				<< "Error while reading Http response: " << DiagnosticInformation(ex);
 
 			close = true;
 			Disconnect();
@@ -161,16 +161,16 @@ void HttpClientConnection::DataAvailableHandler(const Stream::Ptr& stream)
 		m_Stream->Close();
 }
 
-boost::shared_ptr<HttpRequest> HttpClientConnection::NewRequest(void)
+std::shared_ptr<HttpRequest> HttpClientConnection::NewRequest()
 {
 	Reconnect();
-	return boost::make_shared<HttpRequest>(m_Stream);
+	return std::make_shared<HttpRequest>(m_Stream);
 }
 
-void HttpClientConnection::SubmitRequest(const boost::shared_ptr<HttpRequest>& request,
-    const HttpCompletionCallback& callback)
+void HttpClientConnection::SubmitRequest(const std::shared_ptr<HttpRequest>& request,
+	const HttpCompletionCallback& callback)
 {
-	m_Requests.push_back(std::make_pair(request, callback));
+	m_Requests.emplace_back(request, callback);
 	request->Finish();
 }
 

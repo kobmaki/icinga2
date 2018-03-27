@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,23 +32,25 @@ namespace icinga
  *
  * @ingroup ido
  */
-class ServiceDbObject : public DbObject
+class ServiceDbObject final : public DbObject
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ServiceDbObject);
 
 	ServiceDbObject(const DbType::Ptr& type, const String& name1, const String& name2);
 
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
-	virtual Dictionary::Ptr GetConfigFields(void) const override;
-	virtual Dictionary::Ptr GetStatusFields(void) const override;
+	Dictionary::Ptr GetConfigFields() const override;
+	Dictionary::Ptr GetStatusFields() const override;
 
-protected:
-	virtual bool IsStatusAttribute(const String& attribute) const override;
+	void OnConfigUpdateHeavy() override;
+	void OnConfigUpdateLight() override;
 
-	virtual void OnConfigUpdate(void) override;
-	virtual void OnStatusUpdate(void) override;
+	String CalculateConfigHash(const Dictionary::Ptr& configFields) const override;
+
+private:
+	void DoCommonConfigUpdate();
 };
 
 }

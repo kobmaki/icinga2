@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,27 +24,30 @@
 #include "base/timer.hpp"
 #include "base/utility.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 
-void Checkable::RemoveAllComments(void)
+void Checkable::RemoveAllComments()
 {
-	BOOST_FOREACH(const Comment::Ptr& comment, GetComments()) {
+	for (const Comment::Ptr& comment : GetComments()) {
 		Comment::RemoveComment(comment->GetName());
 	}
 }
 
 void Checkable::RemoveCommentsByType(int type)
 {
-	BOOST_FOREACH(const Comment::Ptr& comment, GetComments()) {
+	for (const Comment::Ptr& comment : GetComments()) {
+		/* Do not remove persistent comments from an acknowledgement */
+		if (comment->GetEntryType() == CommentAcknowledgement && comment->GetPersistent())
+			continue;
+
 		if (comment->GetEntryType() == type)
 			Comment::RemoveComment(comment->GetName());
 	}
 }
 
-std::set<Comment::Ptr> Checkable::GetComments(void) const
+std::set<Comment::Ptr> Checkable::GetComments() const
 {
 	boost::mutex::scoped_lock lock(m_CommentMutex);
 	return m_Comments;

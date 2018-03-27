@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,9 @@
 #define CONFIGCOMPILERCONTEXT_H
 
 #include "config/i2-config.hpp"
-#include "base/stdiostream.hpp"
 #include "base/dictionary.hpp"
 #include <boost/thread/mutex.hpp>
+#include <fstream>
 
 namespace icinga
 {
@@ -31,19 +31,20 @@ namespace icinga
 /*
  * @ingroup config
  */
-class I2_CONFIG_API ConfigCompilerContext
+class ConfigCompilerContext
 {
 public:
 	void OpenObjectsFile(const String& filename);
 	void WriteObject(const Dictionary::Ptr& object);
-	void FinishObjectsFile(void);
+	void CancelObjectsFile();
+	void FinishObjectsFile();
 
-	static ConfigCompilerContext *GetInstance(void);
+	static ConfigCompilerContext *GetInstance();
 
 private:
 	String m_ObjectsPath;
 	String m_ObjectsTempFile;
-	StdioStream::Ptr m_ObjectsFP;
+	std::fstream *m_ObjectsFP{nullptr};
 
 	mutable boost::mutex m_Mutex;
 };

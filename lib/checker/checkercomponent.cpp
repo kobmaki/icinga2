@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,19 +18,18 @@
  ******************************************************************************/
 
 #include "checker/checkercomponent.hpp"
-#include "checker/checkercomponent.tcpp"
+#include "checker/checkercomponent-ti.cpp"
 #include "icinga/icingaapplication.hpp"
 #include "icinga/cib.hpp"
-#include "icinga/perfdatavalue.hpp"
 #include "remote/apilistener.hpp"
 #include "base/configtype.hpp"
 #include "base/objectlock.hpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/logger.hpp"
 #include "base/exception.hpp"
 #include "base/convert.hpp"
 #include "base/statsfunction.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -40,53 +39,53 @@ REGISTER_STATSFUNCTION(CheckerComponent, &CheckerComponent::StatsFunc);
 
 void CheckerComponent::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const CheckerComponent::Ptr& checker, ConfigType::GetObjectsByType<CheckerComponent>()) {
+	for (const CheckerComponent::Ptr& checker : ConfigType::GetObjectsByType<CheckerComponent>()) {
 		unsigned long idle = checker->GetIdleCheckables();
 		unsigned long pending = checker->GetPendingCheckables();
 
-		Dictionary::Ptr stats = new Dictionary();
-		stats->Set("idle", idle);
-		stats->Set("pending", pending);
-
-		nodes->Set(checker->GetName(), stats);
+		nodes.emplace_back(checker->GetName(), new Dictionary({
+			{ "idle", idle },
+			{ "pending", pending }
+		}));
 
 		String perfdata_prefix = "checkercomponent_" + checker->GetName() + "_";
 		perfdata->Add(new PerfdataValue(perfdata_prefix + "idle", Convert::ToDouble(idle)));
 		perfdata->Add(new PerfdataValue(perfdata_prefix + "pending", Convert::ToDouble(pending)));
 	}
 
-	status->Set("checkercomponent", nodes);
+	status->Set("checkercomponent", new Dictionary(std::move(nodes)));
 }
 
-CheckerComponent::CheckerComponent(void)
-    : m_Stopped(false)
-{ }
-
-void CheckerComponent::OnConfigLoaded(void)
+void CheckerComponent::OnConfigLoaded()
 {
-	ConfigObject::OnActiveChanged.connect(bind(&CheckerComponent::ObjectHandler, this, _1));
-	ConfigObject::OnPausedChanged.connect(bind(&CheckerComponent::ObjectHandler, this, _1));
+	ConfigObject::OnActiveChanged.connect(std::bind(&CheckerComponent::ObjectHandler, this, _1));
+	ConfigObject::OnPausedChanged.connect(std::bind(&CheckerComponent::ObjectHandler, this, _1));
 
-	Checkable::OnNextCheckChanged.connect(bind(&CheckerComponent::NextCheckChangedHandler, this, _1));
+	Checkable::OnNextCheckChanged.connect(std::bind(&CheckerComponent::NextCheckChangedHandler, this, _1));
 }
 
 void CheckerComponent::Start(bool runtimeCreated)
 {
 	ObjectImpl<CheckerComponent>::Start(runtimeCreated);
 
-	m_Thread = boost::thread(boost::bind(&CheckerComponent::CheckThreadProc, this));
+	Log(LogInformation, "CheckerComponent")
+		<< "'" << GetName() << "' started.";
+
+
+	m_Thread = std::thread(std::bind(&CheckerComponent::CheckThreadProc, this));
 
 	m_ResultTimer = new Timer();
 	m_ResultTimer->SetInterval(5);
-	m_ResultTimer->OnTimerExpired.connect(boost::bind(&CheckerComponent::ResultTimerHandler, this));
+	m_ResultTimer->OnTimerExpired.connect(std::bind(&CheckerComponent::ResultTimerHandler, this));
 	m_ResultTimer->Start();
 }
 
 void CheckerComponent::Stop(bool runtimeRemoved)
 {
-	Log(LogInformation, "CheckerComponent", "Checker stopped.");
+	Log(LogInformation, "CheckerComponent")
+		<< "'" << GetName() << "' stopped.";
 
 	{
 		boost::mutex::scoped_lock lock(m_Mutex);
@@ -100,7 +99,7 @@ void CheckerComponent::Stop(bool runtimeRemoved)
 	ObjectImpl<CheckerComponent>::Stop(runtimeRemoved);
 }
 
-void CheckerComponent::CheckThreadProc(void)
+void CheckerComponent::CheckThreadProc()
 {
 	Utility::SetThreadName("Check Scheduler");
 
@@ -116,10 +115,10 @@ void CheckerComponent::CheckThreadProc(void)
 		if (m_Stopped)
 			break;
 
-		CheckTimeView::iterator it = idx.begin();
-		Checkable::Ptr checkable = *it;
+		auto it = idx.begin();
+		CheckableScheduleInfo csi = *it;
 
-		double wait = checkable->GetNextCheck() - Utility::GetTime();
+		double wait = csi.NextCheck - Utility::GetTime();
 
 		if (Checkable::GetPendingChecks() >= GetConcurrentChecks())
 			wait = 0.5;
@@ -131,6 +130,8 @@ void CheckerComponent::CheckThreadProc(void)
 			continue;
 		}
 
+		Checkable::Ptr checkable = csi.Object;
+
 		m_IdleCheckables.erase(checkable);
 
 		bool forced = checkable->GetForceNextCheck();
@@ -139,7 +140,7 @@ void CheckerComponent::CheckThreadProc(void)
 		if (!forced) {
 			if (!checkable->IsReachable(DependencyCheckExecution)) {
 				Log(LogNotice, "CheckerComponent")
-				    << "Skipping check for object '" << checkable->GetName() << "': Dependency failed.";
+					<< "Skipping check for object '" << checkable->GetName() << "': Dependency failed.";
 				check = false;
 			}
 
@@ -149,12 +150,12 @@ void CheckerComponent::CheckThreadProc(void)
 
 			if (host && !service && (!checkable->GetEnableActiveChecks() || !IcingaApplication::GetInstance()->GetEnableHostChecks())) {
 				Log(LogNotice, "CheckerComponent")
-				    << "Skipping check for host '" << host->GetName() << "': active host checks are disabled";
+					<< "Skipping check for host '" << host->GetName() << "': active host checks are disabled";
 				check = false;
 			}
 			if (host && service && (!checkable->GetEnableActiveChecks() || !IcingaApplication::GetInstance()->GetEnableServiceChecks())) {
 				Log(LogNotice, "CheckerComponent")
-				    << "Skipping check for service '" << service->GetName() << "': active service checks are disabled";
+					<< "Skipping check for service '" << service->GetName() << "': active service checks are disabled";
 				check = false;
 			}
 
@@ -162,15 +163,15 @@ void CheckerComponent::CheckThreadProc(void)
 
 			if (tp && !tp->IsInside(Utility::GetTime())) {
 				Log(LogNotice, "CheckerComponent")
-				    << "Skipping check for object '" << checkable->GetName()
-				    << "': not in check period '" << tp->GetName() << "'";
+					<< "Skipping check for object '" << checkable->GetName()
+					<< "': not in check period '" << tp->GetName() << "'";
 				check = false;
 			}
 		}
 
 		/* reschedule the checkable if checks are disabled */
 		if (!check) {
-			m_IdleCheckables.insert(checkable);
+			m_IdleCheckables.insert(GetCheckableScheduleInfo(checkable));
 			lock.unlock();
 
 			checkable->UpdateNextCheck();
@@ -180,7 +181,7 @@ void CheckerComponent::CheckThreadProc(void)
 			continue;
 		}
 
-		m_PendingCheckables.insert(checkable);
+		m_PendingCheckables.insert(GetCheckableScheduleInfo(checkable));
 
 		lock.unlock();
 
@@ -190,9 +191,11 @@ void CheckerComponent::CheckThreadProc(void)
 		}
 
 		Log(LogDebug, "CheckerComponent")
-		    << "Executing check for '" << checkable->GetName() << "'";
+			<< "Executing check for '" << checkable->GetName() << "'";
 
-		Utility::QueueAsyncCallback(boost::bind(&CheckerComponent::ExecuteCheckHelper, CheckerComponent::Ptr(this), checkable));
+		Checkable::IncreasePendingChecks();
+
+		Utility::QueueAsyncCallback(std::bind(&CheckerComponent::ExecuteCheckHelper, CheckerComponent::Ptr(this), checkable));
 
 		lock.lock();
 	}
@@ -220,29 +223,31 @@ void CheckerComponent::ExecuteCheckHelper(const Checkable::Ptr& checkable)
 		Log(LogCritical, "checker", output);
 	}
 
+	Checkable::DecreasePendingChecks();
+
 	{
 		boost::mutex::scoped_lock lock(m_Mutex);
 
 		/* remove the object from the list of pending objects; if it's not in the
 		 * list this was a manual (i.e. forced) check and we must not re-add the
 		 * object to the list because it's already there. */
-		CheckerComponent::CheckableSet::iterator it;
-		it = m_PendingCheckables.find(checkable);
+		auto it = m_PendingCheckables.find(checkable);
+
 		if (it != m_PendingCheckables.end()) {
 			m_PendingCheckables.erase(it);
 
 			if (checkable->IsActive())
-				m_IdleCheckables.insert(checkable);
+				m_IdleCheckables.insert(GetCheckableScheduleInfo(checkable));
 
 			m_CV.notify_all();
 		}
 	}
 
 	Log(LogDebug, "CheckerComponent")
-	    << "Check finished for object '" << checkable->GetName() << "'";
+		<< "Check finished for object '" << checkable->GetName() << "'";
 }
 
-void CheckerComponent::ResultTimerHandler(void)
+void CheckerComponent::ResultTimerHandler()
 {
 	std::ostringstream msgbuf;
 
@@ -250,7 +255,7 @@ void CheckerComponent::ResultTimerHandler(void)
 		boost::mutex::scoped_lock lock(m_Mutex);
 
 		msgbuf << "Pending checkables: " << m_PendingCheckables.size() << "; Idle checkables: " << m_IdleCheckables.size() << "; Checks/s: "
-		    << (CIB::GetActiveHostChecksStatistics(5) + CIB::GetActiveServiceChecksStatistics(5)) / 5.0;
+			<< (CIB::GetActiveHostChecksStatistics(60) + CIB::GetActiveServiceChecksStatistics(60)) / 60.0;
 	}
 
 	Log(LogNotice, "CheckerComponent", msgbuf.str());
@@ -273,7 +278,7 @@ void CheckerComponent::ObjectHandler(const ConfigObject::Ptr& object)
 			if (m_PendingCheckables.find(checkable) != m_PendingCheckables.end())
 				return;
 
-			m_IdleCheckables.insert(checkable);
+			m_IdleCheckables.insert(GetCheckableScheduleInfo(checkable));
 		} else {
 			m_IdleCheckables.erase(checkable);
 			m_PendingCheckables.erase(checkable);
@@ -281,6 +286,14 @@ void CheckerComponent::ObjectHandler(const ConfigObject::Ptr& object)
 
 		m_CV.notify_all();
 	}
+}
+
+CheckableScheduleInfo CheckerComponent::GetCheckableScheduleInfo(const Checkable::Ptr& checkable)
+{
+	CheckableScheduleInfo csi;
+	csi.Object = checkable;
+	csi.NextCheck = checkable->GetNextCheck();
+	return csi;
 }
 
 void CheckerComponent::NextCheckChangedHandler(const Checkable::Ptr& checkable)
@@ -291,23 +304,27 @@ void CheckerComponent::NextCheckChangedHandler(const Checkable::Ptr& checkable)
 	typedef boost::multi_index::nth_index<CheckableSet, 0>::type CheckableView;
 	CheckableView& idx = boost::get<0>(m_IdleCheckables);
 
-	CheckableView::iterator it = idx.find(checkable);
+	auto it = idx.find(checkable);
+
 	if (it == idx.end())
 		return;
 
 	idx.erase(checkable);
-	idx.insert(checkable);
+
+	CheckableScheduleInfo csi = GetCheckableScheduleInfo(checkable);
+	idx.insert(csi);
+
 	m_CV.notify_all();
 }
 
-unsigned long CheckerComponent::GetIdleCheckables(void)
+unsigned long CheckerComponent::GetIdleCheckables()
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
 
 	return m_IdleCheckables.size();
 }
 
-unsigned long CheckerComponent::GetPendingCheckables(void)
+unsigned long CheckerComponent::GetPendingCheckables()
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define CHECKRESULT_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/checkresult.thpp"
+#include "icinga/checkresult-ti.hpp"
 
 namespace icinga
 {
@@ -31,15 +31,13 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API CheckResult : public ObjectImpl<CheckResult>
+class CheckResult final : public ObjectImpl<CheckResult>
 {
 public:
 	DECLARE_OBJECT(CheckResult);
 
-	double CalculateExecutionTime(void) const;
-	double CalculateLatency(void) const;
-
-	static void StaticInitialize(void);
+	double CalculateExecutionTime() const;
+	double CalculateLatency() const;
 };
 
 }

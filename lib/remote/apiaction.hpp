@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,10 +26,7 @@
 #include "base/dictionary.hpp"
 #include "base/configobject.hpp"
 #include <vector>
-#include <boost/function.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
 
 namespace icinga
 {
@@ -39,18 +36,18 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API ApiAction : public Object
+class ApiAction final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiAction);
 
-	typedef boost::function<Value(const ConfigObject::Ptr& target, const Dictionary::Ptr& params)> Callback;
+	typedef std::function<Value(const ConfigObject::Ptr& target, const Dictionary::Ptr& params)> Callback;
 
-	ApiAction(const std::vector<String>& registerTypes, const Callback& function);
+	ApiAction(std::vector<String> registerTypes, Callback function);
 
 	Value Invoke(const ConfigObject::Ptr& target, const Dictionary::Ptr& params);
 
-	const std::vector<String>& GetTypes(void) const;
+	const std::vector<String>& GetTypes() const;
 
 	static ApiAction::Ptr GetByName(const String& name);
 	static void Register(const String& name, const ApiAction::Ptr& action);
@@ -66,27 +63,23 @@ private:
  *
  * @ingroup remote
  */
-class I2_REMOTE_API ApiActionRegistry : public Registry<ApiActionRegistry, ApiAction::Ptr>
+class ApiActionRegistry : public Registry<ApiActionRegistry, ApiAction::Ptr>
 {
 public:
-	static ApiActionRegistry *GetInstance(void);
+	static ApiActionRegistry *GetInstance();
 };
 
 #define REGISTER_APIACTION(name, types, callback) \
-	namespace { namespace UNIQUE_NAME(apia) { namespace apia ## name { \
-		void RegisterAction(void) \
-		{ \
-			String registerName = #name; \
-			boost::algorithm::replace_all(registerName, "_", "-"); \
-			std::vector<String> registerTypes; \
-			String typeNames = types; \
-			if (!typeNames.IsEmpty()) \
-				boost::algorithm::split(registerTypes, typeNames, boost::is_any_of(";")); \
-			ApiAction::Ptr action = new ApiAction(registerTypes, callback); \
-			ApiActionRegistry::GetInstance()->Register(registerName, action); \
-		} \
-		INITIALIZE_ONCE(RegisterAction); \
-	} } }
+	INITIALIZE_ONCE([]() { \
+		String registerName = #name; \
+		boost::algorithm::replace_all(registerName, "_", "-"); \
+		std::vector<String> registerTypes; \
+		String typeNames = types; \
+		if (!typeNames.IsEmpty()) \
+			registerTypes = typeNames.Split(";"); \
+		ApiAction::Ptr action = new ApiAction(registerTypes, callback); \
+		ApiActionRegistry::GetInstance()->Register(registerName, action); \
+	})
 
 }
 

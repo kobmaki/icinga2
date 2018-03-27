@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,6 +22,7 @@
 
 #include "base/i2-base.hpp"
 #include "base/object.hpp"
+#include <boost/thread/mutex.hpp>
 #include <map>
 
 namespace icinga {
@@ -31,7 +32,7 @@ namespace icinga {
  *
  * @ingroup base
  */
-class I2_BASE_API DependencyGraph
+class DependencyGraph
 {
 public:
 	static void AddDependency(Object *parent, Object *child);
@@ -39,7 +40,7 @@ public:
 	static std::vector<Object::Ptr> GetParents(const Object::Ptr& child);
 
 private:
-	DependencyGraph(void);
+	DependencyGraph();
 
 	static boost::mutex m_Mutex;
 	static std::map<Object *, std::map<Object *, int> > m_Dependencies;

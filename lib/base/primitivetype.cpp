@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,24 +22,24 @@
 
 using namespace icinga;
 
-PrimitiveType::PrimitiveType(const String& name, const String& base, const ObjectFactory& factory)
-	: m_Name(name), m_Base(base), m_Factory(factory)
+PrimitiveType::PrimitiveType(String name, String base, const ObjectFactory& factory)
+	: m_Name(std::move(name)), m_Base(std::move(base)), m_Factory(factory)
 { }
 
-String PrimitiveType::GetName(void) const
+String PrimitiveType::GetName() const
 {
 	return m_Name;
 }
 
-Type::Ptr PrimitiveType::GetBaseType(void) const
+Type::Ptr PrimitiveType::GetBaseType() const
 {
 	if (m_Base == "None")
-		return Type::Ptr();
+		return nullptr;
 	else
 		return Type::GetByName(m_Base);
 }
 
-int PrimitiveType::GetAttributes(void) const
+int PrimitiveType::GetAttributes() const
 {
 	return 0;
 }
@@ -64,7 +64,7 @@ Field PrimitiveType::GetFieldInfo(int id) const
 		throw std::runtime_error("Invalid field ID.");
 }
 
-int PrimitiveType::GetFieldCount(void) const
+int PrimitiveType::GetFieldCount() const
 {
 	Type::Ptr base = GetBaseType();
 
@@ -74,7 +74,7 @@ int PrimitiveType::GetFieldCount(void) const
 		return 0;
 }
 
-ObjectFactory PrimitiveType::GetFactory(void) const
+ObjectFactory PrimitiveType::GetFactory() const
 {
 	return m_Factory;
 }

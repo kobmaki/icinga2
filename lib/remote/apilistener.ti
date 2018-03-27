@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,12 +28,15 @@ namespace icinga
 
 class ApiListener : ConfigObject
 {
-	[config, required] String cert_path;
-	[config, required] String key_path;
-	[config, required] String ca_path;
+	[config, deprecated] String cert_path;
+	[config, deprecated] String key_path;
+	[config, deprecated] String ca_path;
 	[config] String crl_path;
 	[config] String cipher_list {
 		default {{{ return "ALL:!LOW:!WEAK:!MEDIUM:!EXP:!NULL"; }}}
+	};
+	[config] String tls_protocolmin {
+		default {{{ return "TLSv1"; }}}
 	};
 
 	[config] String bind_host;
@@ -45,6 +48,12 @@ class ApiListener : ConfigObject
 	[config] bool accept_commands;
 
 	[config] String ticket_salt;
+
+	[config] Array::Ptr access_control_allow_origin;
+	[config, deprecated] bool access_control_allow_credentials;
+	[config, deprecated] String access_control_allow_headers;
+	[config, deprecated] String access_control_allow_methods;
+
 
 	[state, no_user_modify] Timestamp log_message_timestamp;
 

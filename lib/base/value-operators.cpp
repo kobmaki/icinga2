@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,12 +24,11 @@
 #include "base/convert.hpp"
 #include "base/utility.hpp"
 #include "base/objectlock.hpp"
-#include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
 
 using namespace icinga;
 
-Value::operator double(void) const
+Value::operator double() const
 {
 	const double *value = boost::get<double>(&m_Value);
 
@@ -53,7 +52,7 @@ Value::operator double(void) const
 	}
 }
 
-Value::operator String(void) const
+Value::operator String() const
 {
 	Object *object;
 
@@ -93,12 +92,6 @@ std::istream& icinga::operator>>(std::istream& stream, Value& value)
 	stream >> tstr;
 	value = tstr;
 	return stream;
-}
-
-Value& Value::operator=(const Value& other)
-{
-	m_Value = other.m_Value;
-	return *this;
 }
 
 bool Value::operator==(bool rhs) const
@@ -292,15 +285,15 @@ Value icinga::operator-(const Value& lhs, const Value& rhs)
 		if (lhs.IsEmpty())
 			return new Array();
 
-		Array::Ptr result = new Array();
+		ArrayData result;
 		Array::Ptr left = lhs;
 		Array::Ptr right = rhs;
 
 		ObjectLock olock(left);
-		BOOST_FOREACH(const Value& lv, left) {
+		for (const Value& lv : left) {
 			bool found = false;
 			ObjectLock xlock(right);
-			BOOST_FOREACH(const Value& rv, right) {
+			for (const Value& rv : right) {
 				if (lv == rv) {
 					found = true;
 					break;
@@ -310,10 +303,10 @@ Value icinga::operator-(const Value& lhs, const Value& rhs)
 			if (found)
 				continue;
 
-			result->Add(lv);
+			result.push_back(lv);
 		}
 
-		return result;
+		return new Array(std::move(result));
 	} else
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Operator - cannot be applied to values of type '" + lhs.GetTypeName() + "' and '" + rhs.GetTypeName() + "'"));
 }
@@ -580,7 +573,28 @@ bool icinga::operator<(const Value& lhs, const Value& rhs)
 		return static_cast<double>(lhs) < static_cast<double>(rhs);
 	else if ((lhs.IsObjectType<DateTime>() || lhs.IsEmpty()) && (rhs.IsObjectType<DateTime>() || rhs.IsEmpty()) && !(lhs.IsEmpty() && rhs.IsEmpty()) && !(lhs.IsEmpty() && rhs.IsEmpty()))
 		return Convert::ToDateTimeValue(lhs) < Convert::ToDateTimeValue(rhs);
-	else
+	else if (lhs.IsObjectType<Array>() && rhs.IsObjectType<Array>()) {
+		Array::Ptr larr = lhs;
+		Array::Ptr rarr = rhs;
+
+		ObjectLock llock(larr);
+		ObjectLock rlock(rarr);
+
+		Array::SizeType llen = larr->GetLength();
+		Array::SizeType rlen = rarr->GetLength();
+
+		for (Array::SizeType i = 0; i < std::max(llen, rlen); i++) {
+			Value lval = (i >= llen) ? Empty : larr->Get(i);
+			Value rval = (i >= rlen) ? Empty : rarr->Get(i);
+
+			if (lval < rval)
+				return true;
+			else if (lval > rval)
+				return false;
+		}
+
+		return false;
+	} else
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Operator < cannot be applied to values of type '" + lhs.GetTypeName() + "' and '" + rhs.GetTypeName() + "'"));
 }
 
@@ -612,7 +626,28 @@ bool icinga::operator>(const Value& lhs, const Value& rhs)
 		return static_cast<double>(lhs) > static_cast<double>(rhs);
 	else if ((lhs.IsObjectType<DateTime>() || lhs.IsEmpty()) && (rhs.IsObjectType<DateTime>() || rhs.IsEmpty()) && !(lhs.IsEmpty() && rhs.IsEmpty()) && !(lhs.IsEmpty() && rhs.IsEmpty()))
 		return Convert::ToDateTimeValue(lhs) > Convert::ToDateTimeValue(rhs);
-	else
+	else if (lhs.IsObjectType<Array>() && rhs.IsObjectType<Array>()) {
+		Array::Ptr larr = lhs;
+		Array::Ptr rarr = rhs;
+
+		ObjectLock llock(larr);
+		ObjectLock rlock(rarr);
+
+		Array::SizeType llen = larr->GetLength();
+		Array::SizeType rlen = rarr->GetLength();
+
+		for (Array::SizeType i = 0; i < std::max(llen, rlen); i++) {
+			Value lval = (i >= llen) ? Empty : larr->Get(i);
+			Value rval = (i >= rlen) ? Empty : rarr->Get(i);
+
+			if (lval > rval)
+				return true;
+			else if (lval < rval)
+				return false;
+		}
+
+		return false;
+	} else
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Operator > cannot be applied to values of type '" + lhs.GetTypeName() + "' and '" + rhs.GetTypeName() + "'"));
 }
 

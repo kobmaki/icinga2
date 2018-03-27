@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -52,7 +52,7 @@ public:
 	intrusive_ptr<ApiType> Type;
 };
 
-class I2_REMOTE_API ApiType : public Object
+class ApiType final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiType);
@@ -73,7 +73,7 @@ public:
 	String Type;
 };
 
-struct I2_REMOTE_API ApiObject : public Object
+struct ApiObject : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiObject);
@@ -84,30 +84,30 @@ public:
 	std::vector<ApiObjectReference> UsedBy;
 };
 
-class I2_REMOTE_API ApiClient : public Object
+class ApiClient : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiClient);
 
 	ApiClient(const String& host, const String& port,
-	    const String& user, const String& password);
+		String user, String password);
 
-	typedef boost::function<void(boost::exception_ptr, const std::vector<ApiType::Ptr>&)> TypesCompletionCallback;
+	typedef std::function<void(boost::exception_ptr, const std::vector<ApiType::Ptr>&)> TypesCompletionCallback;
 	void GetTypes(const TypesCompletionCallback& callback) const;
 
-	typedef boost::function<void(boost::exception_ptr, const std::vector<ApiObject::Ptr>&)> ObjectsCompletionCallback;
+	typedef std::function<void(boost::exception_ptr, const std::vector<ApiObject::Ptr>&)> ObjectsCompletionCallback;
 	void GetObjects(const String& pluralType, const ObjectsCompletionCallback& callback,
-	    const std::vector<String>& names = std::vector<String>(),
-	    const std::vector<String>& attrs = std::vector<String>(),
-	    const std::vector<String>& joins = std::vector<String>(), bool all_joins = false) const;
+		const std::vector<String>& names = std::vector<String>(),
+		const std::vector<String>& attrs = std::vector<String>(),
+		const std::vector<String>& joins = std::vector<String>(), bool all_joins = false) const;
 
-	typedef boost::function<void(boost::exception_ptr, const Value&)> ExecuteScriptCompletionCallback;
+	typedef std::function<void(boost::exception_ptr, const Value&)> ExecuteScriptCompletionCallback;
 	void ExecuteScript(const String& session, const String& command, bool sandboxed,
-	    const ExecuteScriptCompletionCallback& callback) const;
-	
-	typedef boost::function<void(boost::exception_ptr, const Array::Ptr&)> AutocompleteScriptCompletionCallback;
+		const ExecuteScriptCompletionCallback& callback) const;
+
+	typedef std::function<void(boost::exception_ptr, const Array::Ptr&)> AutocompleteScriptCompletionCallback;
 	void AutocompleteScript(const String& session, const String& command, bool sandboxed,
-	    const AutocompleteScriptCompletionCallback& callback) const;
+		const AutocompleteScriptCompletionCallback& callback) const;
 
 private:
 	HttpClientConnection::Ptr m_Connection;
@@ -115,13 +115,13 @@ private:
 	String m_Password;
 
 	static void TypesHttpCompletionCallback(HttpRequest& request,
-	    HttpResponse& response, const TypesCompletionCallback& callback);
+		HttpResponse& response, const TypesCompletionCallback& callback);
 	static void ObjectsHttpCompletionCallback(HttpRequest& request,
-	    HttpResponse& response, const ObjectsCompletionCallback& callback);
+		HttpResponse& response, const ObjectsCompletionCallback& callback);
 	static void ExecuteScriptHttpCompletionCallback(HttpRequest& request,
-	    HttpResponse& response, const ExecuteScriptCompletionCallback& callback);
+		HttpResponse& response, const ExecuteScriptCompletionCallback& callback);
 	static void AutocompleteScriptHttpCompletionCallback(HttpRequest& request,
-	    HttpResponse& response, const AutocompleteScriptCompletionCallback& callback);
+		HttpResponse& response, const AutocompleteScriptCompletionCallback& callback);
 };
 
 }

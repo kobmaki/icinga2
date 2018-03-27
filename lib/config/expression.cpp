@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,7 +28,6 @@
 #include "base/exception.hpp"
 #include "base/scriptglobal.hpp"
 #include "base/loader.hpp"
-#include <boost/foreach.hpp>
 #include <boost/exception_ptr.hpp>
 #include <boost/exception/errinfo_nested_exception.hpp>
 
@@ -37,7 +36,7 @@ using namespace icinga;
 boost::signals2::signal<void (ScriptFrame&, ScriptError *ex, const DebugInfo&)> Expression::OnBreakpoint;
 boost::thread_specific_ptr<bool> l_InBreakpointHandler;
 
-Expression::~Expression(void)
+Expression::~Expression()
 { }
 
 void Expression::ScriptBreakpoint(ScriptFrame& frame, ScriptError *ex, const DebugInfo& di)
@@ -74,7 +73,7 @@ ExpressionResult Expression::Evaluate(ScriptFrame& frame, DebugHint *dhint) cons
 		frame.DecreaseStackDepth();
 
 		BOOST_THROW_EXCEPTION(ScriptError("Error while evaluating expression: " + String(ex.what()), GetDebugInfo())
-		    << boost::errinfo_nested_exception(boost::current_exception()));
+			<< boost::errinfo_nested_exception(boost::current_exception()));
 	}
 
 	frame.DecreaseStackDepth();
@@ -85,25 +84,25 @@ bool Expression::GetReference(ScriptFrame& frame, bool init_dict, Value *parent,
 	return false;
 }
 
-const DebugInfo& Expression::GetDebugInfo(void) const
+const DebugInfo& Expression::GetDebugInfo() const
 {
 	static DebugInfo debugInfo;
 	return debugInfo;
 }
 
-Expression *icinga::MakeIndexer(ScopeSpecifier scopeSpec, const String& index)
+std::unique_ptr<Expression> icinga::MakeIndexer(ScopeSpecifier scopeSpec, const String& index)
 {
-	Expression *scope = new GetScopeExpression(scopeSpec);
-	return new IndexerExpression(scope, MakeLiteral(index));
+	std::unique_ptr<Expression> scope{new GetScopeExpression(scopeSpec)};
+	return std::unique_ptr<Expression>(new IndexerExpression(std::move(scope), MakeLiteral(index)));
 }
 
-void DictExpression::MakeInline(void)
+void DictExpression::MakeInline()
 {
 	m_Inline = true;
 }
 
-LiteralExpression::LiteralExpression(const Value& value)
-	: m_Value(value)
+LiteralExpression::LiteralExpression(Value value)
+	: m_Value(std::move(value))
 { }
 
 ExpressionResult LiteralExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
@@ -111,7 +110,7 @@ ExpressionResult LiteralExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dh
 	return m_Value;
 }
 
-const DebugInfo& DebuggableExpression::GetDebugInfo(void) const
+const DebugInfo& DebuggableExpression::GetDebugInfo() const
 {
 	return m_DebugInfo;
 }
@@ -122,8 +121,10 @@ ExpressionResult VariableExpression::DoEvaluate(ScriptFrame& frame, DebugHint *d
 
 	if (frame.Locals && frame.Locals->Get(m_Variable, &value))
 		return value;
-	else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(m_Variable))
-		return VMOps::GetField(frame.Self, m_Variable, frame.Sandboxed, m_DebugInfo);
+	else if (frame.Self.IsObject() && frame.Locals != frame.Self.Get<Object::Ptr>() && frame.Self.Get<Object::Ptr>()->GetOwnField(m_Variable, &value))
+		return value;
+	else if (VMOps::FindVarImport(frame, m_Variable, &value, m_DebugInfo))
+		return value;
 	else
 		return ScriptGlobal::Get(m_Variable);
 }
@@ -136,17 +137,19 @@ bool VariableExpression::GetReference(ScriptFrame& frame, bool init_dict, Value 
 		*parent = frame.Locals;
 
 		if (dhint)
-			*dhint = NULL;
-	} else if (frame.Self.IsObject() && frame.Locals != static_cast<Object::Ptr>(frame.Self) && static_cast<Object::Ptr>(frame.Self)->HasOwnField(m_Variable)) {
+			*dhint = nullptr;
+	} else if (frame.Self.IsObject() && frame.Locals != frame.Self.Get<Object::Ptr>() && frame.Self.Get<Object::Ptr>()->HasOwnField(m_Variable)) {
 		*parent = frame.Self;
 
 		if (dhint && *dhint)
 			*dhint = new DebugHint((*dhint)->GetChild(m_Variable));
+	} else if (VMOps::FindVarImportRef(frame, m_Variable, parent, m_DebugInfo)) {
+		return true;
 	} else if (ScriptGlobal::Exists(m_Variable)) {
 		*parent = ScriptGlobal::GetGlobals();
 
 		if (dhint)
-			*dhint = NULL;
+			*dhint = nullptr;
 	} else
 		*parent = frame.Self;
 
@@ -425,7 +428,8 @@ ExpressionResult FunctionCallExpression::DoEvaluate(ScriptFrame& frame, DebugHin
 
 	if (vfunc.IsObjectType<Type>()) {
 		std::vector<Value> arguments;
-		BOOST_FOREACH(Expression *arg, m_Args) {
+		arguments.reserve(m_Args.size());
+		for (const auto& arg : m_Args) {
 			ExpressionResult argres = arg->Evaluate(frame);
 			CHECK_RESULT(argres);
 
@@ -444,7 +448,8 @@ ExpressionResult FunctionCallExpression::DoEvaluate(ScriptFrame& frame, DebugHin
 		BOOST_THROW_EXCEPTION(ScriptError("Function is not marked as safe for sandbox mode.", m_DebugInfo));
 
 	std::vector<Value> arguments;
-	BOOST_FOREACH(Expression *arg, m_Args) {
+	arguments.reserve(m_Args.size());
+	for (const auto& arg : m_Args) {
 		ExpressionResult argres = arg->Evaluate(frame);
 		CHECK_RESULT(argres);
 
@@ -456,16 +461,17 @@ ExpressionResult FunctionCallExpression::DoEvaluate(ScriptFrame& frame, DebugHin
 
 ExpressionResult ArrayExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
 {
-	Array::Ptr result = new Array();
+	ArrayData result;
+	result.reserve(m_Expressions.size());
 
-	BOOST_FOREACH(Expression *aexpr, m_Expressions) {
+	for (const auto& aexpr : m_Expressions) {
 		ExpressionResult element = aexpr->Evaluate(frame);
 		CHECK_RESULT(element);
 
-		result->Add(element.GetValue());
+		result.push_back(element.GetValue());
 	}
 
-	return result;
+	return new Array(std::move(result));
 }
 
 ExpressionResult DictExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
@@ -480,8 +486,8 @@ ExpressionResult DictExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint
 	Value result;
 
 	try {
-		BOOST_FOREACH(Expression *aexpr, m_Expressions) {
-			ExpressionResult element = aexpr->Evaluate(frame, dhint);
+		for (const auto& aexpr : m_Expressions) {
+			ExpressionResult element = aexpr->Evaluate(frame, m_Inline ? dhint : nullptr);
 			CHECK_RESULT(element);
 			result = element.GetValue();
 		}
@@ -637,7 +643,7 @@ bool IndexerExpression::GetReference(ScriptFrame& frame, bool init_dict, Value *
 {
 	Value vparent;
 	String vindex;
-	DebugHint *psdhint = NULL;
+	DebugHint *psdhint = nullptr;
 	bool free_psd = false;
 
 	if (dhint)
@@ -668,7 +674,7 @@ bool IndexerExpression::GetReference(ScriptFrame& frame, bool init_dict, Value *
 		if (psdhint)
 			*dhint = new DebugHint(psdhint->GetChild(*index));
 		else
-			*dhint = NULL;
+			*dhint = nullptr;
 	}
 
 	if (free_psd)
@@ -677,18 +683,18 @@ bool IndexerExpression::GetReference(ScriptFrame& frame, bool init_dict, Value *
 	return true;
 }
 
-void icinga::BindToScope(Expression *& expr, ScopeSpecifier scopeSpec)
+void icinga::BindToScope(std::unique_ptr<Expression>& expr, ScopeSpecifier scopeSpec)
 {
-	DictExpression *dexpr = dynamic_cast<DictExpression *>(expr);
+	auto *dexpr = dynamic_cast<DictExpression *>(expr.get());
 
 	if (dexpr) {
-		BOOST_FOREACH(Expression *& expr, dexpr->m_Expressions)
+		for (auto& expr : dexpr->m_Expressions)
 			BindToScope(expr, scopeSpec);
 
 		return;
 	}
 
-	SetExpression *aexpr = dynamic_cast<SetExpression *>(expr);
+	auto *aexpr = dynamic_cast<SetExpression *>(expr.get());
 
 	if (aexpr) {
 		BindToScope(aexpr->m_Operand1, scopeSpec);
@@ -696,28 +702,25 @@ void icinga::BindToScope(Expression *& expr, ScopeSpecifier scopeSpec)
 		return;
 	}
 
-	IndexerExpression *iexpr = dynamic_cast<IndexerExpression *>(expr);
+	auto *iexpr = dynamic_cast<IndexerExpression *>(expr.get());
 
 	if (iexpr) {
 		BindToScope(iexpr->m_Operand1, scopeSpec);
 		return;
 	}
 
-	LiteralExpression *lexpr = dynamic_cast<LiteralExpression *>(expr);
-	ScriptFrame frame;
+	auto *lexpr = dynamic_cast<LiteralExpression *>(expr.get());
 
-	if (lexpr && lexpr->Evaluate(frame).GetValue().IsString()) {
-		Expression *scope = new GetScopeExpression(scopeSpec);
-		expr = new IndexerExpression(scope, lexpr, lexpr->GetDebugInfo());
+	if (lexpr && lexpr->GetValue().IsString()) {
+		std::unique_ptr<Expression> scope{new GetScopeExpression(scopeSpec)};
+		expr.reset(new IndexerExpression(std::move(scope), std::move(expr), lexpr->GetDebugInfo()));
 	}
 
-	VariableExpression *vexpr = dynamic_cast<VariableExpression *>(expr);
+	auto *vexpr = dynamic_cast<VariableExpression *>(expr.get());
 
 	if (vexpr) {
-		Expression *scope = new GetScopeExpression(scopeSpec);
-		Expression *new_expr = new IndexerExpression(scope, MakeLiteral(vexpr->GetVariable()), vexpr->GetDebugInfo());
-		delete expr;
-		expr = new_expr;
+		std::unique_ptr<Expression> scope{new GetScopeExpression(scopeSpec)};
+		expr.reset(new IndexerExpression(std::move(scope), MakeLiteral(vexpr->GetVariable()), vexpr->GetDebugInfo()));
 	}
 }
 
@@ -742,10 +745,15 @@ ExpressionResult ImportExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhi
 	if (!name.IsString())
 		BOOST_THROW_EXCEPTION(ScriptError("Template/object name must be a string", m_DebugInfo));
 
-	ConfigItem::Ptr item = ConfigItem::GetByTypeAndName(type, name);
+	ConfigItem::Ptr item = ConfigItem::GetByTypeAndName(Type::GetByName(type), name);
 
 	if (!item)
 		BOOST_THROW_EXCEPTION(ScriptError("Import references unknown template: '" + name + "'", m_DebugInfo));
+
+	Dictionary::Ptr scope = item->GetScope();
+
+	if (scope)
+		scope->CopyTo(frame.Locals);
 
 	ExpressionResult result = item->GetExpression()->Evaluate(frame, dhint);
 	CHECK_RESULT(result);
@@ -753,9 +761,30 @@ ExpressionResult ImportExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhi
 	return Empty;
 }
 
+ExpressionResult ImportDefaultTemplatesExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
+{
+	if (frame.Sandboxed)
+		BOOST_THROW_EXCEPTION(ScriptError("Imports are not allowed in sandbox mode.", m_DebugInfo));
+
+	String type = VMOps::GetField(frame.Self, "type", frame.Sandboxed, m_DebugInfo);
+	Type::Ptr ptype = Type::GetByName(type);
+
+	for (const ConfigItem::Ptr& item : ConfigItem::GetDefaultTemplates(ptype)) {
+		Dictionary::Ptr scope = item->GetScope();
+
+		if (scope)
+			scope->CopyTo(frame.Locals);
+
+		ExpressionResult result = item->GetExpression()->Evaluate(frame, dhint);
+		CHECK_RESULT(result);
+	}
+
+	return Empty;
+}
+
 ExpressionResult FunctionExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
 {
-	return VMOps::NewFunction(frame, m_Args, m_ClosedVars, m_Expression);
+	return VMOps::NewFunction(frame, m_Name, m_Args, m_ClosedVars, m_Expression);
 }
 
 ExpressionResult ApplyExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
@@ -767,13 +796,17 @@ ExpressionResult ApplyExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhin
 	CHECK_RESULT(nameres);
 
 	return VMOps::NewApply(frame, m_Type, m_Target, nameres.GetValue(), m_Filter,
-	    m_Package, m_FKVar, m_FVVar, m_FTerm, m_ClosedVars, m_IgnoreOnError, m_Expression, m_DebugInfo);
+		m_Package, m_FKVar, m_FVVar, m_FTerm, m_ClosedVars, m_IgnoreOnError, m_Expression, m_DebugInfo);
 }
 
 ExpressionResult ObjectExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
 {
 	if (frame.Sandboxed)
 		BOOST_THROW_EXCEPTION(ScriptError("Object definitions are not allowed in sandbox mode.", m_DebugInfo));
+
+	ExpressionResult typeres = m_Type->Evaluate(frame, dhint);
+	CHECK_RESULT(typeres);
+	Type::Ptr type = typeres.GetValue();
 
 	String name;
 
@@ -784,8 +817,8 @@ ExpressionResult ObjectExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhi
 		name = nameres.GetValue();
 	}
 
-	return VMOps::NewObject(frame, m_Abstract, m_Type, name, m_Filter, m_Zone,
-	    m_Package, m_IgnoreOnError, m_ClosedVars, m_Expression, m_DebugInfo);
+	return VMOps::NewObject(frame, m_Abstract, type, name, m_Filter, m_Zone,
+		m_Package, m_DefaultTmpl, m_IgnoreOnError, m_ClosedVars, m_Expression, m_DebugInfo);
 }
 
 ExpressionResult ForExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
@@ -807,7 +840,8 @@ ExpressionResult LibraryExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dh
 	ExpressionResult libres = m_Operand->Evaluate(frame, dhint);
 	CHECK_RESULT(libres);
 
-	Loader::LoadExtensionLibrary(libres.GetValue());
+	Log(LogNotice, "config")
+		<< "Ignoring explicit load request for library \"" << libres << "\".";
 
 	return Empty;
 }
@@ -817,7 +851,7 @@ ExpressionResult IncludeExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dh
 	if (frame.Sandboxed)
 		BOOST_THROW_EXCEPTION(ScriptError("Includes are not allowed in sandbox mode.", m_DebugInfo));
 
-	Expression *expr;
+	std::unique_ptr<Expression> expr;
 	String name, path, pattern;
 
 	switch (m_Type) {
@@ -875,18 +909,45 @@ ExpressionResult IncludeExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dh
 	try {
 		res = expr->Evaluate(frame, dhint);
 	} catch (const std::exception&) {
-		delete expr;
 		throw;
 	}
-
-	delete expr;
 
 	return res;
 }
 
 ExpressionResult BreakpointExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
 {
-	ScriptBreakpoint(frame, NULL, GetDebugInfo());
+	ScriptBreakpoint(frame, nullptr, GetDebugInfo());
+
+	return Empty;
+}
+
+ExpressionResult UsingExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
+{
+	if (frame.Sandboxed)
+		BOOST_THROW_EXCEPTION(ScriptError("Using directives are not allowed in sandbox mode.", m_DebugInfo));
+
+	ExpressionResult importres = m_Name->Evaluate(frame);
+	CHECK_RESULT(importres);
+	Value import = importres.GetValue();
+
+	if (!import.IsObjectType<Dictionary>())
+		BOOST_THROW_EXCEPTION(ScriptError("The parameter must resolve to an object of type 'Dictionary'", m_DebugInfo));
+
+	ScriptFrame::AddImport(import);
+
+	return Empty;
+}
+
+ExpressionResult TryExceptExpression::DoEvaluate(ScriptFrame& frame, DebugHint *dhint) const
+{
+	try {
+		ExpressionResult tryResult = m_TryBody->Evaluate(frame, dhint);
+		CHECK_RESULT(tryResult);
+	} catch (const std::exception&) {
+		ExpressionResult exceptResult = m_ExceptBody->Evaluate(frame, dhint);
+		CHECK_RESULT(exceptResult);
+	}
 
 	return Empty;
 }

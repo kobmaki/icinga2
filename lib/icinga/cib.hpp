@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,12 +29,12 @@ namespace icinga
 {
 
 struct CheckableCheckStatistics {
-    double min_latency;
-    double max_latency;
-    double avg_latency;
-    double min_execution_time;
-    double max_execution_time;
-    double avg_execution_time;
+	double min_latency;
+	double max_latency;
+	double avg_latency;
+	double min_execution_time;
+	double max_execution_time;
+	double avg_execution_time;
 };
 
 struct ServiceStatistics {
@@ -65,7 +65,7 @@ struct HostStatistics {
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API CIB
+class CIB
 {
 public:
 	static void UpdateActiveHostChecksStatistics(long tv, int num);
@@ -80,17 +80,17 @@ public:
 	static void UpdatePassiveServiceChecksStatistics(long tv, int num);
 	static int GetPassiveServiceChecksStatistics(long timespan);
 
-	static CheckableCheckStatistics CalculateHostCheckStats(void);
-	static CheckableCheckStatistics CalculateServiceCheckStats(void);
-	static HostStatistics CalculateHostStats(void);
-	static ServiceStatistics CalculateServiceStats(void);
+	static CheckableCheckStatistics CalculateHostCheckStats();
+	static CheckableCheckStatistics CalculateServiceCheckStats();
+	static HostStatistics CalculateHostStats();
+	static ServiceStatistics CalculateServiceStats();
 
-	static std::pair<Dictionary::Ptr, Array::Ptr> GetFeatureStats(void);
+	static std::pair<Dictionary::Ptr, Array::Ptr> GetFeatureStats();
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
 private:
-	CIB(void);
+	CIB();
 
 	static boost::mutex m_Mutex;
 	static RingBuffer m_ActiveHostChecksStatistics;

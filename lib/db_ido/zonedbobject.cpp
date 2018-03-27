@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,26 +31,25 @@ ZoneDbObject::ZoneDbObject(const DbType::Ptr& type, const String& name1, const S
 	: DbObject(type, name1, name2)
 { }
 
-Dictionary::Ptr ZoneDbObject::GetConfigFields(void) const
+Dictionary::Ptr ZoneDbObject::GetConfigFields() const
 {
-	Dictionary::Ptr fields = new Dictionary();
 	Zone::Ptr zone = static_pointer_cast<Zone>(GetObject());
 
-	fields->Set("is_global", zone->IsGlobal() ? 1 : 0);
-	fields->Set("parent_zone_object_id", zone->GetParent());
+	return new Dictionary({
+		{ "is_global", zone->IsGlobal() ? 1 : 0 },
+		{ "parent_zone_object_id", zone->GetParent() }
 
-	return fields;
+	});
 }
 
-Dictionary::Ptr ZoneDbObject::GetStatusFields(void) const
+Dictionary::Ptr ZoneDbObject::GetStatusFields() const
 {
 	Zone::Ptr zone = static_pointer_cast<Zone>(GetObject());
 
 	Log(LogDebug, "ZoneDbObject")
-	    << "update status for zone '" << zone->GetName() << "'";
+		<< "update status for zone '" << zone->GetName() << "'";
 
-	Dictionary::Ptr fields = new Dictionary();
-	fields->Set("parent_zone_object_id", zone->GetParent());
-
-	return fields;
+	return new Dictionary({
+		{ "parent_zone_object_id", zone->GetParent() }
+	});
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,19 +33,19 @@ namespace icinga
  *
  * @ingroup methods
  */
-class I2_METHODS_API PluginNotificationTask
+class PluginNotificationTask
 {
 public:
 	static void ScriptFunc(const Notification::Ptr& notification,
-	    const User::Ptr& user, const CheckResult::Ptr& cr, int itype,
-	    const String& author, const String& comment,
-	    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros);
+		const User::Ptr& user, const CheckResult::Ptr& cr, int itype,
+		const String& author, const String& comment,
+		const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros);
 
 private:
-	PluginNotificationTask(void);
+	PluginNotificationTask();
 
 	static void ProcessFinishedHandler(const Checkable::Ptr& checkable,
-	    const Value& commandLine, const ProcessResult& pr);
+		const Value& commandLine, const ProcessResult& pr);
 };
 
 }

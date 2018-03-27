@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,16 +18,16 @@
  ******************************************************************************/
 
 #include "cli/apisetuputility.hpp"
-#include "cli/pkiutility.hpp"
 #include "cli/nodeutility.hpp"
 #include "cli/featureutility.hpp"
+#include "remote/apilistener.hpp"
+#include "remote/pkiutility.hpp"
 #include "base/logger.hpp"
 #include "base/console.hpp"
 #include "base/application.hpp"
 #include "base/tlsutility.hpp"
 #include "base/scriptglobal.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
@@ -38,9 +38,9 @@
 
 using namespace icinga;
 
-String ApiSetupUtility::GetConfdPath(void)
+String ApiSetupUtility::GetConfdPath()
 {
-        return Application::GetSysconfDir() + "/icinga2/conf.d";
+		return Application::GetSysconfDir() + "/icinga2/conf.d";
 }
 
 bool ApiSetupUtility::SetupMaster(const String& cn, bool prompt_restart)
@@ -52,6 +52,9 @@ bool ApiSetupUtility::SetupMaster(const String& cn, bool prompt_restart)
 		return false;
 
 	if (!SetupMasterEnableApi())
+		return false;
+
+	if (!SetupMasterUpdateConstants(cn))
 		return false;
 
 	if (prompt_restart) {
@@ -69,7 +72,7 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 	if (PkiUtility::NewCa() > 0)
 		Log(LogWarning, "cli", "Found CA, skipping and using the existing one.");
 
-	String pki_path = PkiUtility::GetPkiPath();
+	String pki_path = ApiListener::GetCertsDir();
 	Utility::MkDirP(pki_path, 0700);
 
 	String user = ScriptGlobal::Get("RunAsUser");
@@ -77,7 +80,7 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 
 	if (!Utility::SetFileOwnership(pki_path, user, group)) {
 		Log(LogWarning, "cli")
-		    << "Cannot set ownership for user '" << user << "' group '" << group << "' on file '" << pki_path << "'.";
+			<< "Cannot set ownership for user '" << user << "' group '" << group << "' on file '" << pki_path << "'.";
 	}
 
 	String key = pki_path + "/" + cn + ".key";
@@ -85,12 +88,12 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 
 	if (Utility::PathExists(key)) {
 		Log(LogInformation, "cli")
-		    << "Private key file '" << key << "' already exists, not generating new certificate.";
+			<< "Private key file '" << key << "' already exists, not generating new certificate.";
 		return true;
 	}
 
 	Log(LogInformation, "cli")
-	    << "Generating new CSR in '" << csr << "'.";
+		<< "Generating new CSR in '" << csr << "'.";
 
 	if (Utility::PathExists(key))
 		NodeUtility::CreateBackupFile(key, true);
@@ -106,7 +109,7 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 	String cert = pki_path + "/" + cn + ".crt";
 
 	Log(LogInformation, "cli")
-	    << "Signing CSR with CA and writing certificate to '" << cert << "'.";
+		<< "Signing CSR with CA and writing certificate to '" << cert << "'.";
 
 	if (Utility::PathExists(cert))
 		NodeUtility::CreateBackupFile(cert);
@@ -117,14 +120,13 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 	}
 
 	/* Copy CA certificate to /etc/icinga2/pki */
-	String ca_path = PkiUtility::GetLocalCaPath();
+	String ca_path = ApiListener::GetCaDir();
 	String ca = ca_path + "/ca.crt";
 	String ca_key = ca_path + "/ca.key";
-	String serial = ca_path + "/serial.txt";
 	String target_ca = pki_path + "/ca.crt";
 
 	Log(LogInformation, "cli")
-	    << "Copying CA certificate to '" << target_ca << "'.";
+		<< "Copying CA certificate to '" << target_ca << "'.";
 
 	if (Utility::PathExists(target_ca))
 		NodeUtility::CreateBackupFile(target_ca);
@@ -133,27 +135,17 @@ bool ApiSetupUtility::SetupMasterCertificates(const String& cn)
 	Utility::CopyFile(ca, target_ca);
 
 	/* fix permissions: root -> icinga daemon user */
-	std::vector<String> files;
-	files.push_back(ca_path);
-	files.push_back(ca);
-	files.push_back(ca_key);
-	files.push_back(serial);
-	files.push_back(target_ca);
-	files.push_back(key);
-	files.push_back(csr);
-	files.push_back(cert);
-
-	BOOST_FOREACH(const String& file, files) {
+	for (const String& file : { ca_path, ca, ca_key, target_ca, key, csr, cert }) {
 		if (!Utility::SetFileOwnership(file, user, group)) {
 			Log(LogWarning, "cli")
-			    << "Cannot set ownership for user '" << user << "' group '" << group << "' on file '" << file << "'.";
+				<< "Cannot set ownership for user '" << user << "' group '" << group << "' on file '" << file << "'.";
 		}
 	}
 
 	return true;
 }
 
-bool ApiSetupUtility::SetupMasterApiUser(void)
+bool ApiSetupUtility::SetupMasterApiUser()
 {
 	String api_username = "root"; // TODO make this available as cli parameter?
 	String api_password = RandomString(8);
@@ -161,12 +153,12 @@ bool ApiSetupUtility::SetupMasterApiUser(void)
 
 	if (Utility::PathExists(apiUsersPath)) {
 		Log(LogInformation, "cli")
-		    << "API user config file '" << apiUsersPath << "' already exists, not creating config file.";
+			<< "API user config file '" << apiUsersPath << "' already exists, not creating config file.";
 		return true;
 	}
 
 	Log(LogInformation, "cli")
-	    << "Adding new ApiUser '" << api_username << "' in '" << apiUsersPath << "'.";
+		<< "Adding new ApiUser '" << api_username << "' in '" << apiUsersPath << "'.";
 
 	NodeUtility::CreateBackupFile(apiUsersPath);
 
@@ -174,14 +166,14 @@ bool ApiSetupUtility::SetupMasterApiUser(void)
 	String tempFilename = Utility::CreateTempFile(apiUsersPath + ".XXXXXX", 0644, fp);
 
 	fp << "/**\n"
-	    << " * The APIUser objects are used for authentication against the API.\n"
-	    << " */\n"
-	    << "object ApiUser \"" << api_username << "\" {\n"
-	    << "  password = \"" << api_password << "\"\n"
-	    << "  // client_cn = \"\"\n"
-	    << "\n"
-	    << "  permissions = [ \"*\" ]\n"
-	    << "}\n";
+		<< " * The APIUser objects are used for authentication against the API.\n"
+		<< " */\n"
+		<< "object ApiUser \"" << api_username << "\" {\n"
+		<< "  password = \"" << api_password << "\"\n"
+		<< "  // client_cn = \"\"\n"
+		<< "\n"
+		<< "  permissions = [ \"*\" ]\n"
+		<< "}\n";
 
 	fp.close();
 
@@ -191,21 +183,27 @@ bool ApiSetupUtility::SetupMasterApiUser(void)
 
 	if (rename(tempFilename.CStr(), apiUsersPath.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rename")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(tempFilename));
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(tempFilename));
 	}
 
 	return true;
 }
 
-bool ApiSetupUtility::SetupMasterEnableApi(void)
+bool ApiSetupUtility::SetupMasterEnableApi()
 {
 	Log(LogInformation, "cli", "Enabling the 'api' feature.");
 
-	std::vector<std::string> features;
-	features.push_back("api");
-	FeatureUtility::EnableFeatures(features);
+	FeatureUtility::EnableFeatures({ "api" });
+
+	return true;
+}
+
+bool ApiSetupUtility::SetupMasterUpdateConstants(const String& cn)
+{
+	NodeUtility::UpdateConstant("NodeName", cn);
+	NodeUtility::UpdateConstant("ZoneName", cn);
 
 	return true;
 }

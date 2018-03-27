@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/hostgroup.hpp"
-#include "icinga/hostgroup.tcpp"
+#include "icinga/hostgroup-ti.cpp"
 #include "config/objectrule.hpp"
 #include "config/configitem.hpp"
 #include "base/configtype.hpp"
@@ -26,18 +26,14 @@
 #include "base/objectlock.hpp"
 #include "base/context.hpp"
 #include "base/workqueue.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_TYPE(HostGroup);
 
-INITIALIZE_ONCE(&HostGroup::RegisterObjectRuleHandler);
-
-void HostGroup::RegisterObjectRuleHandler(void)
-{
+INITIALIZE_ONCE([]() {
 	ObjectRule::RegisterType("HostGroup");
-}
+});
 
 bool HostGroup::EvaluateObjectRule(const Host::Ptr& host, const ConfigItem::Ptr& group)
 {
@@ -45,7 +41,7 @@ bool HostGroup::EvaluateObjectRule(const Host::Ptr& host, const ConfigItem::Ptr&
 
 	CONTEXT("Evaluating rule for group '" + group_name + "'");
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (group->GetScope())
 		group->GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("host", host);
@@ -54,7 +50,7 @@ bool HostGroup::EvaluateObjectRule(const Host::Ptr& host, const ConfigItem::Ptr&
 		return false;
 
 	Log(LogDebug, "HostGroup")
-	    << "Assigning membership for group '" << group_name << "' to host '" << host->GetName() << "'";
+		<< "Assigning membership for group '" << group_name << "' to host '" << host->GetName() << "'";
 
 	Array::Ptr groups = host->GetGroups();
 	groups->Add(group_name);
@@ -66,7 +62,7 @@ void HostGroup::EvaluateObjectRules(const Host::Ptr& host)
 {
 	CONTEXT("Evaluating group memberships for host '" + host->GetName() + "'");
 
-	BOOST_FOREACH(const ConfigItem::Ptr& group, ConfigItem::GetItems("HostGroup"))
+	for (const ConfigItem::Ptr& group : ConfigItem::GetItems(HostGroup::TypeInstance))
 	{
 		if (!group->GetFilter())
 			continue;
@@ -75,7 +71,7 @@ void HostGroup::EvaluateObjectRules(const Host::Ptr& host)
 	}
 }
 
-std::set<Host::Ptr> HostGroup::GetMembers(void) const
+std::set<Host::Ptr> HostGroup::GetMembers() const
 {
 	boost::mutex::scoped_lock lock(m_HostGroupMutex);
 	return m_Members;
@@ -99,8 +95,8 @@ bool HostGroup::ResolveGroupMembership(const Host::Ptr& host, bool add, int rsta
 
 	if (add && rstack > 20) {
 		Log(LogWarning, "HostGroup")
-		    << "Too many nested groups for group '" << GetName() << "': Host '"
-		    << host->GetName() << "' membership assignment failed.";
+			<< "Too many nested groups for group '" << GetName() << "': Host '"
+			<< host->GetName() << "' membership assignment failed.";
 
 		return false;
 	}
@@ -110,7 +106,7 @@ bool HostGroup::ResolveGroupMembership(const Host::Ptr& host, bool add, int rsta
 	if (groups && groups->GetLength() > 0) {
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			HostGroup::Ptr group = HostGroup::GetByName(name);
 
 			if (group && !group->ResolveGroupMembership(host, add, rstack + 1))

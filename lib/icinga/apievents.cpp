@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,7 +28,7 @@ using namespace icinga;
 
 INITIALIZE_ONCE(&ApiEvents::StaticInitialize);
 
-void ApiEvents::StaticInitialize(void)
+void ApiEvents::StaticInitialize()
 {
 	Checkable::OnNewCheckResult.connect(&ApiEvents::CheckResultHandler);
 	Checkable::OnStateChange.connect(&ApiEvents::StateChangeHandler);
@@ -44,6 +44,7 @@ void ApiEvents::StaticInitialize(void)
 
 	Downtime::OnDowntimeAdded.connect(&ApiEvents::DowntimeAddedHandler);
 	Downtime::OnDowntimeRemoved.connect(&ApiEvents::DowntimeRemovedHandler);
+	Downtime::OnDowntimeStarted.connect(&ApiEvents::DowntimeStartedHandler);
 	Downtime::OnDowntimeTriggered.connect(&ApiEvents::DowntimeTriggeredHandler);
 }
 
@@ -70,7 +71,7 @@ void ApiEvents::CheckResultHandler(const Checkable::Ptr& checkable, const CheckR
 
 	result->Set("check_result", Serialize(cr));
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -100,14 +101,14 @@ void ApiEvents::StateChangeHandler(const Checkable::Ptr& checkable, const CheckR
 	result->Set("state_type", checkable->GetStateType());
 	result->Set("check_result", Serialize(cr));
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
 
 void ApiEvents::NotificationSentToAllUsersHandler(const Notification::Ptr& notification,
-    const Checkable::Ptr& checkable, const std::set<User::Ptr>& users, NotificationType type,
-    const CheckResult::Ptr& cr, const String& author, const String& text, const MessageOrigin::Ptr& origin)
+	const Checkable::Ptr& checkable, const std::set<User::Ptr>& users, NotificationType type,
+	const CheckResult::Ptr& cr, const String& author, const String& text, const MessageOrigin::Ptr& origin)
 {
 	std::vector<EventQueue::Ptr> queues = EventQueue::GetQueuesForType("Notification");
 
@@ -128,19 +129,19 @@ void ApiEvents::NotificationSentToAllUsersHandler(const Notification::Ptr& notif
 	if (service)
 		result->Set("service", service->GetShortName());
 
-	Array::Ptr userNames = new Array();
+	ArrayData userNames;
 
-	BOOST_FOREACH(const User::Ptr& user, users) {
-		userNames->Add(user->GetName());
+	for (const User::Ptr& user : users) {
+		userNames.push_back(user->GetName());
 	}
 
-	result->Set("users", userNames);
+	result->Set("users", new Array(std::move(userNames)));
 	result->Set("notification_type", Notification::NotificationTypeToString(type));
 	result->Set("author", author);
 	result->Set("text", text);
 	result->Set("check_result", Serialize(cr));
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -169,15 +170,18 @@ void ApiEvents::FlappingChangedHandler(const Checkable::Ptr& checkable, const Me
 	result->Set("state", service ? static_cast<int>(service->GetState()) : static_cast<int>(host->GetState()));
 	result->Set("state_type", checkable->GetStateType());
 	result->Set("is_flapping", checkable->IsFlapping());
+	result->Set("flapping_current", checkable->GetFlappingCurrent());
+	result->Set("threshold_low", checkable->GetFlappingThresholdLow());
+	result->Set("threshold_high", checkable->GetFlappingThresholdHigh());
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
 
 void ApiEvents::AcknowledgementSetHandler(const Checkable::Ptr& checkable,
-    const String& author, const String& comment, AcknowledgementType type,
-    bool notify, double expiry, const MessageOrigin::Ptr& origin)
+	const String& author, const String& comment, AcknowledgementType type,
+	bool notify, bool persistent, double expiry, const MessageOrigin::Ptr& origin)
 {
 	std::vector<EventQueue::Ptr> queues = EventQueue::GetQueuesForType("AcknowledgementSet");
 
@@ -205,9 +209,10 @@ void ApiEvents::AcknowledgementSetHandler(const Checkable::Ptr& checkable,
 	result->Set("comment", comment);
 	result->Set("acknowledgement_type", type);
 	result->Set("notify", notify);
+	result->Set("persistent", persistent);
 	result->Set("expiry", expiry);
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -236,7 +241,7 @@ void ApiEvents::AcknowledgementClearedHandler(const Checkable::Ptr& checkable, c
 	result->Set("state", service ? static_cast<int>(service->GetState()) : static_cast<int>(host->GetState()));
 	result->Set("state_type", checkable->GetStateType());
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 
@@ -252,13 +257,13 @@ void ApiEvents::CommentAddedHandler(const Comment::Ptr& comment)
 
 	Log(LogDebug, "ApiEvents", "Processing event type 'CommentAdded'.");
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("type", "CommentAdded");
-	result->Set("timestamp", Utility::GetTime());
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "CommentAdded" },
+		{ "timestamp", Utility::GetTime() },
+		{ "comment", Serialize(comment, FAConfig | FAState) }
+	});
 
-	result->Set("comment", Serialize(comment, FAConfig | FAState));
-
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -272,13 +277,13 @@ void ApiEvents::CommentRemovedHandler(const Comment::Ptr& comment)
 
 	Log(LogDebug, "ApiEvents", "Processing event type 'CommentRemoved'.");
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("type", "CommentRemoved");
-	result->Set("timestamp", Utility::GetTime());
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "CommentRemoved" },
+		{ "timestamp", Utility::GetTime() },
+		{ "comment", Serialize(comment, FAConfig | FAState) }
+	});
 
-	result->Set("comment", Serialize(comment, FAConfig | FAState));
-
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -292,13 +297,13 @@ void ApiEvents::DowntimeAddedHandler(const Downtime::Ptr& downtime)
 
 	Log(LogDebug, "ApiEvents", "Processing event type 'DowntimeAdded'.");
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("type", "DowntimeAdded");
-	result->Set("timestamp", Utility::GetTime());
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "DowntimeAdded" },
+		{ "timestamp", Utility::GetTime() },
+		{ "downtime", Serialize(downtime, FAConfig | FAState) }
+	});
 
-	result->Set("downtime", Serialize(downtime, FAConfig | FAState));
-
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -312,13 +317,33 @@ void ApiEvents::DowntimeRemovedHandler(const Downtime::Ptr& downtime)
 
 	Log(LogDebug, "ApiEvents", "Processing event type 'DowntimeRemoved'.");
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("type", "DowntimeRemoved");
-	result->Set("timestamp", Utility::GetTime());
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "DowntimeRemoved" },
+		{ "timestamp", Utility::GetTime() },
+		{ "downtime", Serialize(downtime, FAConfig | FAState) }
+	});
 
-	result->Set("downtime", Serialize(downtime, FAConfig | FAState));
+	for (const EventQueue::Ptr& queue : queues) {
+		queue->ProcessEvent(result);
+	}
+}
 
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+void ApiEvents::DowntimeStartedHandler(const Downtime::Ptr& downtime)
+{
+	std::vector<EventQueue::Ptr> queues = EventQueue::GetQueuesForType("DowntimeStarted");
+
+	if (queues.empty())
+		return;
+
+	Log(LogDebug, "ApiEvents", "Processing event type 'DowntimeStarted'.");
+
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "DowntimeStarted" },
+		{ "timestamp", Utility::GetTime() },
+		{ "downtime", Serialize(downtime, FAConfig | FAState) }
+	});
+
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }
@@ -332,13 +357,13 @@ void ApiEvents::DowntimeTriggeredHandler(const Downtime::Ptr& downtime)
 
 	Log(LogDebug, "ApiEvents", "Processing event type 'DowntimeTriggered'.");
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("type", "DowntimeTriggered");
-	result->Set("timestamp", Utility::GetTime());
+	Dictionary::Ptr result = new Dictionary({
+		{ "type", "DowntimeTriggered" },
+		{ "timestamp", Utility::GetTime() },
+		{ "downtime", Serialize(downtime, FAConfig | FAState) }
+	});
 
-	result->Set("downtime", Serialize(downtime));
-
-	BOOST_FOREACH(const EventQueue::Ptr& queue, queues) {
+	for (const EventQueue::Ptr& queue : queues) {
 		queue->ProcessEvent(result);
 	}
 }

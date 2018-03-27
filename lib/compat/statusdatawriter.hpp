@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,16 +20,14 @@
 #ifndef STATUSDATAWRITER_H
 #define STATUSDATAWRITER_H
 
-#include "compat/statusdatawriter.thpp"
+#include "compat/statusdatawriter-ti.hpp"
 #include "icinga/customvarobject.hpp"
 #include "icinga/host.hpp"
 #include "icinga/service.hpp"
 #include "icinga/command.hpp"
 #include "icinga/compatutility.hpp"
-#include "base/objectlock.hpp"
 #include "base/timer.hpp"
 #include "base/utility.hpp"
-#include <boost/thread/thread.hpp>
 #include <iostream>
 
 namespace icinga
@@ -38,7 +36,7 @@ namespace icinga
 /**
  * @ingroup compat
  */
-class StatusDataWriter : public ObjectImpl<StatusDataWriter>
+class StatusDataWriter final : public ObjectImpl<StatusDataWriter>
 {
 public:
 	DECLARE_OBJECT(StatusDataWriter);
@@ -47,7 +45,8 @@ public:
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	Timer::Ptr m_StatusTimer;
@@ -65,31 +64,28 @@ private:
 	template<typename T>
 	void DumpNameList(std::ostream& fp, const T& list)
 	{
-		typename T::const_iterator it;
 		bool first = true;
-		for (it = list.begin(); it != list.end(); it++) {
+		for (const auto& obj : list) {
 			if (!first)
 				fp << ",";
 			else
 				first = false;
 
-			ObjectLock olock(*it);
-			fp << (*it)->GetName();
+			fp << obj->GetName();
 		}
 	}
 
 	template<typename T>
 	void DumpStringList(std::ostream& fp, const T& list)
 	{
-		typename T::const_iterator it;
 		bool first = true;
-		for (it = list.begin(); it != list.end(); it++) {
+		for (const auto& str : list) {
 			if (!first)
 				fp << ",";
 			else
 				first = false;
 
-			fp << *it;
+			fp << str;
 		}
 	}
 
@@ -98,9 +94,11 @@ private:
 
 	void DumpCustomAttributes(std::ostream& fp, const CustomVarObject::Ptr& object);
 
-	void UpdateObjectsCache(void);
-	void StatusTimerHandler(void);
-	void ObjectHandler(void);
+	void UpdateObjectsCache();
+	void StatusTimerHandler();
+	void ObjectHandler();
+
+	static String GetNotificationOptions(const Checkable::Ptr& checkable);
 };
 
 }

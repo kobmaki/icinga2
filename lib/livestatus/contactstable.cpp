@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,12 +25,11 @@
 #include "base/objectlock.hpp"
 #include "base/json.hpp"
 #include "base/utility.hpp"
-#include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 
 using namespace icinga;
 
-ContactsTable::ContactsTable(void)
+ContactsTable::ContactsTable()
 {
 	AddColumns(this);
 }
@@ -58,19 +57,19 @@ void ContactsTable::AddColumns(Table *table, const String& prefix,
 
 }
 
-String ContactsTable::GetName(void) const
+String ContactsTable::GetName() const
 {
 	return "contacts";
 }
 
-String ContactsTable::GetPrefix(void) const
+String ContactsTable::GetPrefix() const
 {
 	return "contact";
 }
 
 void ContactsTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const User::Ptr& user, ConfigType::GetObjectsByType<User>()) {
+	for (const User::Ptr& user : ConfigType::GetObjectsByType<User>()) {
 		if (!addRowFn(user, LivestatusGroupByNone, Empty))
 			return;
 	}
@@ -204,24 +203,18 @@ Value ContactsTable::CustomVariableNamesAccessor(const Value& row)
 	if (!user)
 		return Empty;
 
-	Dictionary::Ptr vars;
+	Dictionary::Ptr vars = user->GetVars();
 
-	{
-		ObjectLock olock(user);
-		vars = CompatUtility::GetCustomAttributeConfig(user);
+	ArrayData result;
+
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const Dictionary::Pair& kv : vars) {
+			result.push_back(kv.first);
+		}
 	}
 
-	if (!vars)
-		return Empty;
-
-	Array::Ptr cv = new Array();
-
-	ObjectLock olock(vars);
-	BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
-		cv->Add(kv.first);
-	}
-
-	return cv;
+	return new Array(std::move(result));
 }
 
 Value ContactsTable::CustomVariableValuesAccessor(const Value& row)
@@ -231,27 +224,21 @@ Value ContactsTable::CustomVariableValuesAccessor(const Value& row)
 	if (!user)
 		return Empty;
 
-	Dictionary::Ptr vars;
+	Dictionary::Ptr vars = user->GetVars();
 
-	{
-		ObjectLock olock(user);
-		vars = CompatUtility::GetCustomAttributeConfig(user);
+	ArrayData result;
+
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const Dictionary::Pair& kv : vars) {
+			if (kv.second.IsObjectType<Array>() || kv.second.IsObjectType<Dictionary>())
+				result.push_back(JsonEncode(kv.second));
+			else
+				result.push_back(kv.second);
+		}
 	}
 
-	if (!vars)
-		return Empty;
-
-	Array::Ptr cv = new Array();
-
-	ObjectLock olock(vars);
-	BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
-		if (kv.second.IsObjectType<Array>() || kv.second.IsObjectType<Dictionary>())
-			cv->Add(JsonEncode(kv.second));
-		else
-			cv->Add(kv.second);
-	}
-
-	return cv;
+	return new Array(std::move(result));
 }
 
 Value ContactsTable::CustomVariablesAccessor(const Value& row)
@@ -261,32 +248,28 @@ Value ContactsTable::CustomVariablesAccessor(const Value& row)
 	if (!user)
 		return Empty;
 
-	Dictionary::Ptr vars;
+	Dictionary::Ptr vars = user->GetVars();
 
-	{
-		ObjectLock olock(user);
-		vars = CompatUtility::GetCustomAttributeConfig(user);
+	ArrayData result;
+
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const Dictionary::Pair& kv : vars) {
+			Value val;
+
+			if (kv.second.IsObjectType<Array>() || kv.second.IsObjectType<Dictionary>())
+				val = JsonEncode(kv.second);
+			else
+				val = kv.second;
+
+			result.push_back(new Array({
+				kv.first,
+				val
+			}));
+		}
 	}
 
-	if (!vars)
-		return Empty;
-
-	Array::Ptr cv = new Array();
-
-	ObjectLock olock(vars);
-	BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
-		Array::Ptr key_val = new Array();
-		key_val->Add(kv.first);
-
-		if (kv.second.IsObjectType<Array>() || kv.second.IsObjectType<Dictionary>())
-			key_val->Add(JsonEncode(kv.second));
-		else
-			key_val->Add(kv.second);
-
-		cv->Add(key_val);
-	}
-
-	return cv;
+	return new Array(std::move(result));
 }
 
 Value ContactsTable::CVIsJsonAccessor(const Value& row)
@@ -296,12 +279,7 @@ Value ContactsTable::CVIsJsonAccessor(const Value& row)
 	if (!user)
 		return Empty;
 
-	Dictionary::Ptr vars;
-
-	{
-		ObjectLock olock(user);
-		vars = CompatUtility::GetCustomAttributeConfig(user);
-	}
+	Dictionary::Ptr vars = user->GetVars();
 
 	if (!vars)
 		return Empty;
@@ -309,7 +287,7 @@ Value ContactsTable::CVIsJsonAccessor(const Value& row)
 	bool cv_is_json = false;
 
 	ObjectLock olock(vars);
-	BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
+	for (const Dictionary::Pair& kv : vars) {
 		if (kv.second.IsObjectType<Array>() || kv.second.IsObjectType<Dictionary>())
 			cv_is_json = true;
 	}

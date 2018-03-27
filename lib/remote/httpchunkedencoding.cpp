@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,7 @@
 using namespace icinga;
 
 StreamReadStatus HttpChunkedEncoding::ReadChunkFromStream(const Stream::Ptr& stream,
-    char **data, size_t *size, ChunkReadContext& context, bool may_wait)
+	char **data, size_t *size, ChunkReadContext& context, bool may_wait)
 {
 	if (context.LengthIndicator == -1) {
 		String line;
@@ -37,6 +37,8 @@ StreamReadStatus HttpChunkedEncoding::ReadChunkFromStream(const Stream::Ptr& str
 		msgbuf << std::hex << line;
 		msgbuf >> context.LengthIndicator;
 
+		if (context.LengthIndicator < 0)
+			BOOST_THROW_EXCEPTION(std::invalid_argument("HTTP chunk length must not be negative."));
 	}
 
 	StreamReadContext& scontext = context.StreamContext;

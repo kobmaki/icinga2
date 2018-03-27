@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -52,6 +52,12 @@
  * event handling for sockets and timers.
  */
 
+#include <boost/config.hpp>
+
+#if defined(__clang__) && __cplusplus >= 201103L
+#	undef BOOST_NO_CXX11_HDR_TUPLE
+#endif
+
 #ifdef _MSC_VER
 #	pragma warning(disable:4251)
 #	pragma warning(disable:4275)
@@ -83,14 +89,6 @@
 #	pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-#include "base/visibility.hpp"
-
-#ifdef I2_BASE_BUILD
-#	define I2_BASE_API I2_EXPORT
-#else /* I2_BASE_BUILD */
-#	define I2_BASE_API I2_IMPORT
-#endif /* I2_BASE_BUILD */
-
 #if defined(__GNUC__)
 #	define likely(x) __builtin_expect(!!(x), 1)
 #	define unlikely(x) __builtin_expect(!!(x), 0)
@@ -99,5 +97,10 @@
 #	define unlikely(x) (x)
 #endif
 
+#define BOOST_BIND_NO_PLACEHOLDERS
+
+#include <functional>
+
+using namespace std::placeholders;
 
 #endif /* I2BASE_H */

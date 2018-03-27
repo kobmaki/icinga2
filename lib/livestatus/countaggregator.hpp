@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,18 +29,24 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API CountAggregator : public Aggregator
+struct CountAggregatorState final : public AggregatorState
+{
+	int Count{0};
+};
+
+/**
+ * @ingroup livestatus
+ */
+class CountAggregator final : public Aggregator
 {
 public:
 	DECLARE_PTR_TYPEDEFS(CountAggregator);
 
-	CountAggregator(void);
+	void Apply(const Table::Ptr& table, const Value& row, AggregatorState **) override;
+	double GetResultAndFreeState(AggregatorState *state) const override;
 
-	virtual void Apply(const Table::Ptr& table, const Value& row) override;
-	virtual double GetResult(void) const override;
-	
 private:
-	int m_Count;
+	static CountAggregatorState *EnsureState(AggregatorState **state);
 };
 
 }

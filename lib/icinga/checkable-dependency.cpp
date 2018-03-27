@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,6 @@
 #include "icinga/service.hpp"
 #include "icinga/dependency.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -36,10 +35,10 @@ void Checkable::RemoveDependency(const Dependency::Ptr& dep)
 	m_Dependencies.erase(dep);
 }
 
-std::set<Dependency::Ptr> Checkable::GetDependencies(void) const
+std::vector<Dependency::Ptr> Checkable::GetDependencies() const
 {
 	boost::mutex::scoped_lock lock(m_DependencyMutex);
-	return m_Dependencies;
+	return std::vector<Dependency::Ptr>(m_Dependencies.begin(), m_Dependencies.end());
 }
 
 void Checkable::AddReverseDependency(const Dependency::Ptr& dep)
@@ -54,40 +53,40 @@ void Checkable::RemoveReverseDependency(const Dependency::Ptr& dep)
 	m_ReverseDependencies.erase(dep);
 }
 
-std::set<Dependency::Ptr> Checkable::GetReverseDependencies(void) const
+std::vector<Dependency::Ptr> Checkable::GetReverseDependencies() const
 {
 	boost::mutex::scoped_lock lock(m_DependencyMutex);
-	return m_ReverseDependencies;
+	return std::vector<Dependency::Ptr>(m_ReverseDependencies.begin(), m_ReverseDependencies.end());
 }
 
 bool Checkable::IsReachable(DependencyType dt, Dependency::Ptr *failedDependency, int rstack) const
 {
 	if (rstack > 20) {
 		Log(LogWarning, "Checkable")
-		    << "Too many nested dependencies for service '" << GetName() << "': Dependency failed.";
+			<< "Too many nested dependencies for service '" << GetName() << "': Dependency failed.";
 
 		return false;
 	}
 
-	BOOST_FOREACH(const Checkable::Ptr& checkable, GetParents()) {
+	for (const Checkable::Ptr& checkable : GetParents()) {
 		if (!checkable->IsReachable(dt, failedDependency, rstack + 1))
 			return false;
 	}
 
 	/* implicit dependency on host if this is a service */
-	const Service *service = dynamic_cast<const Service *>(this);
+	const auto *service = dynamic_cast<const Service *>(this);
 	if (service && (dt == DependencyState || dt == DependencyNotification)) {
 		Host::Ptr host = service->GetHost();
 
 		if (host && host->GetState() != HostUp && host->GetStateType() == StateTypeHard) {
 			if (failedDependency)
-				*failedDependency = Dependency::Ptr();
+				*failedDependency = nullptr;
 
 			return false;
 		}
 	}
 
-	BOOST_FOREACH(const Dependency::Ptr& dep, GetDependencies()) {
+	for (const Dependency::Ptr& dep : GetDependencies()) {
 		if (!dep->IsAvailable(dt)) {
 			if (failedDependency)
 				*failedDependency = dep;
@@ -97,16 +96,16 @@ bool Checkable::IsReachable(DependencyType dt, Dependency::Ptr *failedDependency
 	}
 
 	if (failedDependency)
-		*failedDependency = Dependency::Ptr();
+		*failedDependency = nullptr;
 
 	return true;
 }
 
-std::set<Checkable::Ptr> Checkable::GetParents(void) const
+std::set<Checkable::Ptr> Checkable::GetParents() const
 {
 	std::set<Checkable::Ptr> parents;
 
-	BOOST_FOREACH(const Dependency::Ptr& dep, GetDependencies()) {
+	for (const Dependency::Ptr& dep : GetDependencies()) {
 		Checkable::Ptr parent = dep->GetParent();
 
 		if (parent && parent.get() != this)
@@ -116,11 +115,11 @@ std::set<Checkable::Ptr> Checkable::GetParents(void) const
 	return parents;
 }
 
-std::set<Checkable::Ptr> Checkable::GetChildren(void) const
+std::set<Checkable::Ptr> Checkable::GetChildren() const
 {
 	std::set<Checkable::Ptr> parents;
 
-	BOOST_FOREACH(const Dependency::Ptr& dep, GetReverseDependencies()) {
+	for (const Dependency::Ptr& dep : GetReverseDependencies()) {
 		Checkable::Ptr service = dep->GetChild();
 
 		if (service && service.get() != this)
@@ -128,4 +127,34 @@ std::set<Checkable::Ptr> Checkable::GetChildren(void) const
 	}
 
 	return parents;
+}
+
+std::set<Checkable::Ptr> Checkable::GetAllChildren() const
+{
+	std::set<Checkable::Ptr> children = GetChildren();
+
+	GetAllChildrenInternal(children, 0);
+
+	return children;
+}
+
+void Checkable::GetAllChildrenInternal(std::set<Checkable::Ptr>& children, int level) const
+{
+	if (level > 32)
+		return;
+
+	std::set<Checkable::Ptr> localChildren;
+
+	for (const Checkable::Ptr& checkable : children) {
+		std::set<Checkable::Ptr> cChildren = checkable->GetChildren();
+
+		if (!cChildren.empty()) {
+			GetAllChildrenInternal(cChildren, level + 1);
+			localChildren.insert(cChildren.begin(), cChildren.end());
+		}
+
+		localChildren.insert(checkable);
+	}
+
+	children.insert(localChildren.begin(), localChildren.end());
 }

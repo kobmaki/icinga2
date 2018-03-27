@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define DATETIME_H
 
 #include "base/i2-base.hpp"
-#include "base/datetime.thpp"
+#include "base/datetime-ti.hpp"
 #include "base/value.hpp"
 #include <vector>
 
@@ -33,7 +33,7 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API DateTime : public ObjectImpl<DateTime>
+class DateTime final : public ObjectImpl<DateTime>
 {
 public:
 	DECLARE_OBJECT(DateTime);
@@ -43,10 +43,10 @@ public:
 
 	String Format(const String& format) const;
 
-	virtual double GetValue(void) const override;
-	virtual String ToString(void) const override;
+	double GetValue() const override;
+	String ToString() const override;
 
-	static Object::Ptr GetPrototype(void);
+	static Object::Ptr GetPrototype();
 
 private:
 	double m_Value;

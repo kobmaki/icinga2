@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,6 @@
 #include "base/objectlock.hpp"
 #include "base/initialize.hpp"
 #include "base/configtype.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -33,17 +32,16 @@ UserGroupDbObject::UserGroupDbObject(const DbType::Ptr& type, const String& name
 	: DbObject(type, name1, name2)
 { }
 
-Dictionary::Ptr UserGroupDbObject::GetConfigFields(void) const
+Dictionary::Ptr UserGroupDbObject::GetConfigFields() const
 {
-	Dictionary::Ptr fields = new Dictionary();
 	UserGroup::Ptr group = static_pointer_cast<UserGroup>(GetObject());
 
-	fields->Set("alias", group->GetDisplayName());
-
-	return fields;
+	return new Dictionary({
+		{ "alias", group->GetDisplayName() }
+	});
 }
 
-Dictionary::Ptr UserGroupDbObject::GetStatusFields(void) const
+Dictionary::Ptr UserGroupDbObject::GetStatusFields() const
 {
-	return Empty;
+	return nullptr;
 }

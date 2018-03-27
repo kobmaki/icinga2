@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,8 +28,8 @@ namespace icinga
 class String;
 class Value;
 
-I2_BASE_API String JsonEncode(const Value& value, bool pretty_print = false);
-I2_BASE_API Value JsonDecode(const String& data);
+String JsonEncode(const Value& value, bool pretty_print = false);
+Value JsonDecode(const String& data);
 
 }
 

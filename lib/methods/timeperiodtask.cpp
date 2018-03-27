@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,28 +22,31 @@
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(EmptyTimePeriod, &TimePeriodTask::EmptyTimePeriodUpdate);
-REGISTER_SCRIPTFUNCTION(EvenMinutesTimePeriod, &TimePeriodTask::EvenMinutesTimePeriodUpdate);
+REGISTER_SCRIPTFUNCTION_NS(Internal, EmptyTimePeriod, &TimePeriodTask::EmptyTimePeriodUpdate, "tp:begin:end");
+REGISTER_SCRIPTFUNCTION_NS(Internal, EvenMinutesTimePeriod, &TimePeriodTask::EvenMinutesTimePeriodUpdate, "tp:begin:end");
 
-Array::Ptr TimePeriodTask::EmptyTimePeriodUpdate(const TimePeriod::Ptr&, double, double)
+Array::Ptr TimePeriodTask::EmptyTimePeriodUpdate(const TimePeriod::Ptr& tp, double, double)
 {
+	REQUIRE_NOT_NULL(tp);
+
 	Array::Ptr segments = new Array();
 	return segments;
 }
 
-Array::Ptr TimePeriodTask::EvenMinutesTimePeriodUpdate(const TimePeriod::Ptr&, double begin, double end)
+Array::Ptr TimePeriodTask::EvenMinutesTimePeriodUpdate(const TimePeriod::Ptr& tp, double begin, double end)
 {
-	Array::Ptr segments = new Array();
+	REQUIRE_NOT_NULL(tp);
+
+	ArrayData segments;
 
 	for (long t = begin / 60 - 1; t * 60 < end; t++) {
 		if ((t % 2) == 0) {
-			Dictionary::Ptr segment = new Dictionary();
-			segment->Set("begin", t * 60);
-			segment->Set("end", (t + 1) * 60);
-
-			segments->Add(segment);
+			segments.push_back(new Dictionary({
+				{ "begin", t * 60 },
+				{ "end", (t + 1) * 60 }
+			}));
 		}
 	}
 
-	return segments;
+	return new Array(std::move(segments));
 }

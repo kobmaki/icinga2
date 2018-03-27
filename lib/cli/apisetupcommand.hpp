@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,16 +30,16 @@ namespace icinga
  *
  * @ingroup cli
  */
-class ApiSetupCommand : public CLICommand
+class ApiSetupCommand final : public CLICommand
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiSetupCommand);
 
-	virtual String GetDescription(void) const override;
-	virtual String GetShortDescription(void) const override;
-	virtual int GetMaxArguments(void) const override;
-	virtual int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
-	virtual ImpersonationLevel GetImpersonationLevel(void) const override;
+	String GetDescription() const override;
+	String GetShortDescription() const override;
+	int GetMaxArguments() const override;
+	int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
+	ImpersonationLevel GetImpersonationLevel() const override;
 };
 
 }

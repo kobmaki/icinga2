@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,9 +20,7 @@
 #include "base/dictionary.hpp"
 #include "base/objectlock.hpp"
 #include "base/json.hpp"
-#include <boost/test/unit_test.hpp>
-#include <boost/foreach.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <BoostTestTargetConfig.h>
 
 using namespace icinga;
 
@@ -82,7 +80,7 @@ BOOST_AUTO_TEST_CASE(foreach)
 
 	bool seen_test1 = false, seen_test2 = false;
 
-	BOOST_FOREACH(const Dictionary::Pair& kv, dictionary) {
+	for (const Dictionary::Pair& kv : dictionary) {
 		BOOST_CHECK(kv.first == "test1" || kv.first == "test2");
 
 		if (kv.first == "test1") {
@@ -135,7 +133,7 @@ BOOST_AUTO_TEST_CASE(remove)
 	{
 		ObjectLock olock(dictionary);
 
-		Dictionary::Iterator it = dictionary->Begin();
+		auto it = dictionary->Begin();
 		dictionary->Remove(it);
 	}
 

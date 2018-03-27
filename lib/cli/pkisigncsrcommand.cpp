@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "cli/pkisigncsrcommand.hpp"
-#include "cli/pkiutility.hpp"
+#include "remote/pkiutility.hpp"
 #include "base/logger.hpp"
 
 using namespace icinga;
@@ -26,22 +26,22 @@ namespace po = boost::program_options;
 
 REGISTER_CLICOMMAND("pki/sign-csr", PKISignCSRCommand);
 
-String PKISignCSRCommand::GetDescription(void) const
+String PKISignCSRCommand::GetDescription() const
 {
 	return "Reads a Certificate Signing Request from stdin and prints a signed certificate on stdout.";
 }
 
-String PKISignCSRCommand::GetShortDescription(void) const
+String PKISignCSRCommand::GetShortDescription() const
 {
 	return "signs a CSR";
 }
 
 void PKISignCSRCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
-	    ("csr", po::value<std::string>(), "CSR file path (input)")
-	    ("cert", po::value<std::string>(), "Certificate file path (output)");
+		("csr", po::value<std::string>(), "CSR file path (input)")
+		("cert", po::value<std::string>(), "Certificate file path (output)");
 }
 
 std::vector<String> PKISignCSRCommand::GetArgumentSuggestions(const String& argument, const String& word) const

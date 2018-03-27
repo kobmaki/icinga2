@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -28,14 +28,15 @@
 #include "base/objectlock.hpp"
 #include <mmatch.h>
 #include <boost/lexical_cast.hpp>
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
+#include <boost/thread/tss.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <boost/uuid/uuid_generators.hpp>
 #include <ios>
 #include <fstream>
 #include <iostream>
+#include <future>
 
 #ifdef __FreeBSD__
 #	include <pthread_np.h>
@@ -49,6 +50,7 @@
 #	include <sys/types.h>
 #	include <pwd.h>
 #	include <grp.h>
+#	include <errno.h>
 #endif /* _WIN32 */
 
 #ifdef _WIN32
@@ -80,9 +82,9 @@ String Utility::DemangleSymbolName(const String& sym)
 
 #ifdef HAVE_CXXABI_H
 	int status;
-	char *realname = abi::__cxa_demangle(sym.CStr(), 0, 0, &status);
+	char *realname = abi::__cxa_demangle(sym.CStr(), nullptr, nullptr, &status);
 
-	if (realname != NULL) {
+	if (realname) {
 		result = String(realname);
 		free(realname);
 	}
@@ -264,7 +266,7 @@ String Utility::DirName(const String& path)
 	String dupPath = path;
 
 	/* PathRemoveFileSpec doesn't properly handle forward slashes. */
-	BOOST_FOREACH(char& ch, dupPath) {
+	for (char& ch : dupPath) {
 		if (ch == '/')
 			ch = '\\';
 	}
@@ -274,7 +276,7 @@ String Utility::DirName(const String& path)
 	dir = strdup(path.CStr());
 #endif /* _WIN32 */
 
-	if (dir == NULL)
+	if (!dir)
 		BOOST_THROW_EXCEPTION(std::bad_alloc());
 
 	String result;
@@ -286,8 +288,8 @@ String Utility::DirName(const String& path)
 		free(dir);
 
 		BOOST_THROW_EXCEPTION(win32_error()
-		    << boost::errinfo_api_function("PathRemoveFileSpec")
-		    << errinfo_win32_error(GetLastError()));
+			<< boost::errinfo_api_function("PathRemoveFileSpec")
+			<< errinfo_win32_error(GetLastError()));
 	}
 
 	result = dir;
@@ -312,7 +314,7 @@ String Utility::BaseName(const String& path)
 	char *dir = strdup(path.CStr());
 	String result;
 
-	if (dir == NULL)
+	if (!dir)
 		BOOST_THROW_EXCEPTION(std::bad_alloc());
 
 #ifndef _WIN32
@@ -364,7 +366,7 @@ void Utility::IncrementTime(double diff)
  *
  * @returns The current time.
  */
-double Utility::GetTime(void)
+double Utility::GetTime()
 {
 #ifdef I2_DEBUG
 	if (m_DebugTime >= 0) {
@@ -392,7 +394,7 @@ double Utility::GetTime(void)
 #else /* _WIN32 */
 	struct timeval tv;
 
-	int rc = gettimeofday(&tv, NULL);
+	int rc = gettimeofday(&tv, nullptr);
 	VERIFY(rc >= 0);
 
 	return tv.tv_sec + tv.tv_usec / 1000000.0;
@@ -404,7 +406,7 @@ double Utility::GetTime(void)
  *
  * @returns The PID.
  */
-pid_t Utility::GetPid(void)
+pid_t Utility::GetPid()
 {
 #ifndef _WIN32
 	return getpid();
@@ -421,7 +423,11 @@ pid_t Utility::GetPid(void)
 void Utility::Sleep(double timeout)
 {
 #ifndef _WIN32
-	usleep(timeout * 1000 * 1000);
+	unsigned long micros = timeout * 1000000u;
+	if (timeout >= 1.0)
+		sleep((unsigned)timeout);
+
+	usleep(micros % 1000000u);
 #else /* _WIN32 */
 	::Sleep(timeout * 1000);
 #endif /* _WIN32 */
@@ -432,29 +438,9 @@ void Utility::Sleep(double timeout)
  *
  * @returns The new unique ID.
  */
-String Utility::NewUniqueID(void)
+String Utility::NewUniqueID()
 {
-	static boost::mutex mutex;
-	static int next_id = 0;
-
-	/* I'd much rather use UUIDs but RHEL is way too cool to have
-	 * a semi-recent version of boost. Yay. */
-
-	String id;
-
-	char buf[128];
-	if (gethostname(buf, sizeof(buf)) == 0)
-		id = String(buf) + "-";
-
-	id += Convert::ToString((long)Utility::GetTime()) + "-";
-
-	{
-		boost::mutex::scoped_lock lock(mutex);
-		id += Convert::ToString(next_id);
-		next_id++;
-	}
-
-	return id;
+	return boost::lexical_cast<std::string>(boost::uuids::random_generator()());
 }
 
 #ifdef _WIN32
@@ -499,6 +485,16 @@ static bool GlobHelper(const String& pathSpec, int type, std::vector<String>& fi
 }
 #endif /* _WIN32 */
 
+#ifndef _WIN32
+static int GlobErrorHandler(const char *epath, int eerrno)
+{
+	if (eerrno == ENOTDIR)
+		return 0;
+
+	return eerrno;
+}
+#endif /* _WIN32 */
+
 /**
  * Calls the specified callback for each file matching the path specification.
  *
@@ -506,13 +502,12 @@ static bool GlobHelper(const String& pathSpec, int type, std::vector<String>& fi
  * @param callback The callback which is invoked for each matching file.
  * @param type The file type (a combination of GlobFile and GlobDirectory)
  */
-bool Utility::Glob(const String& pathSpec, const boost::function<void (const String&)>& callback, int type)
+bool Utility::Glob(const String& pathSpec, const std::function<void (const String&)>& callback, int type)
 {
 	std::vector<String> files, dirs;
 
 #ifdef _WIN32
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, pathSpec, boost::is_any_of("\\/"));
+	std::vector<String> tokens = pathSpec.Split("\\/");
 
 	String part1;
 
@@ -539,7 +534,7 @@ bool Utility::Glob(const String& pathSpec, const boost::function<void (const Str
 			if (!GlobHelper(part1, GlobDirectory, files2, dirs2))
 				return false;
 
-			BOOST_FOREACH(const String& dir, dirs2) {
+			for (const String& dir : dirs2) {
 				if (!Utility::Glob(dir + "/" + part2, callback, type))
 					return false;
 			}
@@ -553,16 +548,16 @@ bool Utility::Glob(const String& pathSpec, const boost::function<void (const Str
 #else /* _WIN32 */
 	glob_t gr;
 
-	int rc = glob(pathSpec.CStr(), GLOB_ERR | GLOB_NOSORT, NULL, &gr);
+	int rc = glob(pathSpec.CStr(), GLOB_NOSORT, GlobErrorHandler, &gr);
 
-	if (rc < 0) {
+	if (rc) {
 		if (rc == GLOB_NOMATCH)
 			return false;
 
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("glob")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(pathSpec));
+			<< boost::errinfo_api_function("glob")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(pathSpec));
 	}
 
 	if (gr.gl_pathc == 0) {
@@ -582,21 +577,21 @@ bool Utility::Glob(const String& pathSpec, const boost::function<void (const Str
 			continue;
 
 		if (S_ISDIR(statbuf.st_mode) && (type & GlobDirectory))
-			dirs.push_back(*gp);
+			dirs.emplace_back(*gp);
 		else if (!S_ISDIR(statbuf.st_mode) && (type & GlobFile))
-			files.push_back(*gp);
+			files.emplace_back(*gp);
 	}
 
 	globfree(&gr);
 #endif /* _WIN32 */
 
 	std::sort(files.begin(), files.end());
-	BOOST_FOREACH(const String& cpath, files) {
+	for (const String& cpath : files) {
 		callback(cpath);
 	}
 
 	std::sort(dirs.begin(), dirs.end());
-	BOOST_FOREACH(const String& cpath, dirs) {
+	for (const String& cpath : dirs) {
 		callback(cpath);
 	}
 
@@ -613,7 +608,7 @@ bool Utility::Glob(const String& pathSpec, const boost::function<void (const Str
  * @param callback The callback which is invoked for each matching file.
  * @param type The file type (a combination of GlobFile and GlobDirectory)
  */
-bool Utility::GlobRecursive(const String& path, const String& pattern, const boost::function<void (const String&)>& callback, int type)
+bool Utility::GlobRecursive(const String& path, const String& pattern, const std::function<void (const String&)>& callback, int type)
 {
 	std::vector<String> files, dirs, alldirs;
 
@@ -632,9 +627,9 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 			return false;
 
 		BOOST_THROW_EXCEPTION(win32_error()
-		    << boost::errinfo_api_function("FindFirstFile")
+			<< boost::errinfo_api_function("FindFirstFile")
 			<< errinfo_win32_error(errorCode)
-		    << boost::errinfo_file_name(pathSpec));
+			<< boost::errinfo_file_name(pathSpec));
 	}
 
 	do {
@@ -658,19 +653,19 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 
 	if (!FindClose(handle)) {
 		BOOST_THROW_EXCEPTION(win32_error()
-		    << boost::errinfo_api_function("FindClose")
-		    << errinfo_win32_error(GetLastError()));
+			<< boost::errinfo_api_function("FindClose")
+			<< errinfo_win32_error(GetLastError()));
 	}
 #else /* _WIN32 */
 	DIR *dirp;
 
 	dirp = opendir(path.CStr());
 
-	if (dirp == NULL)
+	if (!dirp)
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("opendir")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(path));
+			<< boost::errinfo_api_function("opendir")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(path));
 
 	while (dirp) {
 		dirent *pent;
@@ -681,9 +676,9 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 			closedir(dirp);
 
 			BOOST_THROW_EXCEPTION(posix_error()
-			    << boost::errinfo_api_function("readdir")
-			    << boost::errinfo_errno(errno)
-			    << boost::errinfo_file_name(path));
+				<< boost::errinfo_api_function("readdir")
+				<< boost::errinfo_errno(errno)
+				<< boost::errinfo_file_name(path));
 		}
 
 		if (!pent)
@@ -717,17 +712,17 @@ bool Utility::GlobRecursive(const String& path, const String& pattern, const boo
 #endif /* _WIN32 */
 
 	std::sort(files.begin(), files.end());
-	BOOST_FOREACH(const String& cpath, files) {
+	for (const String& cpath : files) {
 		callback(cpath);
 	}
 
 	std::sort(dirs.begin(), dirs.end());
-	BOOST_FOREACH(const String& cpath, dirs) {
+	for (const String& cpath : dirs) {
 		callback(cpath);
 	}
 
 	std::sort(alldirs.begin(), alldirs.end());
-	BOOST_FOREACH(const String& cpath, alldirs) {
+	for (const String& cpath : alldirs) {
 		GlobRecursive(cpath, pattern, callback, type);
 	}
 
@@ -745,9 +740,9 @@ void Utility::MkDir(const String& path, int mode)
 #endif /* _WIN32 */
 
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("mkdir")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(path));
+			<< boost::errinfo_api_function("mkdir")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(path));
 	}
 }
 
@@ -772,18 +767,19 @@ void Utility::MkDirP(const String& path, int mode)
 void Utility::RemoveDirRecursive(const String& path)
 {
 	std::vector<String> paths;
-	Utility::GlobRecursive(path, "*", boost::bind(&Utility::CollectPaths, _1, boost::ref(paths)), GlobFile | GlobDirectory);
+	Utility::GlobRecursive(path, "*", std::bind(&Utility::CollectPaths, _1, std::ref(paths)), GlobFile | GlobDirectory);
 
 	/* This relies on the fact that GlobRecursive lists the parent directory
-	   first before recursing into subdirectories. */
+	 * first before recursing into subdirectories.
+	 */
 	std::reverse(paths.begin(), paths.end());
 
-	BOOST_FOREACH(const String& path, paths) {
+	for (const String& path : paths) {
 		if (remove(path.CStr()) < 0)
 			BOOST_THROW_EXCEPTION(posix_error()
-			    << boost::errinfo_api_function("remove")
-			    << boost::errinfo_errno(errno)
-			    << boost::errinfo_file_name(path));
+				<< boost::errinfo_api_function("remove")
+				<< boost::errinfo_errno(errno)
+				<< boost::errinfo_file_name(path));
 	}
 
 #ifndef _WIN32
@@ -792,9 +788,9 @@ void Utility::RemoveDirRecursive(const String& path)
 	if (_rmdir(path.CStr()) < 0)
 #endif /* _WIN32 */
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rmdir")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(path));
+			<< boost::errinfo_api_function("rmdir")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(path));
 }
 
 void Utility::CollectPaths(const String& path, std::vector<String>& paths)
@@ -802,6 +798,10 @@ void Utility::CollectPaths(const String& path, std::vector<String>& paths)
 	paths.push_back(path);
 }
 
+/*
+ * Copies a source file to a target location.
+ * Caller must ensure that the target's base directory exists and is writable.
+ */
 void Utility::CopyFile(const String& source, const String& target)
 {
 	std::ifstream ifs(source.CStr(), std::ios::binary);
@@ -822,11 +822,11 @@ bool Utility::SetFileOwnership(const String& file, const String& user, const Str
 	if (!pw) {
 		if (errno == 0) {
 			Log(LogCritical, "cli")
-			    << "Invalid user specified: " << user;
+				<< "Invalid user specified: " << user;
 			return false;
 		} else {
 			Log(LogCritical, "cli")
-			    << "getpwnam() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+				<< "getpwnam() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 			return false;
 		}
 	}
@@ -837,18 +837,18 @@ bool Utility::SetFileOwnership(const String& file, const String& user, const Str
 	if (!gr) {
 		if (errno == 0) {
 			Log(LogCritical, "cli")
-			    << "Invalid group specified: " << group;
+				<< "Invalid group specified: " << group;
 			return false;
 		} else {
 			Log(LogCritical, "cli")
-			    << "getgrnam() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+				<< "getgrnam() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 			return false;
 		}
 	}
 
 	if (chown(file.CStr(), pw->pw_uid, gr->gr_gid) < 0) {
 		Log(LogCritical, "cli")
-		    << "chown() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+			<< "chown() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 		return false;
 	}
 #endif /* _WIN32 */
@@ -863,8 +863,8 @@ void Utility::SetNonBlocking(int fd, bool nb)
 
 	if (flags < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("fcntl")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("fcntl")
+			<< boost::errinfo_errno(errno));
 	}
 
 	if (nb)
@@ -874,8 +874,8 @@ void Utility::SetNonBlocking(int fd, bool nb)
 
 	if (fcntl(fd, F_SETFL, flags) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("fcntl")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("fcntl")
+			<< boost::errinfo_errno(errno));
 	}
 }
 
@@ -885,8 +885,8 @@ void Utility::SetCloExec(int fd, bool cloexec)
 
 	if (flags < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("fcntl")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("fcntl")
+			<< boost::errinfo_errno(errno));
 	}
 
 	if (cloexec)
@@ -896,8 +896,8 @@ void Utility::SetCloExec(int fd, bool cloexec)
 
 	if (fcntl(fd, F_SETFD, flags) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("fcntl")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("fcntl")
+			<< boost::errinfo_errno(errno));
 	}
 }
 #endif /* _WIN32 */
@@ -912,7 +912,7 @@ void Utility::SetNonBlockingSocket(SOCKET s, bool nb)
 #endif /* _WIN32 */
 }
 
-void Utility::QueueAsyncCallback(const boost::function<void (void)>& callback, SchedulerPolicy policy)
+void Utility::QueueAsyncCallback(const std::function<void ()>& callback, SchedulerPolicy policy)
 {
 	Application::GetTP().Post(callback, policy);
 }
@@ -935,23 +935,26 @@ String Utility::NaturalJoin(const std::vector<String>& tokens)
 	return result;
 }
 
-String Utility::Join(const Array::Ptr& tokens, char separator)
+String Utility::Join(const Array::Ptr& tokens, char separator, bool escapeSeparator)
 {
 	String result;
 	bool first = true;
 
 	ObjectLock olock(tokens);
-	BOOST_FOREACH(const Value& vtoken, tokens) {
+	for (const Value& vtoken : tokens) {
 		String token = Convert::ToString(vtoken);
-		boost::algorithm::replace_all(token, "\\", "\\\\");
 
-		char sep_before[2], sep_after[3];
-		sep_before[0] = separator;
-		sep_before[1] = '\0';
-		sep_after[0] = '\\';
-		sep_after[1] = separator;
-		sep_after[2] = '\0';
-		boost::algorithm::replace_all(token, sep_before, sep_after);
+		if (escapeSeparator) {
+			boost::algorithm::replace_all(token, "\\", "\\\\");
+
+			char sep_before[2], sep_after[3];
+			sep_before[0] = separator;
+			sep_before[1] = '\0';
+			sep_after[0] = '\\';
+			sep_after[1] = separator;
+			sep_after[2] = '\0';
+			boost::algorithm::replace_all(token, sep_before, sep_after);
+		}
 
 		if (first)
 			first = false;
@@ -971,33 +974,33 @@ String Utility::FormatDuration(double duration)
 
 	if (duration >= 86400) {
 		int days = duration / 86400;
-		tokens.push_back(Convert::ToString(days) + (days != 1 ? " days" : " day"));
+		tokens.emplace_back(Convert::ToString(days) + (days != 1 ? " days" : " day"));
 		duration = static_cast<int>(duration) % 86400;
 	}
 
 	if (duration >= 3600) {
 		int hours = duration / 3600;
-		tokens.push_back(Convert::ToString(hours) + (hours != 1 ? " hours" : " hour"));
+		tokens.emplace_back(Convert::ToString(hours) + (hours != 1 ? " hours" : " hour"));
 		duration = static_cast<int>(duration) % 3600;
 	}
 
 	if (duration >= 60) {
 		int minutes = duration / 60;
-		tokens.push_back(Convert::ToString(minutes) + (minutes != 1 ? " minutes" : " minute"));
+		tokens.emplace_back(Convert::ToString(minutes) + (minutes != 1 ? " minutes" : " minute"));
 		duration = static_cast<int>(duration) % 60;
 	}
 
 	if (duration >= 1) {
 		int seconds = duration;
-		tokens.push_back(Convert::ToString(seconds) + (seconds != 1 ? " seconds" : " second"));
+		tokens.emplace_back(Convert::ToString(seconds) + (seconds != 1 ? " seconds" : " second"));
 	}
 
 	if (tokens.size() == 0) {
 		int milliseconds = std::floor(duration * 1000);
 		if (milliseconds >= 1)
-			tokens.push_back(Convert::ToString(milliseconds) + (milliseconds != 1 ? " milliseconds" : " millisecond"));
+			tokens.emplace_back(Convert::ToString(milliseconds) + (milliseconds != 1 ? " milliseconds" : " millisecond"));
 		else
-			tokens.push_back("less than 1 millisecond");
+			tokens.emplace_back("less than 1 millisecond");
 	}
 
 	return NaturalJoin(tokens);
@@ -1006,24 +1009,24 @@ String Utility::FormatDuration(double duration)
 String Utility::FormatDateTime(const char *format, double ts)
 {
 	char timestamp[128];
-	time_t tempts = (time_t)ts; /* We don't handle sub-second timestamps here just yet. */
+	auto tempts = (time_t)ts; /* We don't handle sub-second timestamps here just yet. */
 	tm tmthen;
 
 #ifdef _MSC_VER
 	tm *temp = localtime(&tempts);
 
-	if (temp == NULL) {
+	if (!temp) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("localtime")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("localtime")
+			<< boost::errinfo_errno(errno));
 	}
 
 	tmthen = *temp;
 #else /* _MSC_VER */
-	if (localtime_r(&tempts, &tmthen) == NULL) {
+	if (!localtime_r(&tempts, &tmthen)) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("localtime_r")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("localtime_r")
+			<< boost::errinfo_errno(errno));
 	}
 #endif /* _MSC_VER */
 
@@ -1040,8 +1043,8 @@ String Utility::FormatErrorNumber(int code) {
 	String result = "Unknown error.";
 
 	DWORD rc = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, code, 0, (char *)&message,
-		0, NULL);
+		FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, code, 0, (char *)&message,
+		0, nullptr);
 
 	if (rc != 0) {
 		result = String(message);
@@ -1064,7 +1067,7 @@ String Utility::EscapeShellCmd(const String& s)
 	size_t prev_quote = String::NPos;
 	int index = -1;
 
-	BOOST_FOREACH(char ch, s) {
+	for (char ch : s) {
 		bool escape = false;
 
 		index++;
@@ -1085,10 +1088,10 @@ String Utility::EscapeShellCmd(const String& s)
 #endif /* _WIN32 */
 
 		if (ch == '#' || ch == '&' || ch == ';' || ch == '`' || ch == '|' ||
-		    ch == '*' || ch == '?' || ch == '~' || ch == '<' || ch == '>' ||
-		    ch == '^' || ch == '(' || ch == ')' || ch == '[' || ch == ']' ||
-		    ch == '{' || ch == '}' || ch == '$' || ch == '\\' || ch == '\x0A' ||
-		    ch == '\xFF')
+			ch == '*' || ch == '?' || ch == '~' || ch == '<' || ch == '>' ||
+			ch == '^' || ch == '(' || ch == ')' || ch == '[' || ch == ']' ||
+			ch == '{' || ch == '}' || ch == '$' || ch == '\\' || ch == '\x0A' ||
+			ch == '\xFF')
 			escape = true;
 
 		if (escape)
@@ -1114,7 +1117,7 @@ String Utility::EscapeShellArg(const String& s)
 	result = "'";
 #endif /* _WIN32 */
 
-	BOOST_FOREACH(char ch, s) {
+	for (char ch : s) {
 #ifdef _WIN32
 		if (ch == '"' || ch == '%') {
 			result += ' ';
@@ -1211,13 +1214,13 @@ void Utility::SetThreadName(const String& name, bool os)
 #endif /* HAVE_PTHREAD_SETNAME_NP */
 }
 
-String Utility::GetThreadName(void)
+String Utility::GetThreadName()
 {
 	String *name = m_ThreadName.get();
 
 	if (!name) {
 		std::ostringstream idbuf;
-		idbuf << boost::this_thread::get_id();
+		idbuf << std::this_thread::get_id();
 		return idbuf.str();
 	}
 
@@ -1229,7 +1232,7 @@ unsigned long Utility::SDBM(const String& str, size_t len)
 	unsigned long hash = 0;
 	size_t current = 0;
 
-	BOOST_FOREACH(char c, str) {
+	for (char c : str) {
 		if (current >= len)
 			break;
 
@@ -1243,15 +1246,14 @@ unsigned long Utility::SDBM(const String& str, size_t len)
 
 int Utility::CompareVersion(const String& v1, const String& v2)
 {
-	std::vector<String> tokensv1, tokensv2;
-	boost::algorithm::split(tokensv1, v1, boost::is_any_of("."));
-	boost::algorithm::split(tokensv2, v2, boost::is_any_of("."));
+	std::vector<String> tokensv1 = v1.Split(".");
+	std::vector<String> tokensv2 = v2.Split(".");
 
 	for (std::vector<String>::size_type i = 0; i < tokensv2.size() - tokensv1.size(); i++)
-		tokensv1.push_back("0");
+		tokensv1.emplace_back("0");
 
 	for (std::vector<String>::size_type i = 0; i < tokensv1.size() - tokensv2.size(); i++)
-		tokensv2.push_back("0");
+		tokensv2.emplace_back("0");
 
 	for (std::vector<String>::size_type i = 0; i < tokensv1.size(); i++) {
 		if (Convert::ToLong(tokensv2[i]) > Convert::ToLong(tokensv1[i]))
@@ -1263,7 +1265,7 @@ int Utility::CompareVersion(const String& v1, const String& v2)
 	return 0;
 }
 
-String Utility::GetHostName(void)
+String Utility::GetHostName()
 {
 	char name[255];
 
@@ -1279,7 +1281,7 @@ String Utility::GetHostName(void)
  *
  * @returns The FQDN.
  */
-String Utility::GetFQDN(void)
+String Utility::GetFQDN()
 {
 	String hostname = GetHostName();
 
@@ -1290,10 +1292,10 @@ String Utility::GetFQDN(void)
 	hints.ai_flags = AI_CANONNAME;
 
 	addrinfo *result;
-	int rc = getaddrinfo(hostname.CStr(), NULL, &hints, &result);
+	int rc = getaddrinfo(hostname.CStr(), nullptr, &hints, &result);
 
 	if (rc != 0)
-		result = NULL;
+		result = nullptr;
 
 	if (result) {
 		if (strcmp(result->ai_canonname, "localhost") != 0)
@@ -1305,7 +1307,7 @@ String Utility::GetFQDN(void)
 	return hostname;
 }
 
-int Utility::Random(void)
+int Utility::Random()
 {
 #ifdef _WIN32
 	return rand();
@@ -1326,20 +1328,20 @@ tm Utility::LocalTime(time_t ts)
 #ifdef _MSC_VER
 	tm *result = localtime(&ts);
 
-	if (result == NULL) {
+	if (!result) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("localtime")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("localtime")
+			<< boost::errinfo_errno(errno));
 	}
 
 	return *result;
 #else /* _MSC_VER */
 	tm result;
 
-	if (localtime_r(&ts, &result) == NULL) {
+	if (!localtime_r(&ts, &result)) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("localtime_r")
-		    << boost::errinfo_errno(errno));
+			<< boost::errinfo_api_function("localtime_r")
+			<< boost::errinfo_errno(errno));
 	}
 
 	return result;
@@ -1387,9 +1389,9 @@ void Utility::SaveJsonFile(const String& path, int mode, const Value& value)
 
 	if (rename(tempFilename.CStr(), path.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rename")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(tempFilename));
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(tempFilename));
 	}
 }
 
@@ -1417,7 +1419,7 @@ String Utility::EscapeString(const String& s, const String& chars, const bool il
 {
 	std::ostringstream result;
 	if (illegal) {
-		BOOST_FOREACH(char ch, s) {
+		for (char ch : s) {
 			if (chars.FindFirstOf(ch) != String::NPos || ch == '%') {
 				result << '%';
 				HexEncode(ch, result);
@@ -1425,7 +1427,7 @@ String Utility::EscapeString(const String& s, const String& chars, const bool il
 				result << ch;
 		}
 	} else {
-		BOOST_FOREACH(char ch, s) {
+		for (char ch : s) {
 			if (chars.FindFirstOf(ch) == String::NPos || ch == '%') {
 				result << '%';
 				HexEncode(ch, result);
@@ -1474,7 +1476,7 @@ static String UnameHelper(char type)
 	char line[1024];
 	std::ostringstream msgbuf;
 
-	while (fgets(line, sizeof(line), fp) != NULL)
+	while (fgets(line, sizeof(line), fp))
 		msgbuf << line;
 
 	pclose(fp);
@@ -1550,12 +1552,12 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 	}
 
 	/* You are using a distribution which supports LSB. */
-	FILE *fp = popen("lsb_release -s -i 2>&1", "r");
+	FILE *fp = popen("type lsb_release >/dev/null 2>&1 && lsb_release -s -i 2>&1", "r");
 
-	if (fp != NULL) {
+	if (fp) {
 		std::ostringstream msgbuf;
 		char line[1024];
-		while (fgets(line, sizeof(line), fp) != NULL)
+		while (fgets(line, sizeof(line), fp))
 			msgbuf << line;
 		int status = pclose(fp);
 		if (WEXITSTATUS(status) == 0) {
@@ -1564,12 +1566,12 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 		}
 	}
 
-	fp = popen("lsb_release -s -r 2>&1", "r");
+	fp = popen("type lsb_release >/dev/null 2>&1 && lsb_release -s -r 2>&1", "r");
 
-	if (fp != NULL) {
+	if (fp) {
 		std::ostringstream msgbuf;
 		char line[1024];
-		while (fgets(line, sizeof(line), fp) != NULL)
+		while (fgets(line, sizeof(line), fp))
 			msgbuf << line;
 		int status = pclose(fp);
 		if (WEXITSTATUS(status) == 0) {
@@ -1579,12 +1581,12 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 	}
 
 	/* OS X */
-	fp = popen("sw_vers -productName 2>&1", "r");
+	fp = popen("type sw_vers >/dev/null 2>&1 && sw_vers -productName 2>&1", "r");
 
-	if (fp != NULL) {
+	if (fp) {
 		std::ostringstream msgbuf;
 		char line[1024];
-		while (fgets(line, sizeof(line), fp) != NULL)
+		while (fgets(line, sizeof(line), fp))
 			msgbuf << line;
 		int status = pclose(fp);
 		if (WEXITSTATUS(status) == 0) {
@@ -1596,12 +1598,12 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 		}
 	}
 
-	fp = popen("sw_vers -productVersion 2>&1", "r");
+	fp = popen("type sw_vers >/dev/null 2>&1 && sw_vers -productVersion 2>&1", "r");
 
-	if (fp != NULL) {
+	if (fp) {
 		std::ostringstream msgbuf;
 		char line[1024];
-		while (fgets(line, sizeof(line), fp) != NULL)
+		while (fgets(line, sizeof(line), fp))
 			msgbuf << line;
 		int status = pclose(fp);
 		if (WEXITSTATUS(status) == 0) {
@@ -1657,7 +1659,7 @@ static bool ReleaseHelper(String *platformName, String *platformVersion)
 #endif /* _WIN32 */
 }
 
-String Utility::GetPlatformKernel(void)
+String Utility::GetPlatformKernel()
 {
 #ifdef _WIN32
 	return "Windows";
@@ -1666,7 +1668,7 @@ String Utility::GetPlatformKernel(void)
 #endif /* _WIN32 */
 }
 
-String Utility::GetPlatformKernelVersion(void)
+String Utility::GetPlatformKernelVersion()
 {
 #ifdef _WIN32
 	OSVERSIONINFO info;
@@ -1682,23 +1684,23 @@ String Utility::GetPlatformKernelVersion(void)
 #endif /* _WIN32 */
 }
 
-String Utility::GetPlatformName(void)
+String Utility::GetPlatformName()
 {
 	String platformName;
-	if (!ReleaseHelper(&platformName, NULL))
+	if (!ReleaseHelper(&platformName, nullptr))
 		return "Unknown";
 	return platformName;
 }
 
-String Utility::GetPlatformVersion(void)
+String Utility::GetPlatformVersion()
 {
 	String platformVersion;
-	if (!ReleaseHelper(NULL, &platformVersion))
+	if (!ReleaseHelper(nullptr, &platformVersion))
 		return "Unknown";
 	return platformVersion;
 }
 
-String Utility::GetPlatformArchitecture(void)
+String Utility::GetPlatformArchitecture()
 {
 #ifdef _WIN32
 	SYSTEM_INFO info;
@@ -1730,7 +1732,7 @@ String Utility::ValidateUTF8(const String& input)
 		}
 
 		if ((input[i] & 0xE0) == 0xC0 && length > i + 1 &&
-		    (input[i + 1] & 0xC0) == 0x80) {
+			(input[i + 1] & 0xC0) == 0x80) {
 			output += input[i];
 			output += input[i + 1];
 			i++;
@@ -1738,7 +1740,7 @@ String Utility::ValidateUTF8(const String& input)
 		}
 
 		if ((input[i] & 0xF0) == 0xE0 && length > i + 2 &&
-		    (input[i + 1] & 0xC0) == 0x80 && (input[i + 2] & 0xC0) == 0x80) {
+			(input[i + 1] & 0xC0) == 0x80 && (input[i + 2] & 0xC0) == 0x80) {
 			output += input[i];
 			output += input[i + 1];
 			output += input[i + 2];
@@ -1768,14 +1770,14 @@ String Utility::CreateTempFile(const String& path, int mode, std::fstream& fp)
 
 	if (fd < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("mkstemp")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(path));
+			<< boost::errinfo_api_function("mkstemp")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(path));
 	}
 
 	try {
 		fp.open(&targetPath[0], std::ios_base::trunc | std::ios_base::out);
-	} catch (const std::fstream::failure& e) {
+	} catch (const std::fstream::failure&) {
 		close(fd);
 		throw;
 	}
@@ -1786,9 +1788,9 @@ String Utility::CreateTempFile(const String& path, int mode, std::fstream& fp)
 
 	if (chmod(resultPath.CStr(), mode) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("chmod")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(resultPath));
+			<< boost::errinfo_api_function("chmod")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(resultPath));
 	}
 
 	return resultPath;
@@ -1796,12 +1798,13 @@ String Utility::CreateTempFile(const String& path, int mode, std::fstream& fp)
 
 #ifdef _WIN32
 /* mkstemp extracted from libc/sysdeps/posix/tempname.c.  Copyright
-   (C) 1991-1999, 2000, 2001, 2006 Free Software Foundation, Inc.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.  */
+ * (C) 1991-1999, 2000, 2001, 2006 Free Software Foundation, Inc.
+ *
+ * The GNU C Library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ */
 
 #define _O_EXCL 0x0400
 #define _O_CREAT 0x0100
@@ -1813,9 +1816,10 @@ String Utility::CreateTempFile(const String& path, int mode, std::fstream& fp)
 static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 /* Generate a temporary file name based on TMPL.  TMPL must match the
-   rules for mk[s]temp (i.e. end in "XXXXXX").  The name constructed
-   does not exist at the time of the call to mkstemp.  TMPL is
-   overwritten with the result.  */
+ * rules for mk[s]temp (i.e. end in "XXXXXX").  The name constructed
+ * does not exist at the time of the call to mkstemp.  TMPL is
+ * overwritten with the result.
+ */
 int Utility::MksTemp(char *tmpl)
 {
 	int len;
@@ -1827,15 +1831,17 @@ int Utility::MksTemp(char *tmpl)
 	int save_errno = errno;
 
 	/* A lower bound on the number of temporary files to attempt to
-	generate.  The maximum total number of temporary file names that
-	can exist for a given template is 62**6.  It should never be
-	necessary to try all these combinations.  Instead if a reasonable
-	number of names is tried (we define reasonable as 62**3) fail to
-	give the system administrator the chance to remove the problems.  */
+	 * generate.  The maximum total number of temporary file names that
+	 * can exist for a given template is 62**6.  It should never be
+	 * necessary to try all these combinations.  Instead if a reasonable
+	 * number of names is tried (we define reasonable as 62**3) fail to
+	 * give the system administrator the chance to remove the problems.
+	 */
 #define ATTEMPTS_MIN (62 * 62 * 62)
 
-	/* The number of times to attempt to generate a temporary file.  To
-	   conform to POSIX, this must be no smaller than TMP_MAX.  */
+	/* The number of times to attempt to generate a temporary file
+	 * To conform to POSIX, this must be no smaller than TMP_MAX.
+	 */
 #if ATTEMPTS_MIN < TMP_MAX
 	unsigned int attempts = TMP_MAX;
 #else
@@ -1860,8 +1866,8 @@ int Utility::MksTemp(char *tmpl)
 		GetSystemTime(&stNow);
 		stNow.wMilliseconds = 500;
 		if (!SystemTimeToFileTime(&stNow, &ftNow)) {
-		    errno = -1;
-		    return -1;
+			errno = -1;
+			return -1;
 		}
 
 		random_time_bits = (((unsigned long long)ftNow.dwHighDateTime << 32) | (unsigned long long)ftNow.dwLowDateTime);
@@ -1898,7 +1904,7 @@ int Utility::MksTemp(char *tmpl)
 	return -1;
 }
 
-String Utility::GetIcingaInstallPath(void)
+String Utility::GetIcingaInstallPath()
 {
 	char szProduct[39];
 
@@ -1920,12 +1926,44 @@ String Utility::GetIcingaInstallPath(void)
 	return "";
 }
 
-String Utility::GetIcingaDataPath(void)
+String Utility::GetIcingaDataPath()
 {
 	char path[MAX_PATH];
-	if (!SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path)))
+	if (!SUCCEEDED(SHGetFolderPath(nullptr, CSIDL_COMMON_APPDATA, nullptr, 0, path)))
 		return "";
 	return String(path) + "\\icinga2";
 }
 
 #endif /* _WIN32 */
+
+String Utility::GetFromSysconfig(const String& env)
+{
+#ifndef _WIN32
+	String sysconf = Application::GetSysconfigFile();
+	if (sysconf.IsEmpty())
+		return "";
+
+	String cmdInner = ". " + EscapeShellArg(sysconf) + " 2>&1 >/dev/null;echo \"$" + env + "\"";
+	String cmd = "sh -c " + EscapeShellArg(cmdInner);
+
+	FILE *fp = popen(cmd.CStr(), "r");
+
+	if (!fp)
+		return "";
+
+	char line[1024];
+	String out;
+
+	if (fgets(line, sizeof(line), fp))
+		out = line;
+	else
+		return "";
+
+	pclose(fp);
+
+	return out.Trim();
+#else
+	//TODO: Figure out how to do this on windows
+	return "";
+#endif /* _WIN32 */
+}

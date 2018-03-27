@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,7 +34,7 @@ static bool ExecuteExpression(Expression *expression)
 		return false;
 
 	try {
-		ScriptFrame frame;
+		ScriptFrame frame(true);
 		expression->Evaluate(frame);
 	} catch (const std::exception& ex) {
 		Log(LogCritical, "config", DiagnosticInformation(ex));
@@ -51,9 +51,9 @@ static void IncludeZoneDirRecursive(const String& path, const String& package, b
 	/* register this zone path for cluster config sync */
 	ConfigCompiler::RegisterZoneDir("_etc", path, zoneName);
 
-	std::vector<Expression *> expressions;
-	Utility::GlobRecursive(path, "*.conf", boost::bind(&ConfigCompiler::CollectIncludes, boost::ref(expressions), _1, zoneName, package), GlobFile);
-	DictExpression expr(expressions);
+	std::vector<std::unique_ptr<Expression> > expressions;
+	Utility::GlobRecursive(path, "*.conf", std::bind(&ConfigCompiler::CollectIncludes, std::ref(expressions), _1, zoneName, package), GlobFile);
+	DictExpression expr(std::move(expressions));
 	if (!ExecuteExpression(&expr))
 		success = false;
 }
@@ -70,13 +70,13 @@ static void IncludeNonLocalZone(const String& zonePath, const String& package, b
 	 */
 	if (ConfigCompiler::HasZoneConfigAuthority(zoneName) || Utility::PathExists(zonePath + "/.authoritative")) {
 		Log(LogNotice, "config")
-		    << "Ignoring non local config include for zone '" << zoneName << "': We already have an authoritative copy included.";
+			<< "Ignoring non local config include for zone '" << zoneName << "': We already have an authoritative copy included.";
 		return;
 	}
 
-	std::vector<Expression *> expressions;
-	Utility::GlobRecursive(zonePath, "*.conf", boost::bind(&ConfigCompiler::CollectIncludes, boost::ref(expressions), _1, zoneName, package), GlobFile);
-	DictExpression expr(expressions);
+	std::vector<std::unique_ptr<Expression> > expressions;
+	Utility::GlobRecursive(zonePath, "*.conf", std::bind(&ConfigCompiler::CollectIncludes, std::ref(expressions), _1, zoneName, package), GlobFile);
+	DictExpression expr(std::move(expressions));
 	if (!ExecuteExpression(&expr))
 		success = false;
 }
@@ -88,13 +88,11 @@ static void IncludePackage(const String& packagePath, bool& success)
 	String packageName = Utility::BaseName(packagePath);
 
 	if (Utility::PathExists(packagePath + "/include.conf")) {
-		Expression *expr = ConfigCompiler::CompileFile(packagePath + "/include.conf",
-		    String(), packageName);
+		std::unique_ptr<Expression> expr = ConfigCompiler::CompileFile(packagePath + "/include.conf",
+			String(), packageName);
 
-		if (!ExecuteExpression(expr))
+		if (!ExecuteExpression(&*expr))
 			success = false;
-
-		delete expr;
 	}
 }
 
@@ -105,12 +103,16 @@ bool DaemonUtility::ValidateConfigFiles(const std::vector<std::string>& configs,
 		ConfigCompilerContext::GetInstance()->OpenObjectsFile(objectsFile);
 
 	if (!configs.empty()) {
-		BOOST_FOREACH(const String& configPath, configs) {
-			Expression *expression = ConfigCompiler::CompileFile(configPath, String(), "_etc");
-			success = ExecuteExpression(expression);
-			delete expression;
-			if (!success)
-				return false;
+		for (const String& configPath : configs) {
+			try {
+				std::unique_ptr<Expression> expression = ConfigCompiler::CompileFile(configPath, String(), "_etc");
+				success = ExecuteExpression(&*expression);
+				if (!success)
+					return false;
+			} catch (const std::exception& ex) {
+				Log(LogCritical, "cli", "Could not compile config files: " + DiagnosticInformation(ex, false));
+				Application::Exit(1);
+			}
 		}
 	}
 
@@ -121,7 +123,7 @@ bool DaemonUtility::ValidateConfigFiles(const std::vector<std::string>& configs,
 
 	String zonesEtcDir = Application::GetZonesDir();
 	if (!zonesEtcDir.IsEmpty() && Utility::PathExists(zonesEtcDir))
-		Utility::Glob(zonesEtcDir + "/*", boost::bind(&IncludeZoneDirRecursive, _1, "_etc", boost::ref(success)), GlobDirectory);
+		Utility::Glob(zonesEtcDir + "/*", std::bind(&IncludeZoneDirRecursive, _1, "_etc", std::ref(success)), GlobDirectory);
 
 	if (!success)
 		return false;
@@ -130,7 +132,7 @@ bool DaemonUtility::ValidateConfigFiles(const std::vector<std::string>& configs,
 	 * are authoritative on this node and are checked in HasZoneConfigAuthority(). */
 	String packagesVarDir = Application::GetLocalStateDir() + "/lib/icinga2/api/packages";
 	if (Utility::PathExists(packagesVarDir))
-		Utility::Glob(packagesVarDir + "/*", boost::bind(&IncludePackage, _1, boost::ref(success)), GlobDirectory);
+		Utility::Glob(packagesVarDir + "/*", std::bind(&IncludePackage, _1, std::ref(success)), GlobDirectory);
 
 	if (!success)
 		return false;
@@ -138,18 +140,19 @@ bool DaemonUtility::ValidateConfigFiles(const std::vector<std::string>& configs,
 	/* Load cluster synchronized configuration files */
 	String zonesVarDir = Application::GetLocalStateDir() + "/lib/icinga2/api/zones";
 	if (Utility::PathExists(zonesVarDir))
-		Utility::Glob(zonesVarDir + "/*", boost::bind(&IncludeNonLocalZone, _1, "_cluster", boost::ref(success)), GlobDirectory);
+		Utility::Glob(zonesVarDir + "/*", std::bind(&IncludeNonLocalZone, _1, "_cluster", std::ref(success)), GlobDirectory);
 
 	if (!success)
 		return false;
 
-	String appType = ScriptGlobal::Get("ApplicationType", &Empty);
+	Type::Ptr appType = Type::GetByName(ScriptGlobal::Get("ApplicationType", &Empty));
 
 	if (ConfigItem::GetItems(appType).empty()) {
-		ConfigItemBuilder::Ptr builder = new ConfigItemBuilder();
-		builder->SetType(appType);
-		builder->SetName("app");
-		ConfigItem::Ptr item = builder->Compile();
+		ConfigItemBuilder builder;
+		builder.SetType(appType);
+		builder.SetName("app");
+		builder.AddExpression(new ImportDefaultTemplatesExpression());
+		ConfigItem::Ptr item = builder.Compile();
 		item->Register();
 	}
 
@@ -157,22 +160,33 @@ bool DaemonUtility::ValidateConfigFiles(const std::vector<std::string>& configs,
 }
 
 bool DaemonUtility::LoadConfigFiles(const std::vector<std::string>& configs,
-    std::vector<ConfigItem::Ptr>& newItems,
-    const String& objectsFile, const String& varsfile)
+	std::vector<ConfigItem::Ptr>& newItems,
+	const String& objectsFile, const String& varsfile)
 {
 	ActivationScope ascope;
 
-	if (!DaemonUtility::ValidateConfigFiles(configs, objectsFile))
+	if (!DaemonUtility::ValidateConfigFiles(configs, objectsFile)) {
+		ConfigCompilerContext::GetInstance()->CancelObjectsFile();
 		return false;
+	}
 
 	WorkQueue upq(25000, Application::GetConcurrency());
+	upq.SetName("DaemonUtility::LoadConfigFiles");
 	bool result = ConfigItem::CommitItems(ascope.GetContext(), upq, newItems);
 
-	if (!result)
+	if (!result) {
+		ConfigCompilerContext::GetInstance()->CancelObjectsFile();
 		return false;
+	}
 
 	ConfigCompilerContext::GetInstance()->FinishObjectsFile();
-	ScriptGlobal::WriteToFile(varsfile);
+
+	try {
+		ScriptGlobal::WriteToFile(varsfile);
+	} catch (const std::exception& ex) {
+		Log(LogCritical, "cli", "Could not write vars file: " + DiagnosticInformation(ex, false));
+		Application::Exit(1);
+	}
 
 	return true;
 }

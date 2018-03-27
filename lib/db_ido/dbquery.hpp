@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -60,27 +60,23 @@ enum DbQueryCategory
 
 class DbObject;
 
-struct I2_DB_IDO_API DbQuery
+struct DbQuery
 {
-	int Type;
-	DbQueryCategory Category;
+	int Type{0};
+	DbQueryCategory Category{DbCatInvalid};
 	String Table;
 	String IdColumn;
 	Dictionary::Ptr Fields;
 	Dictionary::Ptr WhereCriteria;
 	intrusive_ptr<DbObject> Object;
 	DbValue::Ptr NotificationInsertID;
-	bool ConfigUpdate;
-	bool StatusUpdate;
-	WorkQueuePriority Priority;
+	bool ConfigUpdate{false};
+	bool StatusUpdate{false};
+	WorkQueuePriority Priority{PriorityNormal};
 
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
-	DbQuery(void)
-		: Type(0), Category(DbCatInvalid), ConfigUpdate(false), StatusUpdate(false), Priority(PriorityLow)
-	{ }
-
-	static const std::map<String, int>& GetCategoryFilterMap(void);
+	static const std::map<String, int>& GetCategoryFilterMap();
 
 private:
 	static std::map<String, int> m_CategoryFilterMap;

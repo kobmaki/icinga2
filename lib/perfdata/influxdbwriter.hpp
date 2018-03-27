@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,11 +20,12 @@
 #ifndef INFLUXDBWRITER_H
 #define INFLUXDBWRITER_H
 
-#include "perfdata/influxdbwriter.thpp"
+#include "perfdata/influxdbwriter-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/tcpsocket.hpp"
 #include "base/timer.hpp"
+#include "base/workqueue.hpp"
 #include <fstream>
 
 namespace icinga
@@ -35,7 +36,7 @@ namespace icinga
  *
  * @ingroup perfdata
  */
-class InfluxdbWriter : public ObjectImpl<InfluxdbWriter>
+class InfluxdbWriter final : public ObjectImpl<InfluxdbWriter>
 {
 public:
 	DECLARE_OBJECT(InfluxdbWriter);
@@ -43,29 +44,34 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual void ValidateHostTemplate(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
-	virtual void ValidateServiceTemplate(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateHostTemplate(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) override;
+	void ValidateServiceTemplate(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void OnConfigLoaded() override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
+	WorkQueue m_WorkQueue{10000000, 1};
 	Timer::Ptr m_FlushTimer;
-	Array::Ptr m_DataBuffer;
+	std::vector<String> m_DataBuffer;
 
 	void CheckResultHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
-	void SendPerfdata(const Dictionary::Ptr& tmpl, const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, double ts);
+	void CheckResultHandlerWQ(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
 	void SendMetric(const Dictionary::Ptr& tmpl, const String& label, const Dictionary::Ptr& fields, double ts);
-	void FlushTimeout(void);
-	void Flush(void);
+	void FlushTimeout();
+	void FlushTimeoutWQ();
+	void Flush();
 
-	static String FormatInteger(const int val);
-	static String FormatBoolean(const bool val);
+	static String EscapeKeyOrTagValue(const String& str);
+	static String EscapeValue(const Value& value);
 
-	static String EscapeKey(const String& str);
-	static String EscapeField(const String& str);
+	Stream::Ptr Connect();
 
-	Stream::Ptr Connect(void);
+	void AssertOnWorkQueue();
+
+	void ExceptionHandler(boost::exception_ptr exp);
 };
 
 }

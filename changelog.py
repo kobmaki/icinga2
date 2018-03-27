@@ -1,158 +1,234 @@
 #!/usr/bin/env python
-# Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software Foundation
-# Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
+# -*- coding:utf-8 -*-
 
-import urllib2, json, sys, string
-from argparse import ArgumentParser
+import requests
+import re
+import pickle
+import sys
+import os
+from datetime import datetime
+from collections import defaultdict
+from collections import OrderedDict
 
-DESCRIPTION="update release changes"
-VERSION="1.0.0"
-ISSUE_URL= "https://dev.icinga.org/issues/"
-ISSUE_PROJECT="i2"
+#################################
+## Env Config
 
-arg_parser = ArgumentParser(description= "%s (Version: %s)" % (DESCRIPTION, VERSION))
-arg_parser.add_argument('-V', '--version', required=True, type=str, help="define version to query")
-arg_parser.add_argument('-p', '--project', type=str, help="add urls to issues")
-arg_parser.add_argument('-l', '--links', action='store_true', help="add urls to issues")
-arg_parser.add_argument('-H', '--html', action='store_true', help="print html output (defaults to markdown)")
-
-args = arg_parser.parse_args(sys.argv[1:])
-
-ftype = "md" if not args.html else "html"
-
-def format_header(text, lvl, ftype = ftype):
-   if ftype == "html":
-       return "<h%s>%s</h%s>" % (lvl, text, lvl)
-   if ftype == "md":
-       return "#" * lvl + " " + text
-
-def format_logentry(log_entry, args = args, issue_url = ISSUE_URL):
-   if args.links:
-       if args.html:
-           return "<li> {0} <a href=\"{4}{1}\">{1}</a> ({2}): {3}</li>".format(log_entry[0], log_entry[1], log_entry[2], log_entry[3],issue_url)
-       else:
-           return "* {0} [{1}]({4}{1} \"{0} {1}\") ({2}): {3}".format(log_entry[0], log_entry[1], log_entry[2], log_entry[3], issue_url)
-   else:
-       if args.html:
-           return "<li>%s %d (%s): %s</li>" % log_entry
-       else:
-           return "* %s %d (%s): %s" % log_entry
-
-def print_category(category, entries):
-    if len(entries) > 0:
-        print ""
-        print format_header(category, 4)
-        print ""
-        if args.html:
-            print "<ul>"
-
-        for entry in sorted(entries):
-            print format_logentry(entry)
-
-        if args.html:
-            print "</ul>"
-            print ""
-
-
-version_name = args.version
-
-if args.project:
-    ISSUE_PROJECT=args.project
-
-rsp = urllib2.urlopen("https://dev.icinga.org/projects/%s/versions.json" % (ISSUE_PROJECT))
-versions_data = json.loads(rsp.read())
-
-version_id = None
-
-for version in versions_data["versions"]:
-    if version["name"] == version_name:
-        version_id = version["id"]
-        break
-
-if version_id == None:
-    print "Version '%s' not found." % (version_name)
+try:
+    github_auth_username = os.environ['ICINGA_GITHUB_AUTH_USERNAME']
+except KeyError:
+    print "ERROR: Environment variable 'ICINGA_GITHUB_AUTH_USERNAME' is not set."
     sys.exit(1)
 
-changes = ""
+try:
+    github_auth_token = os.environ['ICINGA_GITHUB_AUTH_TOKEN']
+except:
+    print "ERROR: Environment variable 'ICINGA_GITHUB_AUTH_TOKEN' is not set."
+    sys.exit(1)
 
-if "custom_fields" in version:
-    for field in version["custom_fields"]:
-        if field["id"] == 14:
-            changes = field["value"]
+try:
+    project_name = os.environ['ICINGA_GITHUB_PROJECT']
+except:
+    print "ERROR: Environment variable 'ICINGA_GITHUB_PROJECT' is not set."
+    sys.exit(1)
+
+#################################
+## Config
+
+changelog_file = "CHANGELOG.md" # TODO: config param
+debug = 1
+
+# Keep this in sync with GitHub labels.
+ignored_labels = [
+    "high-priority", "low-priority",
+    "bug", "enhancement",
+    "needs-feedback", "question", "duplicate", "invalid", "wontfix",
+    "backported", "build-fix"
+]
+
+# Selectively show and collect specific categories
+#
+# (category, list of case sensitive matching labels)
+# The order is important!
+# Keep this in sync with GitHub labels.
+categories = OrderedDict(
+[
+    ("Enhancement", ["enhancement"]),
+    ("Bug", ["bug", "crash"]),
+    ("ITL", ["ITL"]),
+    ("Documentation", ["Documentation"]),
+    ("Support", ["code-quality", "Tests", "Packages", "Installation"])
+]
+)
+
+#################################
+## Helpers
+
+def write_changelog(line):
+    clfp.write(line + "\n")
+
+def log(level, msg):
+    if level <= debug:
+        print " " + msg
+
+def fetch_github_resources(uri, params = {}):
+    resources = []
+
+    url = 'https://api.github.com/repos/' + project_name + uri + "?per_page=100" # 100 is the maximum
+
+    while True:
+        log(2, "Requesting URL: " + url)
+        resp = requests.get(url, auth=(github_auth_username, github_auth_token), params=params)
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise e
+
+        data = resp.json()
+
+        if len(data) == 0:
             break
 
-    changes = string.join(string.split(changes, "\r\n"), "\n")
+        resources.extend(data)
 
-print format_header("What's New in Version %s" % (version_name), 3)
-print ""
-
-if changes:
-    print format_header("Changes", 4)
-    print ""
-    print changes
-    print ""
-
-offset = 0
-
-features = []
-bugfixes = []
-support = []
-
-while True:
-    # We could filter using &cf_13=1, however this doesn't currently work because the custom field isn't set
-    # for some of the older tickets:
-    rsp = urllib2.urlopen("https://dev.icinga.org/projects/%s/issues.json?offset=%d&status_id=closed&fixed_version_id=%d" % (ISSUE_PROJECT, offset, version_id))
-    issues_data = json.loads(rsp.read())
-    issues_count = len(issues_data["issues"])
-    offset = offset + issues_count
-
-    if issues_count == 0:
-        break
-
-    for issue in issues_data["issues"]:
-        ignore_issue = False
-
-        if "custom_fields" in issue:
-            for field in issue["custom_fields"]:
-                if field["id"] == 13 and "value" in field and field["value"] == "0":
-                    ignore_issue = True
-                    break
-
-            if ignore_issue:
-                continue
-
-        if "category" in issue:
-            category = issue["category"]["name"]
+        # fetch the next page from headers, do not count pages
+        # http://engineering.hackerearth.com/2014/08/21/python-requests-module/
+        if "next" in resp.links:
+            url = resp.links['next']['url']
+            log(2, "Found next link for Github pagination: " + url)
         else:
-            category = "no category"
+            break # no link found, we are done
+            log(2, "No more pages to fetch, stop.")
 
-        # the order is important for print_category()
-        entry = (issue["tracker"]["name"], issue["id"], category, issue["subject"].strip())
+    return resources
 
-	if issue["tracker"]["name"] == "Feature":
-            features.append(entry)
-	elif issue["tracker"]["name"] == "Bug":
-            bugfixes.append(entry)
-	elif issue["tracker"]["name"] == "Support":
-            support.append(entry)
+def issue_type(issue):
+    issue_labels = [label["name"] for label in issue["labels"]]
 
-print_category("Feature", features)
-print_category("Bugfixes", bugfixes)
-print_category("Support", support)
+    # start with the least important first (e.g. "Support", "Documentation", "Bug", "Enhancement" as order)
+    for category in reversed(categories):
+        labels = categories[category]
 
+        for label in labels:
+            if label in issue_labels:
+                return category
 
-sys.exit(0)
+    return "Support"
+
+def escape_markdown(text):
+    #tmp = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    tmp = text
+    tmp.replace('\\', '\\\\')
+
+    return re.sub("([<>*_()\[\]#])", r"\\\1", tmp)
+
+def format_labels(issue):
+    labels = filter(lambda label: label not in ignored_labels, [label["name"] for label in issue["labels"]])
+
+    # Mark PRs as custom label
+    if "pull_request" in issue:
+        labels.append("PR")
+
+    if len(labels):
+        return " (" + ", ".join(labels) + ")"
+    else:
+        return ""
+
+def format_title(title):
+    # Fix encoding
+    try:
+        issue_title = str(title.encode('ascii', 'ignore').encode('utf-8'))
+    except Error:
+        log(1, "Error: Cannot convert " + title + " to UTF-8")
+
+    # Remove dev.icinga.com tag
+    issue_title = re.sub('\[dev\.icinga\.com #\d+\] ', '', issue_title)
+
+    #log(1, "Issue title: " + issue_title + "Type: " + str(type(issue_title)))
+
+    return escape_markdown(issue_title)
+
+#################################
+## MAIN
+
+milestones = {}
+issues = defaultdict(lambda: defaultdict(list))
+
+log(1, "Fetching data from GitHub API for project " + project_name)
+
+try:
+    tickets = fetch_github_resources("/issues", { "state": "all" })
+except requests.exceptions.HTTPError as e:
+    log(1, "ERROR " + str(e.response.status_code) + ": " + e.response.text)
+
+    sys.exit(1)
+
+clfp = open(changelog_file, "w+")
+
+with open('tickets.pickle', 'wb') as fp:
+    pickle.dump(tickets, fp)
+
+with open('tickets.pickle', 'rb') as fp:
+    cached_issues = pickle.load(fp)
+
+for issue in cached_issues: #fetch_github_resources("/issues", { "state": "all" }):
+    milestone = issue["milestone"]
+
+    if not milestone:
+        continue
+
+    ms_title = milestone["title"]
+
+    if not re.match('^\d+\.\d+\.\d+$', ms_title):
+        continue
+
+    if ms_title.split(".")[0] != "2":
+        continue
+
+    milestones[ms_title] = milestone
+
+    ms_tickets = issues[ms_title][issue_type(issue)]
+    ms_tickets.append(issue)
+
+# TODO: Generic header based on project_name
+write_changelog("# Icinga 2.x CHANGELOG")
+write_changelog("")
+
+for milestone in sorted(milestones.values(), key=lambda ms: (ms["due_on"], ms["title"]), reverse=True):
+    if milestone["state"] != "closed":
+        continue
+
+    if milestone["due_on"] == None:
+        print "Milestone", milestone["title"], "does not have a due date."
+        sys.exit(1)
+
+    ms_due_on = datetime.strptime(milestone["due_on"], "%Y-%m-%dT%H:%M:%SZ")
+
+    write_changelog("## %s (%s)" % (milestone["title"], ms_due_on.strftime("%Y-%m-%d")))
+    write_changelog("")
+
+    ms_description = milestone["description"]
+    ms_description = re.sub('\r\n', '\n', ms_description)
+
+    if len(ms_description) > 0:
+        write_changelog("### Notes\n\n" + ms_description + "\n") # Don't escape anything, we take care on Github for valid Markdown
+
+    for category, labels in categories.iteritems():
+        try:
+            ms_issues = issues[milestone["title"]][category]
+        except KeyError:
+            continue
+
+        if len(ms_issues) == 0:
+            continue
+
+        write_changelog("### " + category)
+        write_changelog("")
+
+        for issue in ms_issues:
+            write_changelog("* [#" + str(issue["number"]) + "](https://github.com/" + project_name
+                + "/issues/" + str(issue["number"]) + ")" + format_labels(issue) + ": " + format_title(issue["title"]))
+
+        write_changelog("")
+
+clfp.close()
+log(1, "Finished writing " + changelog_file)

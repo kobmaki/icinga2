@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,6 @@
 #include "base/i2-base.hpp"
 #include "base/string.hpp"
 #include <boost/thread/tss.hpp>
-#include <boost/function.hpp>
 #include <queue>
 
 namespace icinga
@@ -32,22 +31,22 @@ namespace icinga
 struct DeferredInitializer
 {
 public:
-	DeferredInitializer(const boost::function<void (void)>& callback, int priority)
-	    : m_Callback(callback), m_Priority(priority)
+	DeferredInitializer(std::function<void ()> callback, int priority)
+		: m_Callback(std::move(callback)), m_Priority(priority)
 	{ }
 
-	inline bool operator<(const DeferredInitializer& other) const
+	bool operator<(const DeferredInitializer& other) const
 	{
 		return m_Priority < other.m_Priority;
 	}
 
-	inline void operator()(void)
+	void operator()()
 	{
 		m_Callback();
 	}
 
 private:
-	boost::function<void (void)> m_Callback;
+	std::function<void ()> m_Callback;
 	int m_Priority;
 };
 
@@ -56,19 +55,16 @@ private:
  *
  * @ingroup base
  */
-class I2_BASE_API Loader
+class Loader
 {
 public:
-	static void LoadExtensionLibrary(const String& library);
-
-	static void AddDeferredInitializer(const boost::function<void(void)>& callback, int priority = 0);
-	static void ExecuteDeferredInitializers(void);
+	static void AddDeferredInitializer(const std::function<void ()>& callback, int priority = 0);
+	static void ExecuteDeferredInitializers();
 
 private:
-	Loader(void);
+	Loader();
 
-	static boost::thread_specific_ptr<std::priority_queue<DeferredInitializer> >& GetDeferredInitializers(void);
-
+	static boost::thread_specific_ptr<std::priority_queue<DeferredInitializer> >& GetDeferredInitializers();
 };
 
 }

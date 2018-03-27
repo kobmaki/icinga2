@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,11 +32,11 @@ namespace icinga
 /**
  * @ingroup cli
  */
-class I2_CLI_API FeatureUtility
+class FeatureUtility
 {
 public:
-	static String GetFeaturesAvailablePath(void);
-	static String GetFeaturesEnabledPath(void);
+	static String GetFeaturesAvailablePath();
+	static String GetFeaturesEnabledPath();
 
 	static std::vector<String> GetFieldCompletionSuggestions(const String& word, bool enable);
 
@@ -49,7 +49,7 @@ public:
 	static bool CheckFeatureDisabled(const String& feature);
 
 private:
-	FeatureUtility(void);
+	FeatureUtility();
 	static void CollectFeatures(const String& feature_file, std::vector<String>& features);
 	static bool CheckFeatureInternal(const String& feature, bool check_disabled);
 };

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,18 +24,17 @@
 #include "base/scriptframe.hpp"
 #include "base/exception.hpp"
 #include <boost/algorithm/string.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-static int StringLen(void)
+static int StringLen()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
 	return self.GetLength();
 }
 
-static String StringToString(void)
+static String StringToString()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	return vframe->Self;
@@ -58,14 +57,14 @@ static String StringSubstr(const std::vector<Value>& args)
 		return self.SubStr(args[0]);
 }
 
-static String StringUpper(void)
+static String StringUpper()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
 	return boost::to_upper_copy(self);
 }
 
-static String StringLower(void)
+static String StringLower()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
@@ -76,14 +75,9 @@ static Array::Ptr StringSplit(const String& delims)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, self, boost::is_any_of(delims));
+	std::vector<String> tokens = self.Split(delims.CStr());
 
-	Array::Ptr result = new Array();
-	BOOST_FOREACH(const String& token, tokens) {
-		result->Add(token);
-	}
-	return result;
+	return Array::FromVector(tokens);
 }
 
 static int StringFind(const std::vector<Value>& args)
@@ -126,38 +120,35 @@ static Value StringReplace(const String& search, const String& replacement)
 	return self;
 }
 
-static String StringReverse(void)
+static String StringReverse()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
 	return self.Reverse();
 }
 
-static String StringTrim(void)
+static String StringTrim()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	String self = vframe->Self;
 	return self.Trim();
 }
 
-Object::Ptr String::GetPrototype(void)
+Object::Ptr String::GetPrototype()
 {
-	static Dictionary::Ptr prototype;
-
-	if (!prototype) {
-		prototype = new Dictionary();
-		prototype->Set("len", new Function(WrapFunction(StringLen), true));
-		prototype->Set("to_string", new Function(WrapFunction(StringToString), true));
-		prototype->Set("substr", new Function(WrapFunction(StringSubstr), true));
-		prototype->Set("upper", new Function(WrapFunction(StringUpper), true));
-		prototype->Set("lower", new Function(WrapFunction(StringLower), true));
-		prototype->Set("split", new Function(WrapFunction(StringSplit), true));
-		prototype->Set("find", new Function(WrapFunction(StringFind), true));
-		prototype->Set("contains", new Function(WrapFunction(StringContains), true));
-		prototype->Set("replace", new Function(WrapFunction(StringReplace), true));
-		prototype->Set("reverse", new Function(WrapFunction(StringReverse), true));
-		prototype->Set("trim", new Function(WrapFunction(StringTrim), true));
-	}
+	static Dictionary::Ptr prototype = new Dictionary({
+		{ "len", new Function("String#len", StringLen, {}, true) },
+		{ "to_string", new Function("String#to_string", StringToString, {}, true) },
+		{ "substr", new Function("String#substr", StringSubstr, { "start", "len" }, true) },
+		{ "upper", new Function("String#upper", StringUpper, {}, true) },
+		{ "lower", new Function("String#lower", StringLower, {}, true) },
+		{ "split", new Function("String#split", StringSplit, { "delims" }, true) },
+		{ "find", new Function("String#find", StringFind, { "str", "start" }, true) },
+		{ "contains", new Function("String#contains", StringContains, { "str" }, true) },
+		{ "replace", new Function("String#replace", StringReplace, { "search", "replacement" }, true) },
+		{ "reverse", new Function("String#reverse", StringReverse, {}, true) },
+		{ "trim", new Function("String#trim", StringTrim, {}, true) }
+	});
 
 	return prototype;
 }

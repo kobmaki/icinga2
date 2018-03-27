@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,7 +26,6 @@
 #include "base/convert.hpp"
 #include "base/objectlock.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -36,88 +35,100 @@ UserDbObject::UserDbObject(const DbType::Ptr& type, const String& name1, const S
 	: DbObject(type, name1, name2)
 { }
 
-Dictionary::Ptr UserDbObject::GetConfigFields(void) const
+Dictionary::Ptr UserDbObject::GetConfigFields() const
 {
-	Dictionary::Ptr fields = new Dictionary();
 	User::Ptr user = static_pointer_cast<User>(GetObject());
-
-	fields->Set("alias", user->GetDisplayName());
-	fields->Set("email_address", user->GetEmail());
-	fields->Set("pager_address", user->GetPager());
-	fields->Set("host_timeperiod_object_id", user->GetPeriod());
-	fields->Set("service_timeperiod_object_id", user->GetPeriod());
-	fields->Set("host_notifications_enabled", user->GetEnableNotifications());
-	fields->Set("service_notifications_enabled", user->GetEnableNotifications());
-	fields->Set("can_submit_commands", 1);
 
 	int typeFilter = user->GetTypeFilter();
 	int stateFilter = user->GetStateFilter();
 
-	fields->Set("notify_service_recovery", (typeFilter & NotificationRecovery) != 0);
-	fields->Set("notify_service_warning", (stateFilter & StateFilterWarning) != 0);
-	fields->Set("notify_service_unknown", (stateFilter & StateFilterUnknown) != 0);
-	fields->Set("notify_service_critical", (stateFilter & StateFilterCritical) != 0);
-	fields->Set("notify_service_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
-	fields->Set("notify_service_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
-	fields->Set("notify_host_recovery", (typeFilter & NotificationRecovery) != 0);
-	fields->Set("notify_host_down", (stateFilter & StateFilterDown) != 0);
-	fields->Set("notify_host_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) != 0);
-	fields->Set("notify_host_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) != 0);
-
-	return fields;
+	return new Dictionary({
+		{ "alias", user->GetDisplayName() },
+		{ "email_address", user->GetEmail() },
+		{ "pager_address", user->GetPager() },
+		{ "host_timeperiod_object_id", user->GetPeriod() },
+		{ "service_timeperiod_object_id", user->GetPeriod() },
+		{ "host_notifications_enabled", user->GetEnableNotifications() },
+		{ "service_notifications_enabled", user->GetEnableNotifications() },
+		{ "can_submit_commands", 1 },
+		{ "notify_service_recovery", (typeFilter & NotificationRecovery) ? 1 : 0 },
+		{ "notify_service_warning", (stateFilter & StateFilterWarning) ? 1 : 0 },
+		{ "notify_service_unknown", (stateFilter & StateFilterUnknown) ? 1 : 0 },
+		{ "notify_service_critical", (stateFilter & StateFilterCritical) ? 1 : 0 },
+		{ "notify_service_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) ? 1 : 0 },
+		{ "notify_service_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) ? 1 : 0 },
+		{ "notify_host_recovery", (typeFilter & NotificationRecovery) ? 1 : 0 },
+		{ "notify_host_down", (stateFilter & StateFilterDown) ? 1 : 0 },
+		{ "notify_host_flapping", (typeFilter & (NotificationFlappingStart | NotificationFlappingEnd)) ? 1 : 0 },
+		{ "notify_host_downtime", (typeFilter & (NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved)) ? 1 : 0 }
+	});
 }
 
-Dictionary::Ptr UserDbObject::GetStatusFields(void) const
+Dictionary::Ptr UserDbObject::GetStatusFields() const
 {
-	Dictionary::Ptr fields = new Dictionary();
 	User::Ptr user = static_pointer_cast<User>(GetObject());
 
-	fields->Set("host_notifications_enabled", user->GetEnableNotifications());
-	fields->Set("service_notifications_enabled", user->GetEnableNotifications());
-	fields->Set("last_host_notification", DbValue::FromTimestamp(user->GetLastNotification()));
-	fields->Set("last_service_notification", DbValue::FromTimestamp(user->GetLastNotification()));
-
-	return fields;
+	return new Dictionary({
+		{ "host_notifications_enabled", user->GetEnableNotifications() },
+		{ "service_notifications_enabled", user->GetEnableNotifications() },
+		{ "last_host_notification", DbValue::FromTimestamp(user->GetLastNotification()) },
+		{ "last_service_notification", DbValue::FromTimestamp(user->GetLastNotification()) }
+	});
 }
 
-void UserDbObject::OnConfigUpdate(void)
+void UserDbObject::OnConfigUpdateHeavy()
 {
-	Dictionary::Ptr fields = new Dictionary();
 	User::Ptr user = static_pointer_cast<User>(GetObject());
 
 	/* groups */
 	Array::Ptr groups = user->GetGroups();
 
+	std::vector<DbQuery> queries;
+
+	DbQuery query1;
+	query1.Table = DbType::GetByName("UserGroup")->GetTable() + "_members";
+	query1.Type = DbQueryDelete;
+	query1.Category = DbCatConfig;
+	query1.WhereCriteria = new Dictionary({
+		{ "contact_object_id", user }
+	});
+	queries.emplace_back(std::move(query1));
+
 	if (groups) {
 		ObjectLock olock(groups);
-		BOOST_FOREACH(const String& groupName, groups) {
+		for (const String& groupName : groups) {
 			UserGroup::Ptr group = UserGroup::GetByName(groupName);
-
-			DbQuery query1;
-			query1.Table = DbType::GetByName("UserGroup")->GetTable() + "_members";
-			query1.Type = DbQueryDelete;
-			query1.Category = DbCatConfig;
-			query1.WhereCriteria = new Dictionary();
-			query1.WhereCriteria->Set("instance_id", 0); /* DbConnection class fills in real ID */
-			query1.WhereCriteria->Set("contactgroup_id", DbValue::FromObjectInsertID(group));
-			query1.WhereCriteria->Set("contact_object_id", user);
-			OnQuery(query1);
 
 			DbQuery query2;
 			query2.Table = DbType::GetByName("UserGroup")->GetTable() + "_members";
-			query2.Type = DbQueryInsert;
+			query2.Type = DbQueryInsert | DbQueryUpdate;
 			query2.Category = DbCatConfig;
-			query2.Fields = new Dictionary();
-			query2.Fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
-			query2.Fields->Set("contactgroup_id", DbValue::FromObjectInsertID(group));
-			query2.Fields->Set("contact_object_id", user);
-			OnQuery(query2);
+			query2.Fields = new Dictionary({
+				{ "instance_id", 0 }, /* DbConnection class fills in real ID */
+				{ "contactgroup_id", DbValue::FromObjectInsertID(group) },
+				{ "contact_object_id", user }
+			});
+			query2.WhereCriteria = new Dictionary({
+				{ "instance_id", 0 }, /* DbConnection class fills in real ID */
+				{ "contactgroup_id", DbValue::FromObjectInsertID(group) },
+				{ "contact_object_id", user }
+			});
+			queries.emplace_back(std::move(query2));
 		}
 	}
 
-	/* contact addresses */
-	Log(LogDebug, "UserDbObject")
-	    << "contact addresses for '" << user->GetName() << "'";
+	DbObject::OnMultipleQueries(queries);
+
+	queries.clear();
+
+	DbQuery query2;
+	query2.Table = "contact_addresses";
+	query2.Type = DbQueryDelete;
+	query2.Category = DbCatConfig;
+	query2.WhereCriteria = new Dictionary({
+		{ "contact_id", DbValue::FromObjectInsertID(user) }
+	});
+	queries.emplace_back(std::move(query2));
 
 	Dictionary::Ptr vars = user->GetVars();
 
@@ -130,22 +141,34 @@ void UserDbObject::OnConfigUpdate(void)
 
 			String val = vars->Get(key);
 
-			fields->Set("contact_id", DbValue::FromObjectInsertID(user));
-			fields->Set("address_number", i);
-			fields->Set("address", val);
-			fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
-
 			DbQuery query;
 			query.Type = DbQueryInsert;
 			query.Table = "contact_addresses";
 			query.Category = DbCatConfig;
-			query.Fields = fields;
-			OnQuery(query);
+			query.Fields = new Dictionary({
+				{ "contact_id", DbValue::FromObjectInsertID(user) },
+				{ "address_number", i },
+				{ "address", val },
+				{ "instance_id", 0 } /* DbConnection class fills in real ID */
+
+			});
+			queries.emplace_back(std::move(query));
 		}
 	}
+
+	DbObject::OnMultipleQueries(queries);
 }
 
-bool UserDbObject::IsStatusAttribute(const String& attribute) const
+String UserDbObject::CalculateConfigHash(const Dictionary::Ptr& configFields) const
 {
-	return (attribute == "last_notification");
+	String hashData = DbObject::CalculateConfigHash(configFields);
+
+	User::Ptr user = static_pointer_cast<User>(GetObject());
+
+	Array::Ptr groups = user->GetGroups();
+
+	if (groups)
+		hashData += DbObject::HashValue(groups);
+
+	return SHA256(hashData);
 }

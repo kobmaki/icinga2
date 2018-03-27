@@ -39,6 +39,9 @@
 			this.prgConfig = new System.Windows.Forms.ProgressBar();
 			this.tabParameters = new System.Windows.Forms.TabPage();
 			this.groupBox3 = new System.Windows.Forms.GroupBox();
+			this.txtUser = new System.Windows.Forms.TextBox();
+			this.chkRunServiceAsThisUser = new System.Windows.Forms.CheckBox();
+			this.chkInstallNSCP = new System.Windows.Forms.CheckBox();
 			this.chkAcceptConfig = new System.Windows.Forms.CheckBox();
 			this.chkAcceptCommands = new System.Windows.Forms.CheckBox();
 			this.txtTicket = new System.Windows.Forms.TextBox();
@@ -51,14 +54,13 @@
 			this.lblListenerPort = new System.Windows.Forms.Label();
 			this.rdoListener = new System.Windows.Forms.RadioButton();
 			this.groupBox1 = new System.Windows.Forms.GroupBox();
+			this.btnEditEndpoint = new System.Windows.Forms.Button();
 			this.btnRemoveEndpoint = new System.Windows.Forms.Button();
 			this.btnAddEndpoint = new System.Windows.Forms.Button();
 			this.lvwEndpoints = new System.Windows.Forms.ListView();
 			this.colInstanceName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.colHost = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.colPort = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-			this.rdoNoMaster = new System.Windows.Forms.RadioButton();
-			this.rdoNewMaster = new System.Windows.Forms.RadioButton();
 			this.tbcPages = new System.Windows.Forms.TabControl();
 			this.tabRetrieveCertificate = new System.Windows.Forms.TabPage();
 			this.lblRetrieveCertificate = new System.Windows.Forms.Label();
@@ -78,7 +80,7 @@
 			this.txtError = new System.Windows.Forms.TextBox();
 			this.lblError = new System.Windows.Forms.Label();
 			this.picBanner = new System.Windows.Forms.PictureBox();
-			this.chkInstallNSCP = new System.Windows.Forms.CheckBox();
+			this.introduction1 = new System.Windows.Forms.Label();
 			this.tabFinish.SuspendLayout();
 			this.tabConfigure.SuspendLayout();
 			this.tabParameters.SuspendLayout();
@@ -141,9 +143,9 @@
 			this.lblSetupCompleted.AutoSize = true;
 			this.lblSetupCompleted.Location = new System.Drawing.Point(34, 35);
 			this.lblSetupCompleted.Name = "lblSetupCompleted";
-			this.lblSetupCompleted.Size = new System.Drawing.Size(214, 13);
+			this.lblSetupCompleted.Size = new System.Drawing.Size(259, 13);
 			this.lblSetupCompleted.TabIndex = 0;
-			this.lblSetupCompleted.Text = "The Icinga 2 agent was set up successfully.";
+			this.lblSetupCompleted.Text = "The Icinga 2 Windows client was set up successfully.";
 			// 
 			// tabConfigure
 			// 
@@ -175,6 +177,7 @@
 			// 
 			// tabParameters
 			// 
+			this.tabParameters.Controls.Add(this.introduction1);
 			this.tabParameters.Controls.Add(this.groupBox3);
 			this.tabParameters.Controls.Add(this.txtTicket);
 			this.tabParameters.Controls.Add(this.lblTicket);
@@ -192,67 +195,99 @@
 			// 
 			// groupBox3
 			// 
+			this.groupBox3.Controls.Add(this.txtUser);
+			this.groupBox3.Controls.Add(this.chkRunServiceAsThisUser);
 			this.groupBox3.Controls.Add(this.chkInstallNSCP);
 			this.groupBox3.Controls.Add(this.chkAcceptConfig);
 			this.groupBox3.Controls.Add(this.chkAcceptCommands);
-			this.groupBox3.Location = new System.Drawing.Point(308, 359);
+			this.groupBox3.Location = new System.Drawing.Point(308, 291);
 			this.groupBox3.Name = "groupBox3";
-			this.groupBox3.Size = new System.Drawing.Size(301, 111);
+			this.groupBox3.Size = new System.Drawing.Size(301, 188);
 			this.groupBox3.TabIndex = 5;
 			this.groupBox3.TabStop = false;
 			this.groupBox3.Text = "Advanced Options";
 			// 
+			// txtUser
+			// 
+			this.txtUser.Enabled = false;
+			this.txtUser.Location = new System.Drawing.Point(28, 88);
+			this.txtUser.Name = "txtUser";
+			this.txtUser.Size = new System.Drawing.Size(178, 20);
+			this.txtUser.TabIndex = 8;
+			this.txtUser.Text = "NT AUTHORITY\\NetworkService";
+			// 
+			// chkRunServiceAsThisUser
+			// 
+			this.chkRunServiceAsThisUser.AutoSize = true;
+			this.chkRunServiceAsThisUser.Location = new System.Drawing.Point(9, 65);
+			this.chkRunServiceAsThisUser.Name = "chkRunServiceAsThisUser";
+			this.chkRunServiceAsThisUser.Size = new System.Drawing.Size(183, 17);
+			this.chkRunServiceAsThisUser.TabIndex = 7;
+			this.chkRunServiceAsThisUser.Text = "Run Icinga 2 service as this user:";
+			this.chkRunServiceAsThisUser.UseVisualStyleBackColor = true;
+			this.chkRunServiceAsThisUser.CheckedChanged += new System.EventHandler(this.chkRunServiceAsThisUser_CheckedChanged);
+			// 
+			// chkInstallNSCP
+			// 
+			this.chkInstallNSCP.AutoSize = true;
+			this.chkInstallNSCP.Location = new System.Drawing.Point(9, 114);
+			this.chkInstallNSCP.Name = "chkInstallNSCP";
+			this.chkInstallNSCP.Size = new System.Drawing.Size(190, 17);
+			this.chkInstallNSCP.TabIndex = 6;
+			this.chkInstallNSCP.Text = "Install/Update bundled NSClient++";
+			this.chkInstallNSCP.UseVisualStyleBackColor = true;
+			// 
 			// chkAcceptConfig
 			// 
 			this.chkAcceptConfig.AutoSize = true;
-			this.chkAcceptConfig.Location = new System.Drawing.Point(9, 47);
+			this.chkAcceptConfig.Location = new System.Drawing.Point(9, 42);
 			this.chkAcceptConfig.Name = "chkAcceptConfig";
-			this.chkAcceptConfig.Size = new System.Drawing.Size(190, 17);
+			this.chkAcceptConfig.Size = new System.Drawing.Size(284, 17);
 			this.chkAcceptConfig.TabIndex = 1;
-			this.chkAcceptConfig.Text = "Accept config updates from master";
+			this.chkAcceptConfig.Text = "Accept config updates from master/satellite instance(s)";
 			this.chkAcceptConfig.UseVisualStyleBackColor = true;
 			// 
 			// chkAcceptCommands
 			// 
 			this.chkAcceptCommands.AutoSize = true;
-			this.chkAcceptCommands.Location = new System.Drawing.Point(9, 24);
+			this.chkAcceptCommands.Location = new System.Drawing.Point(9, 19);
 			this.chkAcceptCommands.Name = "chkAcceptCommands";
-			this.chkAcceptCommands.Size = new System.Drawing.Size(171, 17);
+			this.chkAcceptCommands.Size = new System.Drawing.Size(265, 17);
 			this.chkAcceptCommands.TabIndex = 0;
-			this.chkAcceptCommands.Text = "Accept commands from master";
+			this.chkAcceptCommands.Text = "Accept commands from master/satellite instance(s)";
 			this.chkAcceptCommands.UseVisualStyleBackColor = true;
 			// 
 			// txtTicket
 			// 
-			this.txtTicket.Location = new System.Drawing.Point(98, 45);
+			this.txtTicket.Location = new System.Drawing.Point(136, 56);
 			this.txtTicket.Name = "txtTicket";
-			this.txtTicket.Size = new System.Drawing.Size(340, 20);
+			this.txtTicket.Size = new System.Drawing.Size(378, 20);
 			this.txtTicket.TabIndex = 1;
 			// 
 			// lblTicket
 			// 
 			this.lblTicket.AutoSize = true;
-			this.lblTicket.Location = new System.Drawing.Point(9, 48);
+			this.lblTicket.Location = new System.Drawing.Point(9, 59);
 			this.lblTicket.Name = "lblTicket";
-			this.lblTicket.Size = new System.Drawing.Size(71, 13);
+			this.lblTicket.Size = new System.Drawing.Size(117, 13);
 			this.lblTicket.TabIndex = 4;
-			this.lblTicket.Text = "Setup Ticket:";
+			this.lblTicket.Text = "Setup Ticket (optional):";
 			// 
 			// txtInstanceName
 			// 
-			this.txtInstanceName.Location = new System.Drawing.Point(98, 16);
+			this.txtInstanceName.Location = new System.Drawing.Point(136, 27);
 			this.txtInstanceName.Name = "txtInstanceName";
-			this.txtInstanceName.Size = new System.Drawing.Size(340, 20);
+			this.txtInstanceName.Size = new System.Drawing.Size(378, 20);
 			this.txtInstanceName.TabIndex = 0;
 			// 
 			// lblInstanceName
 			// 
 			this.lblInstanceName.AutoSize = true;
-			this.lblInstanceName.Location = new System.Drawing.Point(9, 20);
+			this.lblInstanceName.Location = new System.Drawing.Point(11, 30);
 			this.lblInstanceName.Name = "lblInstanceName";
-			this.lblInstanceName.Size = new System.Drawing.Size(82, 13);
+			this.lblInstanceName.Size = new System.Drawing.Size(121, 13);
 			this.lblInstanceName.TabIndex = 3;
-			this.lblInstanceName.Text = "Instance Name:";
+			this.lblInstanceName.Text = "Instance Name (FQDN):";
 			// 
 			// groupBox2
 			// 
@@ -260,9 +295,9 @@
 			this.groupBox2.Controls.Add(this.txtListenerPort);
 			this.groupBox2.Controls.Add(this.lblListenerPort);
 			this.groupBox2.Controls.Add(this.rdoListener);
-			this.groupBox2.Location = new System.Drawing.Point(8, 359);
+			this.groupBox2.Location = new System.Drawing.Point(8, 291);
 			this.groupBox2.Name = "groupBox2";
-			this.groupBox2.Size = new System.Drawing.Size(294, 111);
+			this.groupBox2.Size = new System.Drawing.Size(298, 188);
 			this.groupBox2.TabIndex = 2;
 			this.groupBox2.TabStop = false;
 			this.groupBox2.Text = "TCP Listener";
@@ -283,7 +318,7 @@
 			// txtListenerPort
 			// 
 			this.txtListenerPort.Enabled = false;
-			this.txtListenerPort.Location = new System.Drawing.Point(132, 51);
+			this.txtListenerPort.Location = new System.Drawing.Point(66, 47);
 			this.txtListenerPort.Name = "txtListenerPort";
 			this.txtListenerPort.Size = new System.Drawing.Size(84, 20);
 			this.txtListenerPort.TabIndex = 8;
@@ -292,7 +327,7 @@
 			// lblListenerPort
 			// 
 			this.lblListenerPort.AutoSize = true;
-			this.lblListenerPort.Location = new System.Drawing.Point(43, 55);
+			this.lblListenerPort.Location = new System.Drawing.Point(31, 51);
 			this.lblListenerPort.Name = "lblListenerPort";
 			this.lblListenerPort.Size = new System.Drawing.Size(29, 13);
 			this.lblListenerPort.TabIndex = 1;
@@ -303,30 +338,40 @@
 			this.rdoListener.AutoSize = true;
 			this.rdoListener.Location = new System.Drawing.Point(11, 24);
 			this.rdoListener.Name = "rdoListener";
-			this.rdoListener.Size = new System.Drawing.Size(250, 17);
+			this.rdoListener.Size = new System.Drawing.Size(283, 17);
 			this.rdoListener.TabIndex = 7;
-			this.rdoListener.Text = "Listen for connections from the master instance:";
+			this.rdoListener.Text = "Listen for connections from master/satellite instance(s):";
 			this.rdoListener.UseVisualStyleBackColor = true;
 			this.rdoListener.CheckedChanged += new System.EventHandler(this.RadioListener_CheckedChanged);
 			// 
 			// groupBox1
 			// 
+			this.groupBox1.Controls.Add(this.btnEditEndpoint);
 			this.groupBox1.Controls.Add(this.btnRemoveEndpoint);
 			this.groupBox1.Controls.Add(this.btnAddEndpoint);
 			this.groupBox1.Controls.Add(this.lvwEndpoints);
-			this.groupBox1.Controls.Add(this.rdoNoMaster);
-			this.groupBox1.Controls.Add(this.rdoNewMaster);
-			this.groupBox1.Location = new System.Drawing.Point(8, 77);
+			this.groupBox1.Location = new System.Drawing.Point(8, 94);
 			this.groupBox1.Name = "groupBox1";
-			this.groupBox1.Size = new System.Drawing.Size(601, 276);
+			this.groupBox1.Size = new System.Drawing.Size(601, 191);
 			this.groupBox1.TabIndex = 1;
 			this.groupBox1.TabStop = false;
-			this.groupBox1.Text = "Master Instance";
+			this.groupBox1.Text = "Parent master/satellite instance(s) for this client";
+			// 
+			// btnEditEndpoint
+			// 
+			this.btnEditEndpoint.Enabled = false;
+			this.btnEditEndpoint.Location = new System.Drawing.Point(520, 48);
+			this.btnEditEndpoint.Name = "btnEditEndpoint";
+			this.btnEditEndpoint.Size = new System.Drawing.Size(75, 23);
+			this.btnEditEndpoint.TabIndex = 7;
+			this.btnEditEndpoint.Text = "Edit";
+			this.btnEditEndpoint.UseVisualStyleBackColor = true;
+			this.btnEditEndpoint.Click += new System.EventHandler(this.btnEditEndpoint_Click);
 			// 
 			// btnRemoveEndpoint
 			// 
 			this.btnRemoveEndpoint.Enabled = false;
-			this.btnRemoveEndpoint.Location = new System.Drawing.Point(520, 112);
+			this.btnRemoveEndpoint.Location = new System.Drawing.Point(520, 77);
 			this.btnRemoveEndpoint.Name = "btnRemoveEndpoint";
 			this.btnRemoveEndpoint.Size = new System.Drawing.Size(75, 23);
 			this.btnRemoveEndpoint.TabIndex = 6;
@@ -336,7 +381,7 @@
 			// 
 			// btnAddEndpoint
 			// 
-			this.btnAddEndpoint.Location = new System.Drawing.Point(520, 83);
+			this.btnAddEndpoint.Location = new System.Drawing.Point(520, 19);
 			this.btnAddEndpoint.Name = "btnAddEndpoint";
 			this.btnAddEndpoint.Size = new System.Drawing.Size(75, 23);
 			this.btnAddEndpoint.TabIndex = 5;
@@ -347,13 +392,13 @@
 			// lvwEndpoints
 			// 
 			this.lvwEndpoints.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.colInstanceName,
-            this.colHost,
-            this.colPort});
+			this.colInstanceName,
+			this.colHost,
+			this.colPort});
 			this.lvwEndpoints.FullRowSelect = true;
-			this.lvwEndpoints.Location = new System.Drawing.Point(11, 83);
+			this.lvwEndpoints.Location = new System.Drawing.Point(6, 19);
 			this.lvwEndpoints.Name = "lvwEndpoints";
-			this.lvwEndpoints.Size = new System.Drawing.Size(500, 176);
+			this.lvwEndpoints.Size = new System.Drawing.Size(500, 166);
 			this.lvwEndpoints.TabIndex = 4;
 			this.lvwEndpoints.UseCompatibleStateImageBehavior = false;
 			this.lvwEndpoints.View = System.Windows.Forms.View.Details;
@@ -373,32 +418,6 @@
 			// 
 			this.colPort.Text = "Port";
 			this.colPort.Width = 80;
-			// 
-			// rdoNoMaster
-			// 
-			this.rdoNoMaster.AutoSize = true;
-			this.rdoNoMaster.Checked = true;
-			this.rdoNoMaster.Location = new System.Drawing.Point(11, 50);
-			this.rdoNoMaster.Name = "rdoNoMaster";
-			this.rdoNoMaster.Size = new System.Drawing.Size(374, 17);
-			this.rdoNoMaster.TabIndex = 3;
-			this.rdoNoMaster.TabStop = true;
-			this.rdoNoMaster.Text = "This instance should report its check results to an existing Icinga 2 master:";
-			this.rdoNoMaster.UseVisualStyleBackColor = true;
-			this.rdoNoMaster.CheckedChanged += new System.EventHandler(this.RadioMaster_CheckedChanged);
-			// 
-			// rdoNewMaster
-			// 
-			this.rdoNewMaster.AutoSize = true;
-			this.rdoNewMaster.Enabled = false;
-			this.rdoNewMaster.Location = new System.Drawing.Point(11, 22);
-			this.rdoNewMaster.Name = "rdoNewMaster";
-			this.rdoNewMaster.Size = new System.Drawing.Size(167, 17);
-			this.rdoNewMaster.TabIndex = 2;
-			this.rdoNewMaster.TabStop = true;
-			this.rdoNewMaster.Text = "This is a new master instance.";
-			this.rdoNewMaster.UseVisualStyleBackColor = true;
-			this.rdoNewMaster.CheckedChanged += new System.EventHandler(this.RadioMaster_CheckedChanged);
 			// 
 			// tbcPages
 			// 
@@ -488,8 +507,8 @@
 			// lvwX509Fields
 			// 
 			this.lvwX509Fields.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.colField,
-            this.colValue});
+			this.colField,
+			this.colValue});
 			this.lvwX509Fields.Location = new System.Drawing.Point(6, 19);
 			this.lvwX509Fields.Name = "lvwX509Fields";
 			this.lvwX509Fields.Size = new System.Drawing.Size(586, 172);
@@ -549,7 +568,7 @@
 			this.lblX509Prompt.Name = "lblX509Prompt";
 			this.lblX509Prompt.Size = new System.Drawing.Size(201, 13);
 			this.lblX509Prompt.TabIndex = 0;
-			this.lblX509Prompt.Text = "Please verify the master\'s SSL certificate:";
+			this.lblX509Prompt.Text = "Please verify the master/satellite\'s SSL certificate:";
 			// 
 			// tabError
 			// 
@@ -592,15 +611,14 @@
 			this.picBanner.TabIndex = 1;
 			this.picBanner.TabStop = false;
 			// 
-			// chkInstallNSCP
+			// introduction1
 			// 
-			this.chkInstallNSCP.AutoSize = true;
-			this.chkInstallNSCP.Location = new System.Drawing.Point(9, 70);
-			this.chkInstallNSCP.Name = "chkInstallNSCP";
-			this.chkInstallNSCP.Size = new System.Drawing.Size(149, 17);
-			this.chkInstallNSCP.TabIndex = 6;
-			this.chkInstallNSCP.Text = "Install/Update NSClient++";
-			this.chkInstallNSCP.UseVisualStyleBackColor = true;
+			this.introduction1.AutoSize = true;
+			this.introduction1.Location = new System.Drawing.Point(11, 3);
+			this.introduction1.Name = "introduction1";
+			this.introduction1.Size = new System.Drawing.Size(269, 13);
+			this.introduction1.TabIndex = 6;
+			this.introduction1.Text = "Welcome to the Icinga 2 Windows Client Setup Wizard!";
 			// 
 			// SetupWizard
 			// 
@@ -630,7 +648,6 @@
 			this.groupBox2.ResumeLayout(false);
 			this.groupBox2.PerformLayout();
 			this.groupBox1.ResumeLayout(false);
-			this.groupBox1.PerformLayout();
 			this.tbcPages.ResumeLayout(false);
 			this.tabRetrieveCertificate.ResumeLayout(false);
 			this.tabRetrieveCertificate.PerformLayout();
@@ -670,8 +687,6 @@
 		private System.Windows.Forms.ListView lvwEndpoints;
 		private System.Windows.Forms.ColumnHeader colHost;
 		private System.Windows.Forms.ColumnHeader colPort;
-		private System.Windows.Forms.RadioButton rdoNoMaster;
-		private System.Windows.Forms.RadioButton rdoNewMaster;
 		private System.Windows.Forms.TabControl tbcPages;
 		private System.Windows.Forms.TabPage tabVerifyCertificate;
 		private System.Windows.Forms.Label lblX509Prompt;
@@ -693,10 +708,14 @@
 		private System.Windows.Forms.TextBox txtTicket;
 		private System.Windows.Forms.Label lblTicket;
 		private System.Windows.Forms.ColumnHeader colInstanceName;
-        private System.Windows.Forms.GroupBox groupBox3;
-        private System.Windows.Forms.CheckBox chkAcceptConfig;
-        private System.Windows.Forms.CheckBox chkAcceptCommands;
-	private System.Windows.Forms.CheckBox chkInstallNSCP;
+		private System.Windows.Forms.GroupBox groupBox3;
+		private System.Windows.Forms.CheckBox chkAcceptConfig;
+		private System.Windows.Forms.CheckBox chkAcceptCommands;
+		private System.Windows.Forms.CheckBox chkInstallNSCP;
+		private System.Windows.Forms.TextBox txtUser;
+		private System.Windows.Forms.CheckBox chkRunServiceAsThisUser;
+		private System.Windows.Forms.Button btnEditEndpoint;
+		private System.Windows.Forms.Label introduction1;
 	}
 }
 

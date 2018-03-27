@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,50 +24,49 @@
 #include "base/scriptglobal.hpp"
 #include "base/logger.hpp"
 #include "base/serializer.hpp"
-#include <boost/algorithm/string.hpp>
 #include <set>
 
 using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/variables", VariableQueryHandler);
 
-class VariableTargetProvider : public TargetProvider
+class VariableTargetProvider final : public TargetProvider
 {
 public:
 	DECLARE_PTR_TYPEDEFS(VariableTargetProvider);
 
 	static Dictionary::Ptr GetTargetForVar(const String& name, const Value& value)
 	{
-		Dictionary::Ptr target = new Dictionary();
-		target->Set("name", name);
-		target->Set("type", value.GetReflectionType()->GetName());
-		target->Set("value", value);
-		return target;
+		return new Dictionary({
+			{ "name", name },
+			{ "type", value.GetReflectionType()->GetName() },
+			{ "value", value }
+		});
 	}
 
-	virtual void FindTargets(const String& type,
-	    const boost::function<void (const Value&)>& addTarget) const override
+	void FindTargets(const String& type,
+		const std::function<void (const Value&)>& addTarget) const override
 	{
 		{
 			Dictionary::Ptr globals = ScriptGlobal::GetGlobals();
 			ObjectLock olock(globals);
-			BOOST_FOREACH(const Dictionary::Pair& kv, globals) {
+			for (const Dictionary::Pair& kv : globals) {
 				addTarget(GetTargetForVar(kv.first, kv.second));
 			}
 		}
 	}
 
-	virtual Value GetTargetByName(const String& type, const String& name) const override
+	Value GetTargetByName(const String& type, const String& name) const override
 	{
 		return GetTargetForVar(name, ScriptGlobal::Get(name));
 	}
 
-	virtual bool IsValidType(const String& type) const override
+	bool IsValidType(const String& type) const override
 	{
 		return type == "Variable";
 	}
 
-	virtual String GetPluralName(const String& type) const override
+	String GetPluralName(const String& type) const override
 	{
 		return "variables";
 	}
@@ -83,6 +82,7 @@ bool VariableQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& 
 
 	QueryDescription qd;
 	qd.Types.insert("Variable");
+	qd.Permission = "variables";
 	qd.Provider = new VariableTargetProvider();
 
 	params->Set("type", "Variable");
@@ -95,29 +95,28 @@ bool VariableQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& 
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user, "variable");
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No variables found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No variables found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
-	Array::Ptr results = new Array();
+	ArrayData results;
 
-	BOOST_FOREACH(const Dictionary::Ptr& var, objs) {
-		Dictionary::Ptr result1 = new Dictionary();
-		results->Add(result1);
-
-		Dictionary::Ptr resultAttrs = new Dictionary();
-		result1->Set("name", var->Get("name"));
-		result1->Set("type", var->Get("type"));
-		result1->Set("value", Serialize(var->Get("value"), 0));
+	for (const Dictionary::Ptr& var : objs) {
+		results.emplace_back(new Dictionary({
+			{ "name", var->Get("name") },
+			{ "type", var->Get("type") },
+			{ "value", Serialize(var->Get("value"), 0) }
+		}));
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }

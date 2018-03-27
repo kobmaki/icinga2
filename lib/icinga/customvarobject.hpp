@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define CUSTOMVAROBJECT_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/customvarobject.thpp"
+#include "icinga/customvarobject-ti.hpp"
 #include "base/configobject.hpp"
 #include "remote/messageorigin.hpp"
 
@@ -33,15 +33,15 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API CustomVarObject : public ObjectImpl<CustomVarObject>
+class CustomVarObject : public ObjectImpl<CustomVarObject>
 {
 public:
 	DECLARE_OBJECT(CustomVarObject);
 
-	virtual void ValidateVars(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateVars(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) final;
 };
 
-I2_ICINGA_API int FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<String, int>& filterMap, int defaultValue);
+int FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<String, int>& filterMap, int defaultValue);
 
 }
 

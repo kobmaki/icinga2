@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,6 @@
 #include "base/utility.hpp"
 #include "base/exception.hpp"
 #include "base/application.hpp"
-#include <boost/bind.hpp>
 #include <iostream>
 
 using namespace icinga;
@@ -31,7 +30,7 @@ using namespace icinga;
 int ThreadPool::m_NextID = 1;
 
 ThreadPool::ThreadPool(size_t max_threads)
-	: m_ID(m_NextID++), m_MaxThreads(max_threads), m_Stopped(true)
+	: m_ID(m_NextID++), m_MaxThreads(max_threads)
 {
 	if (m_MaxThreads != UINT_MAX && m_MaxThreads < sizeof(m_Queues) / sizeof(m_Queues[0]))
 		m_MaxThreads = sizeof(m_Queues) / sizeof(m_Queues[0]);
@@ -39,25 +38,25 @@ ThreadPool::ThreadPool(size_t max_threads)
 	Start();
 }
 
-ThreadPool::~ThreadPool(void)
+ThreadPool::~ThreadPool()
 {
 	Stop();
 }
 
-void ThreadPool::Start(void)
+void ThreadPool::Start()
 {
 	if (!m_Stopped)
 		return;
 
 	m_Stopped = false;
 
-	for (size_t i = 0; i < sizeof(m_Queues) / sizeof(m_Queues[0]); i++)
-		m_Queues[i].SpawnWorker(m_ThreadGroup);
+	for (auto& queue : m_Queues)
+		queue.SpawnWorker(m_ThreadGroup);
 
-	m_MgmtThread = boost::thread(boost::bind(&ThreadPool::ManagerThreadProc, this));
+	m_MgmtThread = std::thread(std::bind(&ThreadPool::ManagerThreadProc, this));
 }
 
-void ThreadPool::Stop(void)
+void ThreadPool::Stop()
 {
 	if (m_Stopped)
 		return;
@@ -71,18 +70,18 @@ void ThreadPool::Stop(void)
 	if (m_MgmtThread.joinable())
 		m_MgmtThread.join();
 
-	for (size_t i = 0; i < sizeof(m_Queues) / sizeof(m_Queues[0]); i++) {
-		boost::mutex::scoped_lock lock(m_Queues[i].Mutex);
-		m_Queues[i].Stopped = true;
-		m_Queues[i].CV.notify_all();
+	for (auto& queue : m_Queues) {
+		boost::mutex::scoped_lock lock(queue.Mutex);
+		queue.Stopped = true;
+		queue.CV.notify_all();
 	}
 
 	m_ThreadGroup.join_all();
 	m_ThreadGroup.~thread_group();
 	new (&m_ThreadGroup) boost::thread_group();
 
-	for (size_t i = 0; i < sizeof(m_Queues) / sizeof(m_Queues[0]); i++)
-		m_Queues[i].Stopped = false;
+	for (auto& queue : m_Queues)
+		queue.Stopped = false;
 
 	m_Stopped = true;
 }
@@ -123,7 +122,7 @@ void ThreadPool::WorkerThread::ThreadProc(Queue& queue)
 			UpdateUtilization(ThreadBusy);
 		}
 
-		double st = Utility::GetTime();;
+		double st = Utility::GetTime();
 
 #ifdef I2_DEBUG
 #	ifdef RUSAGE_THREAD
@@ -138,8 +137,8 @@ void ThreadPool::WorkerThread::ThreadProc(Queue& queue)
 				wi.Callback();
 		} catch (const std::exception& ex) {
 			Log(LogCritical, "ThreadPool")
-			    << "Exception thrown in event handler:\n"
-			    << DiagnosticInformation(ex);
+				<< "Exception thrown in event handler:\n"
+				<< DiagnosticInformation(ex);
 		} catch (...) {
 			Log(LogCritical, "ThreadPool", "Exception of unknown type thrown in event handler.");
 		}
@@ -160,10 +159,10 @@ void ThreadPool::WorkerThread::ThreadProc(Queue& queue)
 		(void) getrusage(RUSAGE_THREAD, &usage_end);
 
 		double duser = (usage_end.ru_utime.tv_sec - usage_start.ru_utime.tv_sec) +
-		    (usage_end.ru_utime.tv_usec - usage_start.ru_utime.tv_usec) / 1000000.0;
+			(usage_end.ru_utime.tv_usec - usage_start.ru_utime.tv_usec) / 1000000.0;
 
 		double dsys = (usage_end.ru_stime.tv_sec - usage_start.ru_stime.tv_sec) +
-		    (usage_end.ru_stime.tv_usec - usage_start.ru_stime.tv_usec) / 1000000.0;
+			(usage_end.ru_stime.tv_usec - usage_start.ru_stime.tv_usec) / 1000000.0;
 
 		double dwait = (et - st) - (duser + dsys);
 
@@ -176,9 +175,9 @@ void ThreadPool::WorkerThread::ThreadProc(Queue& queue)
 		if (et - st > 0.5) {
 			Log(LogWarning, "ThreadPool")
 #	ifdef RUSAGE_THREAD
-			    << "Event call took user:" << duser << "s, system:" << dsys << "s, wait:" << dwait << "s, minor_faults:" << dminfaults << ", major_faults:" << dmajfaults << ", voluntary_csw:" << dvctx << ", involuntary_csw:" << divctx;
+				<< "Event call took user:" << duser << "s, system:" << dsys << "s, wait:" << dwait << "s, minor_faults:" << dminfaults << ", major_faults:" << dmajfaults << ", voluntary_csw:" << dvctx << ", involuntary_csw:" << divctx;
 #	else
-			    << "Event call took " << (et - st) << "s";
+				<< "Event call took " << (et - st) << "s";
 #	endif /* RUSAGE_THREAD */
 		}
 #endif /* I2_DEBUG */
@@ -213,14 +212,14 @@ bool ThreadPool::Post(const ThreadPool::WorkFunction& callback, SchedulerPolicy 
 		if (policy == LowLatencyScheduler)
 			queue.SpawnWorker(m_ThreadGroup);
 
-		queue.Items.push_back(wi);
+		queue.Items.emplace_back(std::move(wi));
 		queue.CV.notify_one();
 	}
 
 	return true;
 }
 
-void ThreadPool::ManagerThreadProc(void)
+void ThreadPool::ManagerThreadProc()
 {
 	std::ostringstream idbuf;
 	idbuf << "TP #" << m_ID << " Manager";
@@ -243,24 +242,22 @@ void ThreadPool::ManagerThreadProc(void)
 				break;
 		}
 
-		for (size_t i = 0; i < sizeof(m_Queues) / sizeof(m_Queues[0]); i++) {
+		for (auto& queue : m_Queues) {
 			size_t pending, alive = 0;
 			double avg_latency;
 			double utilization = 0;
 
-			Queue& queue = m_Queues[i];
+				boost::mutex::scoped_lock lock(queue.Mutex);
 
-			boost::mutex::scoped_lock lock(queue.Mutex);
-
-			for (size_t i = 0; i < sizeof(queue.Threads) / sizeof(queue.Threads[0]); i++)
-				queue.Threads[i].UpdateUtilization();
+			for (auto& thread : queue.Threads)
+				thread.UpdateUtilization();
 
 			pending = queue.Items.size();
 
-			for (size_t i = 0; i < sizeof(queue.Threads) / sizeof(queue.Threads[0]); i++) {
-				if (queue.Threads[i].State != ThreadDead && !queue.Threads[i].Zombie) {
+			for (auto& thread : queue.Threads) {
+				if (thread.State != ThreadDead && !thread.Zombie) {
 					alive++;
-					utilization += queue.Threads[i].Utilization * 100;
+					utilization += thread.Utilization * 100;
 				}
 			}
 
@@ -293,7 +290,7 @@ void ThreadPool::ManagerThreadProc(void)
 
 				if (tthreads != 0) {
 					Log(LogNotice, "ThreadPool")
-					    << "Thread pool; current: " << alive << "; adjustment: " << tthreads;
+						<< "Thread pool; current: " << alive << "; adjustment: " << tthreads;
 				}
 
 				for (int i = 0; i < -tthreads; i++)
@@ -319,10 +316,10 @@ void ThreadPool::ManagerThreadProc(void)
 			lastStats = now;
 
 			Log(LogNotice, "ThreadPool")
-			    << "Pool #" << m_ID << ": Pending tasks: " << total_pending << "; Average latency: "
-			    << (long)(total_avg_latency * 1000 / (sizeof(m_Queues) / sizeof(m_Queues[0]))) << "ms"
-			    << "; Threads: " << total_alive
-			    << "; Pool utilization: " << (total_utilization / (sizeof(m_Queues) / sizeof(m_Queues[0]))) << "%";
+				<< "Pool #" << m_ID << ": Pending tasks: " << total_pending << "; Average latency: "
+				<< (long)(total_avg_latency * 1000 / (sizeof(m_Queues) / sizeof(m_Queues[0]))) << "ms"
+				<< "; Threads: " << total_alive
+				<< "; Pool utilization: " << (total_utilization / (sizeof(m_Queues) / sizeof(m_Queues[0]))) << "%";
 		}
 	}
 }
@@ -332,12 +329,12 @@ void ThreadPool::ManagerThreadProc(void)
  */
 void ThreadPool::Queue::SpawnWorker(boost::thread_group& group)
 {
-	for (size_t i = 0; i < sizeof(Threads) / sizeof(Threads[0]); i++) {
-		if (Threads[i].State == ThreadDead) {
+	for (auto& thread : Threads) {
+		if (thread.State == ThreadDead) {
 			Log(LogDebug, "ThreadPool", "Spawning worker thread.");
 
-			Threads[i] = WorkerThread(ThreadIdle);
-			Threads[i].Thread = group.create_thread(boost::bind(&ThreadPool::WorkerThread::ThreadProc, boost::ref(Threads[i]), boost::ref(*this)));
+			thread = WorkerThread(ThreadIdle);
+			thread.Thread = group.create_thread(std::bind(&ThreadPool::WorkerThread::ThreadProc, std::ref(thread), std::ref(*this)));
 
 			break;
 		}
@@ -349,15 +346,15 @@ void ThreadPool::Queue::SpawnWorker(boost::thread_group& group)
  */
 void ThreadPool::Queue::KillWorker(boost::thread_group& group)
 {
-	for (size_t i = 0; i < sizeof(Threads) / sizeof(Threads[0]); i++) {
-		if (Threads[i].State == ThreadIdle && !Threads[i].Zombie) {
+	for (auto& thread : Threads) {
+		if (thread.State == ThreadIdle && !thread.Zombie) {
 			Log(LogDebug, "ThreadPool", "Killing worker thread.");
 
-			group.remove_thread(Threads[i].Thread);
-			Threads[i].Thread->detach();
-			delete Threads[i].Thread;
+			group.remove_thread(thread.Thread);
+			thread.Thread->detach();
+			delete thread.Thread;
 
-			Threads[i].Zombie = true;
+			thread.Zombie = true;
 			CV.notify_all();
 
 			break;

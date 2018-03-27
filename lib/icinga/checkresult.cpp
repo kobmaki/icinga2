@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,16 +18,14 @@
  ******************************************************************************/
 
 #include "icinga/checkresult.hpp"
-#include "icinga/checkresult.tcpp"
+#include "icinga/checkresult-ti.cpp"
 #include "base/scriptglobal.hpp"
 
 using namespace icinga;
 
 REGISTER_TYPE(CheckResult);
-INITIALIZE_ONCE(&CheckResult::StaticInitialize);
 
-void CheckResult::StaticInitialize(void)
-{
+INITIALIZE_ONCE([]() {
 	ScriptGlobal::Set("ServiceOK", ServiceOK);
 	ScriptGlobal::Set("ServiceWarning", ServiceWarning);
 	ScriptGlobal::Set("ServiceCritical", ServiceCritical);
@@ -35,14 +33,14 @@ void CheckResult::StaticInitialize(void)
 
 	ScriptGlobal::Set("HostUp", HostUp);
 	ScriptGlobal::Set("HostDown", HostDown);
-}
+})
 
-double CheckResult::CalculateExecutionTime(void) const
+double CheckResult::CalculateExecutionTime() const
 {
 	return GetExecutionEnd() - GetExecutionStart();
 }
 
-double CheckResult::CalculateLatency(void) const
+double CheckResult::CalculateLatency() const
 {
 	double latency = (GetScheduleEnd() - GetScheduleStart()) - CalculateExecutionTime();
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,8 +18,7 @@
  ******************************************************************************/
 
 #include "base/string.hpp"
-#include <boost/test/unit_test.hpp>
-#include <boost/foreach.hpp>
+#include <BoostTestTargetConfig.h>
 
 using namespace icinga;
 
@@ -106,7 +105,7 @@ BOOST_AUTO_TEST_CASE(index)
 	s[0] = 'x';
 	BOOST_CHECK(s == "xello");
 
-	BOOST_FOREACH(char& ch, s) {
+	for (char& ch : s) {
 		ch = 'y';
 	}
 	BOOST_CHECK(s == "yyyyy");

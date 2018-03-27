@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,12 +20,12 @@
 #include "icinga/cib.hpp"
 #include "icinga/host.hpp"
 #include "icinga/service.hpp"
-#include "icinga/perfdatavalue.hpp"
+#include "icinga/clusterevents.hpp"
 #include "base/objectlock.hpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/configtype.hpp"
 #include "base/statsfunction.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -46,12 +46,12 @@ void CIB::UpdateActiveServiceChecksStatistics(long tv, int num)
 
 int CIB::GetActiveHostChecksStatistics(long timespan)
 {
-	return m_ActiveHostChecksStatistics.GetValues(timespan);
+	return m_ActiveHostChecksStatistics.UpdateAndGetValues(Utility::GetTime(), timespan);
 }
 
 int CIB::GetActiveServiceChecksStatistics(long timespan)
 {
-	return m_ActiveServiceChecksStatistics.GetValues(timespan);
+	return m_ActiveServiceChecksStatistics.UpdateAndGetValues(Utility::GetTime(), timespan);
 }
 
 void CIB::UpdatePassiveHostChecksStatistics(long tv, int num)
@@ -66,22 +66,23 @@ void CIB::UpdatePassiveServiceChecksStatistics(long tv, int num)
 
 int CIB::GetPassiveHostChecksStatistics(long timespan)
 {
-	return m_PassiveHostChecksStatistics.GetValues(timespan);
+	return m_PassiveHostChecksStatistics.UpdateAndGetValues(Utility::GetTime(), timespan);
 }
 
 int CIB::GetPassiveServiceChecksStatistics(long timespan)
 {
-	return m_PassiveServiceChecksStatistics.GetValues(timespan);
+	return m_PassiveServiceChecksStatistics.UpdateAndGetValues(Utility::GetTime(), timespan);
 }
 
-CheckableCheckStatistics CIB::CalculateHostCheckStats(void)
+CheckableCheckStatistics CIB::CalculateHostCheckStats()
 {
 	double min_latency = -1, max_latency = 0, sum_latency = 0;
 	int count_latency = 0;
 	double min_execution_time = -1, max_execution_time = 0, sum_execution_time = 0;
 	int count_execution_time = 0;
+	bool checkresult = false;
 
-	BOOST_FOREACH(const Host::Ptr& host, ConfigType::GetObjectsByType<Host>()) {
+	for (const Host::Ptr& host : ConfigType::GetObjectsByType<Host>()) {
 		ObjectLock olock(host);
 
 		CheckResult::Ptr cr = host->GetLastCheckResult();
@@ -89,6 +90,9 @@ CheckableCheckStatistics CIB::CalculateHostCheckStats(void)
 		if (!cr)
 			continue;
 
+		/* set to true, we have a checkresult */
+		checkresult = true;
+
 		/* latency */
 		double latency = cr->CalculateLatency();
 
@@ -114,6 +118,11 @@ CheckableCheckStatistics CIB::CalculateHostCheckStats(void)
 		count_execution_time++;
 	}
 
+	if (!checkresult) {
+		min_latency = 0;
+		min_execution_time = 0;
+	}
+
 	CheckableCheckStatistics ccs;
 
 	ccs.min_latency = min_latency;
@@ -126,14 +135,15 @@ CheckableCheckStatistics CIB::CalculateHostCheckStats(void)
 	return ccs;
 }
 
-CheckableCheckStatistics CIB::CalculateServiceCheckStats(void)
+CheckableCheckStatistics CIB::CalculateServiceCheckStats()
 {
 	double min_latency = -1, max_latency = 0, sum_latency = 0;
 	int count_latency = 0;
 	double min_execution_time = -1, max_execution_time = 0, sum_execution_time = 0;
 	int count_execution_time = 0;
+	bool checkresult = false;
 
-	BOOST_FOREACH(const Service::Ptr& service, ConfigType::GetObjectsByType<Service>()) {
+	for (const Service::Ptr& service : ConfigType::GetObjectsByType<Service>()) {
 		ObjectLock olock(service);
 
 		CheckResult::Ptr cr = service->GetLastCheckResult();
@@ -141,6 +151,9 @@ CheckableCheckStatistics CIB::CalculateServiceCheckStats(void)
 		if (!cr)
 			continue;
 
+		/* set to true, we have a checkresult */
+		checkresult = true;
+
 		/* latency */
 		double latency = cr->CalculateLatency();
 
@@ -166,6 +179,11 @@ CheckableCheckStatistics CIB::CalculateServiceCheckStats(void)
 		count_execution_time++;
 	}
 
+	if (!checkresult) {
+		min_latency = 0;
+		min_execution_time = 0;
+	}
+
 	CheckableCheckStatistics ccs;
 
 	ccs.min_latency = min_latency;
@@ -178,11 +196,11 @@ CheckableCheckStatistics CIB::CalculateServiceCheckStats(void)
 	return ccs;
 }
 
-ServiceStatistics CIB::CalculateServiceStats(void)
+ServiceStatistics CIB::CalculateServiceStats()
 {
-	ServiceStatistics ss = {0};
+	ServiceStatistics ss = {};
 
-	BOOST_FOREACH(const Service::Ptr& service, ConfigType::GetObjectsByType<Service>()) {
+	for (const Service::Ptr& service : ConfigType::GetObjectsByType<Service>()) {
 		ObjectLock olock(service);
 
 		CheckResult::Ptr cr = service->GetLastCheckResult();
@@ -212,11 +230,11 @@ ServiceStatistics CIB::CalculateServiceStats(void)
 	return ss;
 }
 
-HostStatistics CIB::CalculateHostStats(void)
+HostStatistics CIB::CalculateHostStats()
 {
-	HostStatistics hs = {0};
+	HostStatistics hs = {};
 
-	BOOST_FOREACH(const Host::Ptr& host, ConfigType::GetObjectsByType<Host>()) {
+	for (const Host::Ptr& host : ConfigType::GetObjectsByType<Host>()) {
 		ObjectLock olock(host);
 
 		if (host->IsReachable()) {
@@ -245,19 +263,18 @@ HostStatistics CIB::CalculateHostStats(void)
  * 'perfdata' must be a flat dictionary with double values
  * 'status' dictionary can contain multiple levels of dictionaries
  */
-std::pair<Dictionary::Ptr, Array::Ptr> CIB::GetFeatureStats(void)
+std::pair<Dictionary::Ptr, Array::Ptr> CIB::GetFeatureStats()
 {
 	Dictionary::Ptr status = new Dictionary();
 	Array::Ptr perfdata = new Array();
 
-	String name;
-	BOOST_FOREACH(tie(name, boost::tuples::ignore), StatsFunctionRegistry::GetInstance()->GetItems()) {
-		StatsFunction::Ptr func = StatsFunctionRegistry::GetInstance()->GetItem(name);
+	Dictionary::Ptr statsFunctions = ScriptGlobal::Get("StatsFunctions", &Empty);
 
-		if (!func)
-			BOOST_THROW_EXCEPTION(std::invalid_argument("Function '" + name + "' does not exist."));
+	if (statsFunctions) {
+		ObjectLock olock(statsFunctions);
 
-		func->Invoke(status, perfdata);
+		for (const Dictionary::Pair& kv : statsFunctions)
+			static_cast<Function::Ptr>(kv.second)->Invoke({ status, perfdata });
 	}
 
 	return std::make_pair(status, perfdata);
@@ -289,13 +306,15 @@ void CIB::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata) {
 	status->Set("active_service_checks_15min", GetActiveServiceChecksStatistics(60 * 15));
 	status->Set("passive_service_checks_15min", GetPassiveServiceChecksStatistics(60 * 15));
 
+	status->Set("remote_check_queue", ClusterEvents::GetCheckRequestQueueSize());
+
 	CheckableCheckStatistics scs = CalculateServiceCheckStats();
 
 	status->Set("min_latency", scs.min_latency);
 	status->Set("max_latency", scs.max_latency);
 	status->Set("avg_latency", scs.avg_latency);
-	status->Set("min_execution_time", scs.min_latency);
-	status->Set("max_execution_time", scs.max_latency);
+	status->Set("min_execution_time", scs.min_execution_time);
+	status->Set("max_execution_time", scs.max_execution_time);
 	status->Set("avg_execution_time", scs.avg_execution_time);
 
 	ServiceStatistics ss = CalculateServiceStats();

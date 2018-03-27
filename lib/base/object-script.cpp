@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,10 +25,11 @@
 
 using namespace icinga;
 
-static String ObjectToString(void)
+static String ObjectToString()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Object::Ptr self = static_cast<Object::Ptr>(vframe->Self);
+	REQUIRE_NOT_NULL(self);
 	return self->ToString();
 }
 
@@ -36,26 +37,25 @@ static void ObjectNotifyAttribute(const String& attribute)
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Object::Ptr self = static_cast<Object::Ptr>(vframe->Self);
+	REQUIRE_NOT_NULL(self);
 	self->NotifyField(self->GetReflectionType()->GetFieldId(attribute));
 }
 
-static Object::Ptr ObjectClone(void)
+static Object::Ptr ObjectClone()
 {
 	ScriptFrame *vframe = ScriptFrame::GetCurrentFrame();
 	Object::Ptr self = static_cast<Object::Ptr>(vframe->Self);
+	REQUIRE_NOT_NULL(self);
 	return self->Clone();
 }
 
-Object::Ptr Object::GetPrototype(void)
+Object::Ptr Object::GetPrototype()
 {
-	static Dictionary::Ptr prototype;
-
-	if (!prototype) {
-		prototype = new Dictionary();
-		prototype->Set("to_string", new Function(WrapFunction(ObjectToString), true));
-		prototype->Set("notify_attribute", new Function(WrapFunction(ObjectNotifyAttribute), false));
-		prototype->Set("clone", new Function(WrapFunction(ObjectClone), true));
-	}
+	static Dictionary::Ptr prototype = new Dictionary({
+			{ "to_string", new Function("Object#to_string", ObjectToString, {}, true) },
+			{ "notify_attribute", new Function("Object#notify_attribute", ObjectNotifyAttribute, { "attribute" }, false) },
+			{ "clone", new Function("Object#clone", ObjectClone, {}, true) }
+	});
 
 	return prototype;
 }

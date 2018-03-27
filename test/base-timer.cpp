@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,8 +20,7 @@
 #include "base/timer.hpp"
 #include "base/utility.hpp"
 #include "base/application.hpp"
-#include <boost/test/unit_test.hpp>
-#include <boost/foreach.hpp>
+#include <BoostTestTargetConfig.h>
 
 using namespace icinga;
 
@@ -49,7 +48,7 @@ BOOST_AUTO_TEST_CASE(invoke)
 {
 	int counter;
 	Timer::Ptr timer = new Timer();
-	timer->OnTimerExpired.connect(boost::bind(&Callback, &counter));
+	timer->OnTimerExpired.connect(std::bind(&Callback, &counter));
 	timer->SetInterval(1);
 
 	counter = 0;
@@ -64,7 +63,7 @@ BOOST_AUTO_TEST_CASE(scope)
 {
 	int counter;
 	Timer::Ptr timer = new Timer();
-	timer->OnTimerExpired.connect(boost::bind(&Callback, &counter));
+	timer->OnTimerExpired.connect(std::bind(&Callback, &counter));
 	timer->SetInterval(1);
 
 	counter = 0;

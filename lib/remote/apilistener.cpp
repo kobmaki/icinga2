@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "remote/apilistener.hpp"
-#include "remote/apilistener.tcpp"
+#include "remote/apilistener-ti.cpp"
 #include "remote/jsonrpcconnection.hpp"
 #include "remote/endpoint.hpp"
 #include "remote/jsonrpc.hpp"
@@ -30,6 +30,7 @@
 #include "base/logger.hpp"
 #include "base/objectlock.hpp"
 #include "base/stdiostream.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/application.hpp"
 #include "base/context.hpp"
 #include "base/statsfunction.hpp"
@@ -47,66 +48,157 @@ REGISTER_STATSFUNCTION(ApiListener, &ApiListener::StatsFunc);
 
 REGISTER_APIFUNCTION(Hello, icinga, &ApiListener::HelloAPIHandler);
 
-ApiListener::ApiListener(void)
-	: m_SyncQueue(0, 4), m_LogMessageCount(0)
+ApiListener::ApiListener()
 {
 	m_RelayQueue.SetName("ApiListener, RelayQueue");
 	m_SyncQueue.SetName("ApiListener, SyncQueue");
 }
 
-void ApiListener::OnConfigLoaded(void)
+String ApiListener::GetApiDir()
+{
+	return Application::GetLocalStateDir() + "/lib/icinga2/api/";
+}
+
+String ApiListener::GetCertsDir()
+{
+	return Application::GetLocalStateDir() + "/lib/icinga2/certs/";
+}
+
+String ApiListener::GetCaDir()
+{
+	return Application::GetLocalStateDir() + "/lib/icinga2/ca/";
+}
+
+String ApiListener::GetCertificateRequestsDir()
+{
+	return Application::GetLocalStateDir() + "/lib/icinga2/certificate-requests/";
+}
+
+String ApiListener::GetDefaultCertPath()
+{
+	return GetCertsDir() + "/" + ScriptGlobal::Get("NodeName") + ".crt";
+}
+
+String ApiListener::GetDefaultKeyPath()
+{
+	return GetCertsDir() + "/" + ScriptGlobal::Get("NodeName") + ".key";
+}
+
+String ApiListener::GetDefaultCaPath()
+{
+	return GetCertsDir() + "/ca.crt";
+}
+
+void ApiListener::CopyCertificateFile(const String& oldCertPath, const String& newCertPath)
+{
+	struct stat st1, st2;
+
+	if (!oldCertPath.IsEmpty() && stat(oldCertPath.CStr(), &st1) >= 0 && (stat(newCertPath.CStr(), &st2) < 0 || st1.st_mtime > st2.st_mtime)) {
+		Log(LogWarning, "ApiListener")
+			<< "Copying '" << oldCertPath << "' certificate file to '" << newCertPath << "'";
+
+		Utility::MkDirP(Utility::DirName(newCertPath), 0700);
+		Utility::CopyFile(oldCertPath, newCertPath);
+	}
+}
+
+void ApiListener::OnConfigLoaded()
 {
 	if (m_Instance)
 		BOOST_THROW_EXCEPTION(ScriptError("Only one ApiListener object is allowed.", GetDebugInfo()));
 
 	m_Instance = this;
 
+	String defaultCertPath = GetDefaultCertPath();
+	String defaultKeyPath = GetDefaultKeyPath();
+	String defaultCaPath = GetDefaultCaPath();
+
+	/* Migrate certificate location < 2.8 to the new default path. */
+	String oldCertPath = GetCertPath();
+	String oldKeyPath = GetKeyPath();
+	String oldCaPath = GetCaPath();
+
+	CopyCertificateFile(oldCertPath, defaultCertPath);
+	CopyCertificateFile(oldKeyPath, defaultKeyPath);
+	CopyCertificateFile(oldCaPath, defaultCaPath);
+
+	if (!oldCertPath.IsEmpty() && !oldKeyPath.IsEmpty() && !oldCaPath.IsEmpty()) {
+		Log(LogWarning, "ApiListener", "Please read the upgrading documentation for v2.8: https://www.icinga.com/docs/icinga2/latest/doc/16-upgrading-icinga-2/");
+	}
+
 	/* set up SSL context */
-	boost::shared_ptr<X509> cert;
+	std::shared_ptr<X509> cert;
 	try {
-		cert = GetX509Certificate(GetCertPath());
+		cert = GetX509Certificate(defaultCertPath);
 	} catch (const std::exception&) {
 		BOOST_THROW_EXCEPTION(ScriptError("Cannot get certificate from cert path: '"
-		    + GetCertPath() + "'.", GetDebugInfo()));
+			+ defaultCertPath + "'.", GetDebugInfo()));
 	}
 
 	try {
 		SetIdentity(GetCertificateCN(cert));
 	} catch (const std::exception&) {
 		BOOST_THROW_EXCEPTION(ScriptError("Cannot get certificate common name from cert path: '"
-		    + GetCertPath() + "'.", GetDebugInfo()));
+			+ defaultCertPath + "'.", GetDebugInfo()));
 	}
 
 	Log(LogInformation, "ApiListener")
-	    << "My API identity: " << GetIdentity();
+		<< "My API identity: " << GetIdentity();
+
+	UpdateSSLContext();
+}
+
+void ApiListener::UpdateSSLContext()
+{
+	std::shared_ptr<SSL_CTX> context;
 
 	try {
-		m_SSLContext = MakeSSLContext(GetCertPath(), GetKeyPath(), GetCaPath());
+		context = MakeSSLContext(GetDefaultCertPath(), GetDefaultKeyPath(), GetDefaultCaPath());
 	} catch (const std::exception&) {
 		BOOST_THROW_EXCEPTION(ScriptError("Cannot make SSL context for cert path: '"
-		    + GetCertPath() + "' key path: '" + GetKeyPath() + "' ca path: '" + GetCaPath() + "'.", GetDebugInfo()));
+			+ GetDefaultCertPath() + "' key path: '" + GetDefaultKeyPath() + "' ca path: '" + GetDefaultCaPath() + "'.", GetDebugInfo()));
 	}
 
 	if (!GetCrlPath().IsEmpty()) {
 		try {
-			AddCRLToSSLContext(m_SSLContext, GetCrlPath());
+			AddCRLToSSLContext(context, GetCrlPath());
 		} catch (const std::exception&) {
 			BOOST_THROW_EXCEPTION(ScriptError("Cannot add certificate revocation list to SSL context for crl path: '"
-			    + GetCrlPath() + "'.", GetDebugInfo()));
+				+ GetCrlPath() + "'.", GetDebugInfo()));
 		}
 	}
 
 	if (!GetCipherList().IsEmpty()) {
 		try {
-			SetCipherListToSSLContext(m_SSLContext, GetCipherList());
+			SetCipherListToSSLContext(context, GetCipherList());
 		} catch (const std::exception&) {
 			BOOST_THROW_EXCEPTION(ScriptError("Cannot set cipher list to SSL context for cipher list: '"
-			    + GetCipherList() + "'.", GetDebugInfo()));
+				+ GetCipherList() + "'.", GetDebugInfo()));
 		}
+	}
+
+	if (!GetTlsProtocolmin().IsEmpty()){
+		try {
+			SetTlsProtocolminToSSLContext(context, GetTlsProtocolmin());
+		} catch (const std::exception&) {
+			BOOST_THROW_EXCEPTION(ScriptError("Cannot set minimum TLS protocol version to SSL context with tls_protocolmin: '" + GetTlsProtocolmin() + "'.", GetDebugInfo()));
+		}
+	}
+
+	m_SSLContext = context;
+
+	for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
+			client->Disconnect();
+		}
+	}
+
+	for (const JsonRpcConnection::Ptr& client : m_AnonymousClients) {
+		client->Disconnect();
 	}
 }
 
-void ApiListener::OnAllConfigLoaded(void)
+void ApiListener::OnAllConfigLoaded()
 {
 	m_LocalEndpoint = Endpoint::GetByName(GetIdentity());
 
@@ -119,12 +211,15 @@ void ApiListener::OnAllConfigLoaded(void)
  */
 void ApiListener::Start(bool runtimeCreated)
 {
+	Log(LogInformation, "ApiListener")
+		<< "'" << GetName() << "' started.";
+
 	SyncZoneDirs();
 
 	ObjectImpl<ApiListener>::Start(runtimeCreated);
 
 	{
-		boost::mutex::scoped_lock(m_LogLock);
+		boost::mutex::scoped_lock lock(m_LogLock);
 		RotateLogFile();
 		OpenLogFile();
 	}
@@ -132,45 +227,62 @@ void ApiListener::Start(bool runtimeCreated)
 	/* create the primary JSON-RPC listener */
 	if (!AddListener(GetBindHost(), GetBindPort())) {
 		Log(LogCritical, "ApiListener")
-		     << "Cannot add listener on host '" << GetBindHost() << "' for port '" << GetBindPort() << "'.";
+			<< "Cannot add listener on host '" << GetBindHost() << "' for port '" << GetBindPort() << "'.";
 		Application::Exit(EXIT_FAILURE);
 	}
 
 	m_Timer = new Timer();
-	m_Timer->OnTimerExpired.connect(boost::bind(&ApiListener::ApiTimerHandler, this));
+	m_Timer->OnTimerExpired.connect(std::bind(&ApiListener::ApiTimerHandler, this));
 	m_Timer->SetInterval(5);
 	m_Timer->Start();
 	m_Timer->Reschedule(0);
 
 	m_ReconnectTimer = new Timer();
-	m_ReconnectTimer->OnTimerExpired.connect(boost::bind(&ApiListener::ApiReconnectTimerHandler, this));
+	m_ReconnectTimer->OnTimerExpired.connect(std::bind(&ApiListener::ApiReconnectTimerHandler, this));
 	m_ReconnectTimer->SetInterval(60);
 	m_ReconnectTimer->Start();
 	m_ReconnectTimer->Reschedule(0);
 
+	m_AuthorityTimer = new Timer();
+	m_AuthorityTimer->OnTimerExpired.connect(std::bind(&ApiListener::UpdateObjectAuthority));
+	m_AuthorityTimer->SetInterval(30);
+	m_AuthorityTimer->Start();
+
+	m_CleanupCertificateRequestsTimer = new Timer();
+	m_CleanupCertificateRequestsTimer->OnTimerExpired.connect(std::bind(&ApiListener::CleanupCertificateRequestsTimerHandler, this));
+	m_CleanupCertificateRequestsTimer->SetInterval(3600);
+	m_CleanupCertificateRequestsTimer->Start();
+	m_CleanupCertificateRequestsTimer->Reschedule(0);
+
 	OnMasterChanged(true);
 }
 
-ApiListener::Ptr ApiListener::GetInstance(void)
+void ApiListener::Stop(bool runtimeDeleted)
+{
+	ObjectImpl<ApiListener>::Stop(runtimeDeleted);
+
+	Log(LogInformation, "ApiListener")
+		<< "'" << GetName() << "' stopped.";
+
+	boost::mutex::scoped_lock lock(m_LogLock);
+	CloseLogFile();
+}
+
+ApiListener::Ptr ApiListener::GetInstance()
 {
 	return m_Instance;
 }
 
-boost::shared_ptr<SSL_CTX> ApiListener::GetSSLContext(void) const
-{
-	return m_SSLContext;
-}
-
-Endpoint::Ptr ApiListener::GetMaster(void) const
+Endpoint::Ptr ApiListener::GetMaster() const
 {
 	Zone::Ptr zone = Zone::GetLocalZone();
 
 	if (!zone)
-		return Endpoint::Ptr();
+		return nullptr;
 
 	std::vector<String> names;
 
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, zone->GetEndpoints())
+	for (const Endpoint::Ptr& endpoint : zone->GetEndpoints())
 		if (endpoint->GetConnected() || endpoint->GetName() == GetIdentity())
 			names.push_back(endpoint->GetName());
 
@@ -179,7 +291,7 @@ Endpoint::Ptr ApiListener::GetMaster(void) const
 	return Endpoint::GetByName(*names.begin());
 }
 
-bool ApiListener::IsMaster(void) const
+bool ApiListener::IsMaster() const
 {
 	Endpoint::Ptr master = GetMaster();
 
@@ -199,7 +311,7 @@ bool ApiListener::AddListener(const String& node, const String& service)
 {
 	ObjectLock olock(this);
 
-	boost::shared_ptr<SSL_CTX> sslContext = m_SSLContext;
+	std::shared_ptr<SSL_CTX> sslContext = m_SSLContext;
 
 	if (!sslContext) {
 		Log(LogCritical, "ApiListener", "SSL context is required for AddListener()");
@@ -207,7 +319,7 @@ bool ApiListener::AddListener(const String& node, const String& service)
 	}
 
 	Log(LogInformation, "ApiListener")
-	    << "Adding new listener on port '" << service << "'";
+		<< "Adding new listener on port '" << service << "'";
 
 	TcpSocket::Ptr server = new TcpSocket();
 
@@ -215,11 +327,11 @@ bool ApiListener::AddListener(const String& node, const String& service)
 		server->Bind(node, service, AF_UNSPEC);
 	} catch (const std::exception&) {
 		Log(LogCritical, "ApiListener")
-		    << "Cannot bind TCP socket for host '" << node << "' on port '" << service << "'.";
+			<< "Cannot bind TCP socket for host '" << node << "' on port '" << service << "'.";
 		return false;
 	}
 
-	boost::thread thread(boost::bind(&ApiListener::ListenerThreadProc, this, server));
+	std::thread thread(std::bind(&ApiListener::ListenerThreadProc, this, server));
 	thread.detach();
 
 	m_Servers.insert(server);
@@ -236,7 +348,7 @@ void ApiListener::ListenerThreadProc(const Socket::Ptr& server)
 	for (;;) {
 		try {
 			Socket::Ptr client = server->Accept();
-			boost::thread thread(boost::bind(&ApiListener::NewClientHandler, this, client, String(), RoleServer));
+			std::thread thread(std::bind(&ApiListener::NewClientHandler, this, client, String(), RoleServer));
 			thread.detach();
 		} catch (const std::exception&) {
 			Log(LogCritical, "ApiListener", "Cannot accept new connection.");
@@ -254,7 +366,7 @@ void ApiListener::AddConnection(const Endpoint::Ptr& endpoint)
 	{
 		ObjectLock olock(this);
 
-		boost::shared_ptr<SSL_CTX> sslContext = m_SSLContext;
+		std::shared_ptr<SSL_CTX> sslContext = m_SSLContext;
 
 		if (!sslContext) {
 			Log(LogCritical, "ApiListener", "SSL context is required for AddConnection()");
@@ -265,8 +377,8 @@ void ApiListener::AddConnection(const Endpoint::Ptr& endpoint)
 	String host = endpoint->GetHost();
 	String port = endpoint->GetPort();
 
-	Log(LogInformation, "JsonRpcConnection")
-	    << "Reconnecting to API endpoint '" << endpoint->GetName() << "' via host '" << host << "' and port '" << port << "'";
+	Log(LogInformation, "ApiListener")
+		<< "Reconnecting to endpoint '" << endpoint->GetName() << "' via host '" << host << "' and port '" << port << "'";
 
 	TcpSocket::Ptr client = new TcpSocket();
 
@@ -283,8 +395,11 @@ void ApiListener::AddConnection(const Endpoint::Ptr& endpoint)
 		info << "Cannot connect to host '" << host << "' on port '" << port << "'";
 		Log(LogCritical, "ApiListener", info.str());
 		Log(LogDebug, "ApiListener")
-		    << info.str() << "\n" << DiagnosticInformation(ex);
+			<< info.str() << "\n" << DiagnosticInformation(ex);
 	}
+
+	Log(LogInformation, "ApiListener")
+		<< "Finished reconnecting to endpoint '" << endpoint->GetName() << "' via host '" << host << "' and port '" << port << "'";
 }
 
 void ApiListener::NewClientHandler(const Socket::Ptr& client, const String& hostname, ConnectionRole role)
@@ -293,7 +408,10 @@ void ApiListener::NewClientHandler(const Socket::Ptr& client, const String& host
 		NewClientHandlerInternal(client, hostname, role);
 	} catch (const std::exception& ex) {
 		Log(LogCritical, "ApiListener")
-		    << "Exception while handling new API client connection: " << DiagnosticInformation(ex);
+			<< "Exception while handling new API client connection: " << DiagnosticInformation(ex, false);
+
+		Log(LogDebug, "ApiListener")
+			<< "Exception while handling new API client connection: " << DiagnosticInformation(ex);
 	}
 }
 
@@ -306,6 +424,15 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 {
 	CONTEXT("Handling new API client connection");
 
+	String conninfo;
+
+	if (role == RoleClient)
+		conninfo = "to";
+	else
+		conninfo = "from";
+
+	conninfo += " " + client->GetPeerAddress();
+
 	TlsStream::Ptr tlsStream;
 
 	{
@@ -313,19 +440,21 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 		try {
 			tlsStream = new TlsStream(client, hostname, role, m_SSLContext);
 		} catch (const std::exception&) {
-			Log(LogCritical, "ApiListener", "Cannot create TLS stream from client connection.");
+			Log(LogCritical, "ApiListener")
+				<< "Cannot create TLS stream from client connection (" << conninfo << ")";
 			return;
 		}
 	}
 
 	try {
 		tlsStream->Handshake();
-	} catch (const std::exception& ex) {
-		Log(LogCritical, "ApiListener", "Client TLS handshake failed");
+	} catch (const std::exception&) {
+		Log(LogCritical, "ApiListener")
+			<< "Client TLS handshake failed (" << conninfo << ")";
 		return;
 	}
 
-	boost::shared_ptr<X509> cert = tlsStream->GetPeerCertificate();
+	std::shared_ptr<X509> cert = tlsStream->GetPeerCertificate();
 	String identity;
 	Endpoint::Ptr endpoint;
 	bool verify_ok = false;
@@ -335,7 +464,7 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 			identity = GetCertificateCN(cert);
 		} catch (const std::exception&) {
 			Log(LogCritical, "ApiListener")
-			    << "Cannot get certificate common name from cert path: '" << GetCertPath() << "'.";
+				<< "Cannot get certificate common name from cert path: '" << GetDefaultCertPath() << "'.";
 			return;
 		}
 
@@ -344,13 +473,12 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 			if (identity != hostname) {
 				Log(LogWarning, "ApiListener")
 					<< "Unexpected certificate common name while connecting to endpoint '"
-				    << hostname << "': got '" << identity << "'";
+					<< hostname << "': got '" << identity << "'";
 				return;
 			} else if (!verify_ok) {
 				Log(LogWarning, "ApiListener")
-					<< "Peer certificate for endpoint '" << hostname
-					<< "' is not signed by the certificate authority.";
-				return;
+					<< "Certificate validation failed for endpoint '" << hostname
+					<< "': " << tlsStream->GetVerifyError();
 			}
 		}
 
@@ -360,32 +488,41 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 		{
 			Log log(LogInformation, "ApiListener");
 
-			log << "New client connection for identity '" << identity << "'";
+			log << "New client connection for identity '" << identity << "' " << conninfo;
 
 			if (!verify_ok)
-				log << " (client certificate not signed by CA)";
+				log << " (certificate validation failed: " << tlsStream->GetVerifyError() << ")";
 			else if (!endpoint)
 				log << " (no Endpoint object found for identity)";
 		}
 	} else {
 		Log(LogInformation, "ApiListener")
-		    << "New client connection (no client certificate)";
+			<< "New client connection " << conninfo << " (no client certificate)";
 	}
 
 	ClientType ctype;
 
 	if (role == RoleClient) {
-		Dictionary::Ptr message = new Dictionary();
-		message->Set("jsonrpc", "2.0");
-		message->Set("method", "icinga::Hello");
-		message->Set("params", new Dictionary());
+		Dictionary::Ptr message = new Dictionary({
+			{ "jsonrpc", "2.0" },
+			{ "method", "icinga::Hello" },
+			{ "params", new Dictionary() }
+		});
+
 		JsonRpc::SendMessage(tlsStream, message);
 		ctype = ClientJsonRpc;
 	} else {
-		tlsStream->WaitForData(5);
+		tlsStream->WaitForData(10);
 
 		if (!tlsStream->IsDataAvailable()) {
-			Log(LogWarning, "ApiListener", "No data received on new API connection.");
+			if (identity.IsEmpty())
+				Log(LogInformation, "ApiListener")
+					<< "No data received on new API connection. "
+					<< "Ensure that the remote endpoints are properly configured in a cluster setup.";
+			else
+				Log(LogWarning, "ApiListener")
+					<< "No data received on new API connection for identity '" << identity << "'. "
+					<< "Ensure that the remote endpoints are properly configured in a cluster setup.";
 			return;
 		}
 
@@ -409,9 +546,13 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 
 			endpoint->AddClient(aclient);
 
-			m_SyncQueue.Enqueue(boost::bind(&ApiListener::SyncClient, this, aclient, endpoint, needSync));
-		} else
-			AddAnonymousClient(aclient);
+			m_SyncQueue.Enqueue(std::bind(&ApiListener::SyncClient, this, aclient, endpoint, needSync));
+		} else {
+			if (!AddAnonymousClient(aclient)) {
+				Log(LogNotice, "ApiListener", "Ignoring anonymous JSON-RPC connection. Max connections exceeded.");
+				aclient->Disconnect();
+			}
+		}
 	} else {
 		Log(LogNotice, "ApiListener", "New HTTP client");
 
@@ -423,6 +564,8 @@ void ApiListener::NewClientHandlerInternal(const Socket::Ptr& client, const Stri
 
 void ApiListener::SyncClient(const JsonRpcConnection::Ptr& aclient, const Endpoint::Ptr& endpoint, bool needSync)
 {
+	Zone::Ptr eZone = endpoint->GetZone();
+
 	try {
 		{
 			ObjectLock olock(endpoint);
@@ -430,20 +573,36 @@ void ApiListener::SyncClient(const JsonRpcConnection::Ptr& aclient, const Endpoi
 			endpoint->SetSyncing(true);
 		}
 
+		Zone::Ptr myZone = Zone::GetLocalZone();
+
+		if (myZone->GetParent() == eZone) {
+			Log(LogInformation, "ApiListener")
+				<< "Requesting new certificate for this Icinga instance from endpoint '" << endpoint->GetName() << "'.";
+
+			JsonRpcConnection::SendCertificateRequest(aclient, nullptr, String());
+
+			if (Utility::PathExists(ApiListener::GetCertificateRequestsDir()))
+				Utility::Glob(ApiListener::GetCertificateRequestsDir() + "/*.json", std::bind(&JsonRpcConnection::SendCertificateRequest, aclient, nullptr, _1), GlobFile);
+		}
+
 		/* Make sure that the config updates are synced
 		 * before the logs are replayed.
 		 */
 
 		Log(LogInformation, "ApiListener")
-		    << "Sending config updates for endpoint '" << endpoint->GetName() << "'.";
+			<< "Sending config updates for endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
 
 		/* sync zone file config */
 		SendConfigUpdate(aclient);
+
+		Log(LogInformation, "ApiListener")
+			<< "Finished sending config file updates for endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
+
 		/* sync runtime config */
 		SendRuntimeConfigObjects(aclient);
 
 		Log(LogInformation, "ApiListener")
-		    << "Finished sending config updates for endpoint '" << endpoint->GetName() << "'.";
+			<< "Finished sending runtime config updates for endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
 
 		if (!needSync) {
 			ObjectLock olock2(endpoint);
@@ -452,36 +611,44 @@ void ApiListener::SyncClient(const JsonRpcConnection::Ptr& aclient, const Endpoi
 		}
 
 		Log(LogInformation, "ApiListener")
-		    << "Sending replay log for endpoint '" << endpoint->GetName() << "'.";
+			<< "Sending replay log for endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
 
 		ReplayLog(aclient);
 
-		if (endpoint->GetZone() == Zone::GetLocalZone())
+		if (eZone == Zone::GetLocalZone())
 			UpdateObjectAuthority();
 
 		Log(LogInformation, "ApiListener")
-		    << "Finished sending replay log for endpoint '" << endpoint->GetName() << "'.";
+			<< "Finished sending replay log for endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
 	} catch (const std::exception& ex) {
-		ObjectLock olock2(endpoint);
-		endpoint->SetSyncing(false);
+		{
+			ObjectLock olock2(endpoint);
+			endpoint->SetSyncing(false);
+		}
 
 		Log(LogCritical, "ApiListener")
-		    << "Error while syncing endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex);
+			<< "Error while syncing endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex, false);
+
+		Log(LogDebug, "ApiListener")
+			<< "Error while syncing endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex);
 	}
+
+	Log(LogInformation, "ApiListener")
+		<< "Finished syncing endpoint '" << endpoint->GetName() << "' in zone '" << eZone->GetName() << "'.";
 }
 
-void ApiListener::ApiTimerHandler(void)
+void ApiListener::ApiTimerHandler()
 {
 	double now = Utility::GetTime();
 
 	std::vector<int> files;
-	Utility::Glob(GetApiDir() + "log/*", boost::bind(&ApiListener::LogGlobHandler, boost::ref(files), _1), GlobFile);
+	Utility::Glob(GetApiDir() + "log/*", std::bind(&ApiListener::LogGlobHandler, std::ref(files), _1), GlobFile);
 	std::sort(files.begin(), files.end());
 
-	BOOST_FOREACH(int ts, files) {
+	for (int ts : files) {
 		bool need = false;
 
-		BOOST_FOREACH(const Endpoint::Ptr& endpoint, ConfigType::GetObjectsByType<Endpoint>()) {
+		for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>()) {
 			if (endpoint == GetLocalEndpoint())
 				continue;
 
@@ -497,12 +664,12 @@ void ApiListener::ApiTimerHandler(void)
 		if (!need) {
 			String path = GetApiDir() + "log/" + Convert::ToString(ts);
 			Log(LogNotice, "ApiListener")
-			    << "Removing old log file: " << path;
+				<< "Removing old log file: " << path;
 			(void)unlink(path.CStr());
 		}
 	}
 
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, ConfigType::GetObjectsByType<Endpoint>()) {
+	for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>()) {
 		if (!endpoint->GetConnected())
 			continue;
 
@@ -511,22 +678,22 @@ void ApiListener::ApiTimerHandler(void)
 		if (ts == 0)
 			continue;
 
-		Dictionary::Ptr lparams = new Dictionary();
-		lparams->Set("log_position", ts);
-
-		Dictionary::Ptr lmessage = new Dictionary();
-		lmessage->Set("jsonrpc", "2.0");
-		lmessage->Set("method", "log::SetLogPosition");
-		lmessage->Set("params", lparams);
+		Dictionary::Ptr lmessage = new Dictionary({
+			{ "jsonrpc", "2.0" },
+			{ "method", "log::SetLogPosition" },
+			{ "params", new Dictionary({
+				{ "log_position", ts }
+			}) }
+		});
 
 		double maxTs = 0;
 
-		BOOST_FOREACH(const JsonRpcConnection::Ptr& client, endpoint->GetClients()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
 			if (client->GetTimestamp() > maxTs)
 				maxTs = client->GetTimestamp();
 		}
 
-		BOOST_FOREACH(const JsonRpcConnection::Ptr& client, endpoint->GetClients()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
 			if (client->GetTimestamp() != maxTs)
 				client->Disconnect();
 			else
@@ -534,17 +701,16 @@ void ApiListener::ApiTimerHandler(void)
 		}
 
 		Log(LogNotice, "ApiListener")
-		    << "Setting log position for identity '" << endpoint->GetName() << "': "
-		    << Utility::FormatDateTime("%Y/%m/%d %H:%M:%S", ts);
+			<< "Setting log position for identity '" << endpoint->GetName() << "': "
+			<< Utility::FormatDateTime("%Y/%m/%d %H:%M:%S", ts);
 	}
-
 }
 
-void ApiListener::ApiReconnectTimerHandler(void)
+void ApiListener::ApiReconnectTimerHandler()
 {
 	Zone::Ptr my_zone = Zone::GetLocalZone();
 
-	BOOST_FOREACH(const Zone::Ptr& zone, ConfigType::GetObjectsByType<Zone>()) {
+	for (const Zone::Ptr& zone : ConfigType::GetObjectsByType<Zone>()) {
 		/* don't connect to global zones */
 		if (zone->GetGlobal())
 			continue;
@@ -552,44 +718,44 @@ void ApiListener::ApiReconnectTimerHandler(void)
 		/* only connect to endpoints in a) the same zone b) our parent zone c) immediate child zones */
 		if (my_zone != zone && my_zone != zone->GetParent() && zone != my_zone->GetParent()) {
 			Log(LogDebug, "ApiListener")
-			    << "Not connecting to Zone '" << zone->GetName()
-			    << "' because it's not in the same zone, a parent or a child zone.";
+				<< "Not connecting to Zone '" << zone->GetName()
+				<< "' because it's not in the same zone, a parent or a child zone.";
 			continue;
 		}
 
-		BOOST_FOREACH(const Endpoint::Ptr& endpoint, zone->GetEndpoints()) {
+		for (const Endpoint::Ptr& endpoint : zone->GetEndpoints()) {
 			/* don't connect to ourselves */
 			if (endpoint == GetLocalEndpoint()) {
 				Log(LogDebug, "ApiListener")
-				    << "Not connecting to Endpoint '" << endpoint->GetName() << "' because that's us.";
+					<< "Not connecting to Endpoint '" << endpoint->GetName() << "' because that's us.";
 				continue;
 			}
 
 			/* don't try to connect to endpoints which don't have a host and port */
 			if (endpoint->GetHost().IsEmpty() || endpoint->GetPort().IsEmpty()) {
 				Log(LogDebug, "ApiListener")
-				    << "Not connecting to Endpoint '" << endpoint->GetName()
-				    << "' because the host/port attributes are missing.";
+					<< "Not connecting to Endpoint '" << endpoint->GetName()
+					<< "' because the host/port attributes are missing.";
 				continue;
 			}
 
 			/* don't try to connect if there's already a connection attempt */
 			if (endpoint->GetConnecting()) {
 				Log(LogDebug, "ApiListener")
-				    << "Not connecting to Endpoint '" << endpoint->GetName()
-				    << "' because we're already trying to connect to it.";
+					<< "Not connecting to Endpoint '" << endpoint->GetName()
+					<< "' because we're already trying to connect to it.";
 				continue;
 			}
 
 			/* don't try to connect if we're already connected */
 			if (endpoint->GetConnected()) {
 				Log(LogDebug, "ApiListener")
-				    << "Not connecting to Endpoint '" << endpoint->GetName()
-				    << "' because we're already connected to it.";
+					<< "Not connecting to Endpoint '" << endpoint->GetName()
+					<< "' because we're already connected to it.";
 				continue;
 			}
 
-			boost::thread thread(boost::bind(&ApiListener::AddConnection, this, endpoint));
+			std::thread thread(std::bind(&ApiListener::AddConnection, this, endpoint));
 			thread.detach();
 		}
 	}
@@ -598,24 +764,51 @@ void ApiListener::ApiReconnectTimerHandler(void)
 
 	if (master)
 		Log(LogNotice, "ApiListener")
-		    << "Current zone master: " << master->GetName();
+			<< "Current zone master: " << master->GetName();
 
 	std::vector<String> names;
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, ConfigType::GetObjectsByType<Endpoint>())
+	for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>())
 		if (endpoint->GetConnected())
-			names.push_back(endpoint->GetName() + " (" + Convert::ToString(endpoint->GetClients().size()) + ")");
+			names.emplace_back(endpoint->GetName() + " (" + Convert::ToString(endpoint->GetClients().size()) + ")");
 
 	Log(LogNotice, "ApiListener")
-	    << "Connected endpoints: " << Utility::NaturalJoin(names);
+		<< "Connected endpoints: " << Utility::NaturalJoin(names);
+}
+
+static void CleanupCertificateRequest(const String& path, double expiryTime)
+{
+#ifndef _WIN32
+	struct stat statbuf;
+	if (lstat(path.CStr(), &statbuf) < 0)
+		return;
+#else /* _WIN32 */
+	struct _stat statbuf;
+	if (_stat(path.CStr(), &statbuf) < 0)
+		return;
+#endif /* _WIN32 */
+
+	if (statbuf.st_mtime < expiryTime)
+		(void) unlink(path.CStr());
+}
+
+void ApiListener::CleanupCertificateRequestsTimerHandler()
+{
+	String requestsDir = GetCertificateRequestsDir();
+
+	if (Utility::PathExists(requestsDir)) {
+		/* remove certificate requests that are older than a week */
+		double expiryTime = Utility::GetTime() - 7 * 24 * 60 * 60;
+		Utility::Glob(requestsDir + "/*.json", std::bind(&CleanupCertificateRequest, _1, expiryTime), GlobFile);
+	}
 }
 
 void ApiListener::RelayMessage(const MessageOrigin::Ptr& origin,
-    const ConfigObject::Ptr& secobj, const Dictionary::Ptr& message, bool log)
+	const ConfigObject::Ptr& secobj, const Dictionary::Ptr& message, bool log)
 {
 	if (!IsActive())
 		return;
 
-	m_RelayQueue.Enqueue(boost::bind(&ApiListener::SyncRelayMessage, this, origin, secobj, message, log), PriorityNormal, true);
+	m_RelayQueue.Enqueue(std::bind(&ApiListener::SyncRelayMessage, this, origin, secobj, message, log), PriorityNormal, true);
 }
 
 void ApiListener::PersistMessage(const Dictionary::Ptr& message, const ConfigObject::Ptr& secobj)
@@ -631,7 +824,7 @@ void ApiListener::PersistMessage(const Dictionary::Ptr& message, const ConfigObj
 
 	if (secobj) {
 		Dictionary::Ptr secname = new Dictionary();
-		secname->Set("type", secobj->GetType()->GetName());
+		secname->Set("type", secobj->GetReflectionType()->GetName());
 		secname->Set("name", secobj->GetName());
 		pmessage->Set("secobj", secname);
 	}
@@ -656,16 +849,16 @@ void ApiListener::SyncSendMessage(const Endpoint::Ptr& endpoint, const Dictionar
 
 	if (!endpoint->GetSyncing()) {
 		Log(LogNotice, "ApiListener")
-		    << "Sending message to '" << endpoint->GetName() << "'";
+			<< "Sending message '" << message->Get("method") << "' to '" << endpoint->GetName() << "'";
 
 		double maxTs = 0;
 
-		BOOST_FOREACH(const JsonRpcConnection::Ptr& client, endpoint->GetClients()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
 			if (client->GetTimestamp() > maxTs)
 				maxTs = client->GetTimestamp();
 		}
 
-		BOOST_FOREACH(const JsonRpcConnection::Ptr& client, endpoint->GetClients()) {
+		for (const JsonRpcConnection::Ptr& client : endpoint->GetClients()) {
 			if (client->GetTimestamp() != maxTs)
 				continue;
 
@@ -680,9 +873,13 @@ bool ApiListener::RelayMessageOne(const Zone::Ptr& targetZone, const MessageOrig
 
 	Zone::Ptr myZone = Zone::GetLocalZone();
 
-	/* only relay the message to a) the same zone, b) the parent zone and c) direct child zones */
-	if (targetZone != myZone && targetZone != myZone->GetParent() && targetZone->GetParent() != myZone)
+	/* only relay the message to a) the same zone, b) the parent zone and c) direct child zones. Exception is a global zone. */
+	if (!targetZone->GetGlobal() &&
+		targetZone != myZone &&
+		targetZone != myZone->GetParent() &&
+		targetZone->GetParent() != myZone) {
 		return true;
+	}
 
 	Endpoint::Ptr myEndpoint = GetLocalEndpoint();
 
@@ -690,7 +887,23 @@ bool ApiListener::RelayMessageOne(const Zone::Ptr& targetZone, const MessageOrig
 
 	bool relayed = false, log_needed = false, log_done = false;
 
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, targetZone->GetEndpoints()) {
+	std::set<Endpoint::Ptr> targetEndpoints;
+
+	if (targetZone->GetGlobal()) {
+		targetEndpoints = myZone->GetEndpoints();
+
+		for (const Zone::Ptr& zone : ConfigType::GetObjectsByType<Zone>()) {
+			/* Fetch immediate child zone members */
+			if (zone->GetParent() == myZone) {
+				std::set<Endpoint::Ptr> endpoints = zone->GetEndpoints();
+				targetEndpoints.insert(endpoints.begin(), endpoints.end());
+			}
+		}
+	} else {
+		targetEndpoints = targetZone->GetEndpoints();
+	}
+
+	for (const Endpoint::Ptr& endpoint : targetEndpoints) {
 		/* don't relay messages to ourselves */
 		if (endpoint == GetLocalEndpoint())
 			continue;
@@ -739,7 +952,7 @@ bool ApiListener::RelayMessageOne(const Zone::Ptr& targetZone, const MessageOrig
 	if (!skippedEndpoints.empty()) {
 		double ts = message->Get("ts");
 
-		BOOST_FOREACH(const Endpoint::Ptr& endpoint, skippedEndpoints)
+		for (const Endpoint::Ptr& endpoint : skippedEndpoints)
 			endpoint->SetLocalLogPosition(ts);
 	}
 
@@ -747,13 +960,13 @@ bool ApiListener::RelayMessageOne(const Zone::Ptr& targetZone, const MessageOrig
 }
 
 void ApiListener::SyncRelayMessage(const MessageOrigin::Ptr& origin,
-    const ConfigObject::Ptr& secobj, const Dictionary::Ptr& message, bool log)
+	const ConfigObject::Ptr& secobj, const Dictionary::Ptr& message, bool log)
 {
 	double ts = Utility::GetTime();
 	message->Set("ts", ts);
 
 	Log(LogNotice, "ApiListener")
-	    << "Relaying '" << message->Get("method") << "' message";
+		<< "Relaying '" << message->Get("method") << "' message";
 
 	if (origin && origin->FromZone)
 		message->Set("originZone", origin->FromZone->GetName());
@@ -774,7 +987,7 @@ void ApiListener::SyncRelayMessage(const MessageOrigin::Ptr& origin,
 
 	bool need_log = !RelayMessageOne(target_zone, origin, message, master);
 
-	BOOST_FOREACH(const Zone::Ptr& zone, target_zone->GetAllParents()) {
+	for (const Zone::Ptr& zone : target_zone->GetAllParents()) {
 		if (!RelayMessageOne(zone, origin, message, master))
 			need_log = true;
 	}
@@ -783,21 +996,18 @@ void ApiListener::SyncRelayMessage(const MessageOrigin::Ptr& origin,
 		PersistMessage(message, secobj);
 }
 
-String ApiListener::GetApiDir(void)
-{
-	return Application::GetLocalStateDir() + "/lib/icinga2/api/";
-}
-
 /* must hold m_LogLock */
-void ApiListener::OpenLogFile(void)
+void ApiListener::OpenLogFile()
 {
 	String path = GetApiDir() + "log/current";
 
-	std::fstream *fp = new std::fstream(path.CStr(), std::fstream::out | std::ofstream::app);
+	Utility::MkDirP(Utility::DirName(path), 0750);
+
+	auto *fp = new std::fstream(path.CStr(), std::fstream::out | std::ofstream::app);
 
 	if (!fp->good()) {
 		Log(LogWarning, "ApiListener")
-		    << "Could not open spool file: " << path;
+			<< "Could not open spool file: " << path;
 		return;
 	}
 
@@ -807,7 +1017,7 @@ void ApiListener::OpenLogFile(void)
 }
 
 /* must hold m_LogLock */
-void ApiListener::CloseLogFile(void)
+void ApiListener::CloseLogFile()
 {
 	if (!m_LogFile)
 		return;
@@ -817,7 +1027,7 @@ void ApiListener::CloseLogFile(void)
 }
 
 /* must hold m_LogLock */
-void ApiListener::RotateLogFile(void)
+void ApiListener::RotateLogFile()
 {
 	double ts = GetLogMessageTimestamp();
 
@@ -891,19 +1101,19 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 		count = 0;
 
 		std::vector<int> files;
-		Utility::Glob(GetApiDir() + "log/*", boost::bind(&ApiListener::LogGlobHandler, boost::ref(files), _1), GlobFile);
+		Utility::Glob(GetApiDir() + "log/*", std::bind(&ApiListener::LogGlobHandler, std::ref(files), _1), GlobFile);
 		std::sort(files.begin(), files.end());
 
-		BOOST_FOREACH(int ts, files) {
+		for (int ts : files) {
 			String path = GetApiDir() + "log/" + Convert::ToString(ts);
 
 			if (ts < peer_ts)
 				continue;
 
 			Log(LogNotice, "ApiListener")
-			    << "Replaying log: " << path;
+				<< "Replaying log: " << path;
 
-			std::fstream *fp = new std::fstream(path.CStr(), std::fstream::in | std::fstream::binary);
+			auto *fp = new std::fstream(path.CStr(), std::fstream::in | std::fstream::binary);
 			StdioStream::Ptr logStream = new StdioStream(fp, true);
 
 			String message;
@@ -923,7 +1133,7 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 					pmessage = JsonDecode(message);
 				} catch (const std::exception&) {
 					Log(LogWarning, "ApiListener")
-					    << "Unexpected end-of-file for cluster log: " << path;
+						<< "Unexpected end-of-file for cluster log: " << path;
 
 					/* Log files may be incomplete or corrupted. This is perfectly OK. */
 					break;
@@ -935,12 +1145,7 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 				Dictionary::Ptr secname = pmessage->Get("secobj");
 
 				if (secname) {
-					ConfigType::Ptr dtype = ConfigType::GetByName(secname->Get("type"));
-
-					if (!dtype)
-						continue;
-
-					ConfigObject::Ptr secobj = dtype->GetObject(secname->Get("name"));
+					ConfigObject::Ptr secobj = ConfigObject::GetObject(secname->Get("type"), secname->Get("name"));
 
 					if (!secobj)
 						continue;
@@ -950,11 +1155,16 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 				}
 
 				try  {
-					NetString::WriteStringToStream(client->GetStream(), pmessage->Get("message"));
+					size_t bytesSent = NetString::WriteStringToStream(client->GetStream(), pmessage->Get("message"));
+					endpoint->AddMessageSent(bytesSent);
 					count++;
 				} catch (const std::exception& ex) {
 					Log(LogWarning, "ApiListener")
-					    << "Error while replaying log for endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex);
+						<< "Error while replaying log for endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex, false);
+
+					Log(LogDebug, "ApiListener")
+						<< "Error while replaying log for endpoint '" << endpoint->GetName() << "': " << DiagnosticInformation(ex);
+
 					break;
 				}
 
@@ -963,15 +1173,16 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 				if (ts > logpos_ts + 10) {
 					logpos_ts = ts;
 
-					Dictionary::Ptr lparams = new Dictionary();
-					lparams->Set("log_position", logpos_ts);
+					Dictionary::Ptr lmessage = new Dictionary({
+						{ "jsonrpc", "2.0" },
+						{ "method", "log::SetLogPosition" },
+						{ "params", new Dictionary({
+							{ "log_position", logpos_ts }
+						}) }
+					});
 
-					Dictionary::Ptr lmessage = new Dictionary();
-					lmessage->Set("jsonrpc", "2.0");
-					lmessage->Set("method", "log::SetLogPosition");
-					lmessage->Set("params", lparams);
-
-					JsonRpc::SendMessage(client->GetStream(), lmessage);
+					size_t bytesSent = JsonRpc::SendMessage(client->GetStream(), lmessage);
+					endpoint->AddMessageSent(bytesSent);
 				}
 			}
 
@@ -980,11 +1191,11 @@ void ApiListener::ReplayLog(const JsonRpcConnection::Ptr& client)
 
 		if (count > 0) {
 			Log(LogInformation, "ApiListener")
-			   << "Replayed " << count << " messages.";
+				<< "Replayed " << count << " messages.";
 		}
 
 		Log(LogNotice, "ApiListener")
-		   << "Replayed " << count << " messages.";
+			<< "Replayed " << count << " messages.";
 
 		if (last_sync) {
 			{
@@ -1011,19 +1222,17 @@ void ApiListener::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& per
 	stats = listener->GetStatus();
 
 	ObjectLock olock(stats.second);
-	BOOST_FOREACH(const Dictionary::Pair& kv, stats.second)
-		perfdata->Add("'api_" + kv.first + "'=" + Convert::ToString(kv.second));
+	for (const Dictionary::Pair& kv : stats.second)
+		perfdata->Add(new PerfdataValue("api_" + kv.first, kv.second));
 
 	status->Set("api", stats.first);
 }
 
-std::pair<Dictionary::Ptr, Dictionary::Ptr> ApiListener::GetStatus(void)
+std::pair<Dictionary::Ptr, Dictionary::Ptr> ApiListener::GetStatus()
 {
-	Dictionary::Ptr status = new Dictionary();
 	Dictionary::Ptr perfdata = new Dictionary();
 
 	/* cluster stats */
-	status->Set("identity", GetIdentity());
 
 	double allEndpoints = 0;
 	Array::Ptr allNotConnectedEndpoints = new Array();
@@ -1033,11 +1242,11 @@ std::pair<Dictionary::Ptr, Dictionary::Ptr> ApiListener::GetStatus(void)
 
 	Dictionary::Ptr connectedZones = new Dictionary();
 
-	BOOST_FOREACH(const Zone::Ptr& zone, ConfigType::GetObjectsByType<Zone>()) {
+	for (const Zone::Ptr& zone : ConfigType::GetObjectsByType<Zone>()) {
 		/* only check endpoints in a) the same zone b) our parent zone c) immediate child zones */
 		if (my_zone != zone && my_zone != zone->GetParent() && zone != my_zone->GetParent()) {
 			Log(LogDebug, "ApiListener")
-			    << "Not checking connection to Zone '" << zone->GetName() << "' because it's not in the same zone, a parent or a child zone.";
+				<< "Not checking connection to Zone '" << zone->GetName() << "' because it's not in the same zone, a parent or a child zone.";
 			continue;
 		}
 
@@ -1045,10 +1254,10 @@ std::pair<Dictionary::Ptr, Dictionary::Ptr> ApiListener::GetStatus(void)
 		int countZoneEndpoints = 0;
 		double zoneLag = 0;
 
-		Array::Ptr zoneEndpoints = new Array();
+		ArrayData zoneEndpoints;
 
-		BOOST_FOREACH(const Endpoint::Ptr& endpoint, zone->GetEndpoints()) {
-			zoneEndpoints->Add(endpoint->GetName());
+		for (const Endpoint::Ptr& endpoint : zone->GetEndpoints()) {
+			zoneEndpoints.emplace_back(endpoint->GetName());
 
 			if (endpoint->GetName() == GetIdentity())
 				continue;
@@ -1073,32 +1282,73 @@ std::pair<Dictionary::Ptr, Dictionary::Ptr> ApiListener::GetStatus(void)
 		if (zone->GetEndpoints().size() == 1 && countZoneEndpoints == 0)
 			zoneConnected = true;
 
-		Dictionary::Ptr zoneStats = new Dictionary();
-		zoneStats->Set("connected", zoneConnected);
-		zoneStats->Set("client_log_lag", zoneLag);
-		zoneStats->Set("endpoints", zoneEndpoints);
-
 		String parentZoneName;
 		Zone::Ptr parentZone = zone->GetParent();
 		if (parentZone)
 			parentZoneName = parentZone->GetName();
 
-		zoneStats->Set("parent_zone", parentZoneName);
+		Dictionary::Ptr zoneStats = new Dictionary({
+			{ "connected", zoneConnected },
+			{ "client_log_lag", zoneLag },
+			{ "endpoints", new Array(std::move(zoneEndpoints)) },
+			{ "parent_zone", parentZoneName }
+		});
 
 		connectedZones->Set(zone->GetName(), zoneStats);
 	}
 
-	status->Set("num_endpoints", allEndpoints);
-	status->Set("num_conn_endpoints", allConnectedEndpoints->GetLength());
-	status->Set("num_not_conn_endpoints", allNotConnectedEndpoints->GetLength());
-	status->Set("conn_endpoints", allConnectedEndpoints);
-	status->Set("not_conn_endpoints", allNotConnectedEndpoints);
+	/* connection stats */
+	size_t jsonRpcClients = GetAnonymousClients().size();
+	size_t httpClients = GetHttpClients().size();
+	size_t workQueueItems = JsonRpcConnection::GetWorkQueueLength();
+	size_t workQueueCount = JsonRpcConnection::GetWorkQueueCount();
+	size_t syncQueueItems = m_SyncQueue.GetLength();
+	size_t relayQueueItems = m_RelayQueue.GetLength();
+	double workQueueItemRate = JsonRpcConnection::GetWorkQueueRate();
+	double syncQueueItemRate = m_SyncQueue.GetTaskCount(60) / 60.0;
+	double relayQueueItemRate = m_RelayQueue.GetTaskCount(60) / 60.0;
 
-	status->Set("zones", connectedZones);
+	Dictionary::Ptr status = new Dictionary({
+		{ "identity", GetIdentity() },
+		{ "num_endpoints", allEndpoints },
+		{ "num_conn_endpoints", allConnectedEndpoints->GetLength() },
+		{ "num_not_conn_endpoints", allNotConnectedEndpoints->GetLength() },
+		{ "conn_endpoints", allConnectedEndpoints },
+		{ "not_conn_endpoints", allNotConnectedEndpoints },
 
+		{ "zones", connectedZones },
+
+		{ "json_rpc", new Dictionary({
+			{ "clients", jsonRpcClients },
+			{ "work_queue_items", workQueueItems },
+			{ "work_queue_count", workQueueCount },
+			{ "sync_queue_items", syncQueueItems },
+			{ "relay_queue_items", relayQueueItems },
+			{ "work_queue_item_rate", workQueueItemRate },
+			{ "sync_queue_item_rate", syncQueueItemRate },
+			{ "relay_queue_item_rate", relayQueueItemRate }
+		}) },
+
+		{ "http", new Dictionary({
+			{ "clients", httpClients }
+		}) }
+	});
+
+	/* performance data */
 	perfdata->Set("num_endpoints", allEndpoints);
 	perfdata->Set("num_conn_endpoints", Convert::ToDouble(allConnectedEndpoints->GetLength()));
 	perfdata->Set("num_not_conn_endpoints", Convert::ToDouble(allNotConnectedEndpoints->GetLength()));
+
+	perfdata->Set("num_json_rpc_clients", jsonRpcClients);
+	perfdata->Set("num_http_clients", httpClients);
+	perfdata->Set("num_json_rpc_work_queue_items", workQueueItems);
+	perfdata->Set("num_json_rpc_work_queue_count", workQueueCount);
+	perfdata->Set("num_json_rpc_sync_queue_items", syncQueueItems);
+	perfdata->Set("num_json_rpc_relay_queue_items", relayQueueItems);
+
+	perfdata->Set("num_json_rpc_work_queue_item_rate", workQueueItemRate);
+	perfdata->Set("num_json_rpc_sync_queue_item_rate", syncQueueItemRate);
+	perfdata->Set("num_json_rpc_relay_queue_item_rate", relayQueueItemRate);
 
 	return std::make_pair(status, perfdata);
 }
@@ -1114,39 +1364,43 @@ double ApiListener::CalculateZoneLag(const Endpoint::Ptr& endpoint)
 	return 0;
 }
 
-void ApiListener::AddAnonymousClient(const JsonRpcConnection::Ptr& aclient)
+bool ApiListener::AddAnonymousClient(const JsonRpcConnection::Ptr& aclient)
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_AnonymousClientsLock);
+	if (m_AnonymousClients.size() > 25)
+		return false;
+
 	m_AnonymousClients.insert(aclient);
+	return true;
 }
 
 void ApiListener::RemoveAnonymousClient(const JsonRpcConnection::Ptr& aclient)
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_AnonymousClientsLock);
 	m_AnonymousClients.erase(aclient);
 }
 
-std::set<JsonRpcConnection::Ptr> ApiListener::GetAnonymousClients(void) const
+std::set<JsonRpcConnection::Ptr> ApiListener::GetAnonymousClients() const
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_AnonymousClientsLock);
 	return m_AnonymousClients;
 }
 
 void ApiListener::AddHttpClient(const HttpServerConnection::Ptr& aclient)
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_HttpClientsLock);
 	m_HttpClients.insert(aclient);
 }
 
 void ApiListener::RemoveHttpClient(const HttpServerConnection::Ptr& aclient)
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_HttpClientsLock);
 	m_HttpClients.erase(aclient);
 }
 
-std::set<HttpServerConnection::Ptr> ApiListener::GetHttpClients(void) const
+std::set<HttpServerConnection::Ptr> ApiListener::GetHttpClients() const
 {
-	ObjectLock olock(this);
+	boost::mutex::scoped_lock lock(m_HttpClientsLock);
 	return m_HttpClients;
 }
 
@@ -1155,7 +1409,53 @@ Value ApiListener::HelloAPIHandler(const MessageOrigin::Ptr& origin, const Dicti
 	return Empty;
 }
 
-Endpoint::Ptr ApiListener::GetLocalEndpoint(void) const
+Endpoint::Ptr ApiListener::GetLocalEndpoint() const
 {
 	return m_LocalEndpoint;
+}
+
+void ApiListener::ValidateTlsProtocolmin(const Lazy<String>& lvalue, const ValidationUtils& utils)
+{
+	ObjectImpl<ApiListener>::ValidateTlsProtocolmin(lvalue, utils);
+
+	if (lvalue() != SSL_TXT_TLSV1
+#ifdef SSL_TXT_TLSV1_1
+		&& lvalue() != SSL_TXT_TLSV1_1 &&
+		lvalue() != SSL_TXT_TLSV1_2
+#endif /* SSL_TXT_TLSV1_1 */
+		) {
+		String message = "Invalid TLS version. Must be one of '" SSL_TXT_TLSV1 "'";
+#ifdef SSL_TXT_TLSV1_1
+		message += ", '" SSL_TXT_TLSV1_1 "' or '" SSL_TXT_TLSV1_2 "'";
+#endif /* SSL_TXT_TLSV1_1 */
+
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "tls_protocolmin" }, message));
+	}
+}
+
+bool ApiListener::IsHACluster()
+{
+	Zone::Ptr zone = Zone::GetLocalZone();
+
+	if (!zone)
+		return false;
+
+	return zone->IsSingleInstance();
+}
+
+/* Provide a helper function for zone origin name. */
+String ApiListener::GetFromZoneName(const Zone::Ptr& fromZone)
+{
+	String fromZoneName;
+
+	if (fromZone) {
+		fromZoneName = fromZone->GetName();
+	} else {
+		Zone::Ptr lzone = Zone::GetLocalZone();
+
+		if (lzone)
+			fromZoneName = lzone->GetName();
+	}
+
+	return fromZoneName;
 }

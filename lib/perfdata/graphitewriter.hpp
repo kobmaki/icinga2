@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,11 +20,12 @@
 #ifndef GRAPHITEWRITER_H
 #define GRAPHITEWRITER_H
 
-#include "perfdata/graphitewriter.thpp"
+#include "perfdata/graphitewriter-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/tcpsocket.hpp"
 #include "base/timer.hpp"
+#include "base/workqueue.hpp"
 #include <fstream>
 
 namespace icinga
@@ -35,7 +36,7 @@ namespace icinga
  *
  * @ingroup perfdata
  */
-class GraphiteWriter : public ObjectImpl<GraphiteWriter>
+class GraphiteWriter final : public ObjectImpl<GraphiteWriter>
 {
 public:
 	DECLARE_OBJECT(GraphiteWriter);
@@ -43,25 +44,36 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual void ValidateHostNameTemplate(const String& value, const ValidationUtils& utils) override;
-	virtual void ValidateServiceNameTemplate(const String& value, const ValidationUtils& utils) override;
+	void ValidateHostNameTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
+	void ValidateServiceNameTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void OnConfigLoaded() override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	Stream::Ptr m_Stream;
+	WorkQueue m_WorkQueue{10000000, 1};
 
 	Timer::Ptr m_ReconnectTimer;
 
 	void CheckResultHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
+	void CheckResultHandlerInternal(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
 	void SendMetric(const String& prefix, const String& name, double value, double ts);
 	void SendPerfdata(const String& prefix, const CheckResult::Ptr& cr, double ts);
-	static String EscapeMetric(const String& str, bool legacyMode = false);
+	static String EscapeMetric(const String& str);
 	static String EscapeMetricLabel(const String& str);
-	static Value EscapeMacroMetric(const Value& value, bool legacyMode = false);
+	static Value EscapeMacroMetric(const Value& value);
 
-	void ReconnectTimerHandler(void);
+	void ReconnectTimerHandler();
+
+	void Disconnect();
+	void Reconnect();
+
+	void AssertOnWorkQueue();
+
+	void ExceptionHandler(boost::exception_ptr exp);
 };
 
 }

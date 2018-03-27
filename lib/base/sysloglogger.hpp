@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,7 +22,7 @@
 
 #ifndef _WIN32
 #include "base/i2-base.hpp"
-#include "base/sysloglogger.thpp"
+#include "base/sysloglogger-ti.hpp"
 
 namespace icinga
 {
@@ -32,17 +32,24 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API SyslogLogger : public ObjectImpl<SyslogLogger>
+class SyslogLogger final : public ObjectImpl<SyslogLogger>
 {
 public:
 	DECLARE_OBJECT(SyslogLogger);
 	DECLARE_OBJECTNAME(SyslogLogger);
 
+	static void StaticInitialize();
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
+	void OnConfigLoaded() override;
+	void ValidateFacility(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
+
 protected:
-	virtual void ProcessLogEntry(const LogEntry& entry) override;
-	virtual void Flush(void) override;
+	static std::map<String, int> m_FacilityMap;
+	int m_Facility;
+
+	void ProcessLogEntry(const LogEntry& entry) override;
+	void Flush() override;
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,45 +29,48 @@
 #include "base/utility.hpp"
 #include "base/process.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(PluginNotification, &PluginNotificationTask::ScriptFunc);
+REGISTER_SCRIPTFUNCTION_NS(Internal, PluginNotification, &PluginNotificationTask::ScriptFunc, "notification:user:cr:itype:author:comment:resolvedMacros:useResolvedMacros");
 
 void PluginNotificationTask::ScriptFunc(const Notification::Ptr& notification,
-    const User::Ptr& user, const CheckResult::Ptr& cr, int itype,
-    const String& author, const String& comment, const Dictionary::Ptr& resolvedMacros,
-    bool useResolvedMacros)
+	const User::Ptr& user, const CheckResult::Ptr& cr, int itype,
+	const String& author, const String& comment, const Dictionary::Ptr& resolvedMacros,
+	bool useResolvedMacros)
 {
+	REQUIRE_NOT_NULL(notification);
+	REQUIRE_NOT_NULL(user);
+
 	NotificationCommand::Ptr commandObj = notification->GetCommand();
 
-	NotificationType type = static_cast<NotificationType>(itype);
+	auto type = static_cast<NotificationType>(itype);
 
 	Checkable::Ptr checkable = notification->GetCheckable();
 
-	Dictionary::Ptr notificationExtra = new Dictionary();
-	notificationExtra->Set("type", Notification::NotificationTypeToString(type));
-	notificationExtra->Set("author", author);
-	notificationExtra->Set("comment", comment);
+	Dictionary::Ptr notificationExtra = new Dictionary({
+		{ "type", Notification::NotificationTypeToString(type) },
+		{ "author", author },
+		{ "comment", comment }
+	});
 
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
 	MacroProcessor::ResolverList resolvers;
-	resolvers.push_back(std::make_pair("user", user));
-	resolvers.push_back(std::make_pair("notification", notificationExtra));
-	resolvers.push_back(std::make_pair("notification", notification));
+	resolvers.emplace_back("user", user);
+	resolvers.emplace_back("notification", notificationExtra);
+	resolvers.emplace_back("notification", notification);
 	if (service)
-		resolvers.push_back(std::make_pair("service", service));
-	resolvers.push_back(std::make_pair("host", host));
-	resolvers.push_back(std::make_pair("command", commandObj));
-	resolvers.push_back(std::make_pair("icinga", IcingaApplication::GetInstance()));
+		resolvers.emplace_back("service", service);
+	resolvers.emplace_back("host", host);
+	resolvers.emplace_back("command", commandObj);
+	resolvers.emplace_back("icinga", IcingaApplication::GetInstance());
 
 	PluginUtility::ExecuteCommand(commandObj, checkable, cr, resolvers,
-	    resolvedMacros, useResolvedMacros,
-	    boost::bind(&PluginNotificationTask::ProcessFinishedHandler, checkable, _1, _2));
+		resolvedMacros, useResolvedMacros,
+		std::bind(&PluginNotificationTask::ProcessFinishedHandler, checkable, _1, _2));
 }
 
 void PluginNotificationTask::ProcessFinishedHandler(const Checkable::Ptr& checkable, const Value& commandLine, const ProcessResult& pr)
@@ -75,8 +78,8 @@ void PluginNotificationTask::ProcessFinishedHandler(const Checkable::Ptr& checka
 	if (pr.ExitStatus != 0) {
 		Process::Arguments parguments = Process::PrepareCommand(commandLine);
 		Log(LogWarning, "PluginNotificationTask")
-		    << "Notification command for object '" << checkable->GetName() << "' (PID: " << pr.PID
-		    << ", arguments: " << Process::PrettyPrintArguments(parguments) << ") terminated with exit code "
-		    << pr.ExitStatus << ", output: " << pr.Output;
+			<< "Notification command for object '" << checkable->GetName() << "' (PID: " << pr.PID
+			<< ", arguments: " << Process::PrettyPrintArguments(parguments) << ") terminated with exit code "
+			<< pr.ExitStatus << ", output: " << pr.Output;
 	}
 }

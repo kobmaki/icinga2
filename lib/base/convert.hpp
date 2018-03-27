@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,7 +32,7 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API Convert
+class Convert
 {
 public:
 	template<typename T>
@@ -59,17 +59,17 @@ public:
 		}
 	}
 
-	static inline long ToLong(const Value& val)
+	static long ToLong(const Value& val)
 	{
 		return val;
 	}
 
-	static inline double ToDouble(const Value& val)
+	static double ToDouble(const Value& val)
 	{
 		return val;
 	}
 
-	static inline bool ToBool(const Value& val)
+	static bool ToBool(const Value& val)
 	{
 		return val.ToBool();
 	}
@@ -88,7 +88,7 @@ public:
 	static double ToDateTimeValue(const Value& val);
 
 private:
-	Convert(void);
+	Convert();
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,7 +30,7 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API HostsTable : public Table
+class HostsTable final : public Table
 {
 public:
 	DECLARE_PTR_TYPEDEFS(HostsTable);
@@ -38,13 +38,13 @@ public:
 	HostsTable(LivestatusGroupByType type = LivestatusGroupByNone);
 
 	static void AddColumns(Table *table, const String& prefix = String(),
-	    const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
+		const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
 
-	virtual String GetName(void) const override;
-	virtual String GetPrefix(void) const override;
+	String GetName() const override;
+	String GetPrefix() const override;
 
 protected:
-	virtual void FetchRows(const AddRowFunction& addRowFn) override;
+	void FetchRows(const AddRowFunction& addRowFn) override;
 
 	static Object::Ptr HostGroupAccessor(const Value& row, LivestatusGroupByType groupByType, const Object::Ptr& groupByObject);
 
@@ -55,7 +55,6 @@ protected:
 	static Value CheckCommandAccessor(const Value& row);
 	static Value CheckCommandExpandedAccessor(const Value& row);
 	static Value EventHandlerAccessor(const Value& row);
-	static Value NotificationPeriodAccessor(const Value& row);
 	static Value CheckPeriodAccessor(const Value& row);
 	static Value NotesAccessor(const Value& row);
 	static Value NotesExpandedAccessor(const Value& row);
@@ -100,7 +99,6 @@ protected:
 	static Value IsFlappingAccessor(const Value& row);
 	static Value ScheduledDowntimeDepthAccessor(const Value& row);
 	static Value ActiveChecksEnabledAccessor(const Value& row);
-	static Value CheckOptionsAccessor(const Value& row);
 	static Value CheckIntervalAccessor(const Value& row);
 	static Value RetryIntervalAccessor(const Value& row);
 	static Value NotificationIntervalAccessor(const Value& row);

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,19 +18,18 @@
  ******************************************************************************/
 
 #include "icinga/user.hpp"
-#include "icinga/user.tcpp"
+#include "icinga/user-ti.cpp"
 #include "icinga/usergroup.hpp"
 #include "icinga/notification.hpp"
 #include "icinga/usergroup.hpp"
 #include "base/objectlock.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 REGISTER_TYPE(User);
 
-void User::OnConfigLoaded(void)
+void User::OnConfigLoaded()
 {
 	ObjectImpl<User>::OnConfigLoaded();
 
@@ -38,7 +37,7 @@ void User::OnConfigLoaded(void)
 	SetStateFilter(FilterArrayToInt(GetStates(), Notification::GetStateFilterMap(), ~0));
 }
 
-void User::OnAllConfigLoaded(void)
+void User::OnAllConfigLoaded()
 {
 	ObjectImpl<User>::OnAllConfigLoaded();
 
@@ -51,7 +50,7 @@ void User::OnAllConfigLoaded(void)
 
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			UserGroup::Ptr ug = UserGroup::GetByName(name);
 
 			if (ug)
@@ -69,7 +68,7 @@ void User::Stop(bool runtimeRemoved)
 	if (groups) {
 		ObjectLock olock(groups);
 
-		BOOST_FOREACH(const String& name, groups) {
+		for (const String& name : groups) {
 			UserGroup::Ptr ug = UserGroup::GetByName(name);
 
 			if (ug)
@@ -93,29 +92,29 @@ void User::AddGroup(const String& name)
 	groups->Add(name);
 }
 
-TimePeriod::Ptr User::GetPeriod(void) const
+TimePeriod::Ptr User::GetPeriod() const
 {
 	return TimePeriod::GetByName(GetPeriodRaw());
 }
 
-void User::ValidateStates(const Array::Ptr& value, const ValidationUtils& utils)
+void User::ValidateStates(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<User>::ValidateStates(value, utils);
+	ObjectImpl<User>::ValidateStates(lvalue, utils);
 
-	int filter = FilterArrayToInt(value, Notification::GetStateFilterMap(), 0);
+	int filter = FilterArrayToInt(lvalue(), Notification::GetStateFilterMap(), 0);
 
 	if (filter == -1 || (filter & ~(StateFilterUp | StateFilterDown | StateFilterOK | StateFilterWarning | StateFilterCritical | StateFilterUnknown)) != 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("states"), "State filter is invalid."));
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "states" }, "State filter is invalid."));
 }
 
-void User::ValidateTypes(const Array::Ptr& value, const ValidationUtils& utils)
+void User::ValidateTypes(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<User>::ValidateTypes(value, utils);
+	ObjectImpl<User>::ValidateTypes(lvalue, utils);
 
-	int filter = FilterArrayToInt(value, Notification::GetTypeFilterMap(), 0);
+	int filter = FilterArrayToInt(lvalue(), Notification::GetTypeFilterMap(), 0);
 
 	if (filter == -1 || (filter & ~(NotificationDowntimeStart | NotificationDowntimeEnd | NotificationDowntimeRemoved |
-	    NotificationCustom | NotificationAcknowledgement | NotificationProblem | NotificationRecovery |
-	    NotificationFlappingStart | NotificationFlappingEnd)) != 0)
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("types"), "Type filter is invalid."));
+		NotificationCustom | NotificationAcknowledgement | NotificationProblem | NotificationRecovery |
+		NotificationFlappingStart | NotificationFlappingEnd)) != 0)
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "types" }, "Type filter is invalid."));
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,11 +20,11 @@
 #ifndef JSONRPCCONNECTION_H
 #define JSONRPCCONNECTION_H
 
+#include "remote/i2-remote.hpp"
 #include "remote/endpoint.hpp"
 #include "base/tlsstream.hpp"
 #include "base/timer.hpp"
 #include "base/workqueue.hpp"
-#include "remote/i2-remote.hpp"
 
 namespace icinga
 {
@@ -48,28 +48,34 @@ class MessageOrigin;
  *
  * @ingroup remote
  */
-class I2_REMOTE_API JsonRpcConnection : public Object
+class JsonRpcConnection final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(JsonRpcConnection);
 
-	JsonRpcConnection(const String& identity, bool authenticated, const TlsStream::Ptr& stream, ConnectionRole role);
+	JsonRpcConnection(const String& identity, bool authenticated, TlsStream::Ptr stream, ConnectionRole role);
 
-	void Start(void);
+	void Start();
 
-	double GetTimestamp(void) const;
-	String GetIdentity(void) const;
-	bool IsAuthenticated(void) const;
-	Endpoint::Ptr GetEndpoint(void) const;
-	TlsStream::Ptr GetStream(void) const;
-	ConnectionRole GetRole(void) const;
+	double GetTimestamp() const;
+	String GetIdentity() const;
+	bool IsAuthenticated() const;
+	Endpoint::Ptr GetEndpoint() const;
+	TlsStream::Ptr GetStream() const;
+	ConnectionRole GetRole() const;
 
-	void Disconnect(void);
+	void Disconnect();
 
 	void SendMessage(const Dictionary::Ptr& request);
 
-	static void HeartbeatTimerHandler(void);
+	static void HeartbeatTimerHandler();
 	static Value HeartbeatAPIHandler(const intrusive_ptr<MessageOrigin>& origin, const Dictionary::Ptr& params);
+
+	static size_t GetWorkQueueCount();
+	static size_t GetWorkQueueLength();
+	static double GetWorkQueueRate();
+
+	static void SendCertificateRequest(const JsonRpcConnection::Ptr& aclient, const intrusive_ptr<MessageOrigin>& origin, const String& path);
 
 private:
 	int m_ID;
@@ -86,14 +92,16 @@ private:
 
 	StreamReadContext m_Context;
 
-	bool ProcessMessage(void);
+	bool ProcessMessage();
 	void MessageHandlerWrapper(const String& jsonString);
 	void MessageHandler(const String& jsonString);
-	void DataAvailableHandler(void);
+	void DataAvailableHandler();
 
-	static void StaticInitialize(void);
-	static void TimeoutTimerHandler(void);
-	void CheckLiveness(void);
+	static void StaticInitialize();
+	static void TimeoutTimerHandler();
+	void CheckLiveness();
+
+	void CertificateRequestResponseHandler(const Dictionary::Ptr& message);
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,19 +27,12 @@
 #include "base/context.hpp"
 #include "base/workqueue.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-INITIALIZE_ONCE(&Notification::RegisterApplyRuleHandler);
-
-void Notification::RegisterApplyRuleHandler(void)
-{
-	std::vector<String> targets;
-	targets.push_back("Host");
-	targets.push_back("Service");
-	ApplyRule::RegisterType("Notification", targets);
-}
+INITIALIZE_ONCE([]() {
+	ApplyRule::RegisterType("Notification", { "Host", "Service" });
+});
 
 bool Notification::EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, const String& name, ScriptFrame& frame, const ApplyRule& rule)
 {
@@ -48,34 +41,38 @@ bool Notification::EvaluateApplyRuleInstance(const Checkable::Ptr& checkable, co
 
 	DebugInfo di = rule.GetDebugInfo();
 
+#ifdef _DEBUG
 	Log(LogDebug, "Notification")
-	    << "Applying notification '" << name << "' to object '" << checkable->GetName() << "' for rule " << di;
+		<< "Applying notification '" << name << "' to object '" << checkable->GetName() << "' for rule " << di;
+#endif /* _DEBUG */
 
-	ConfigItemBuilder::Ptr builder = new ConfigItemBuilder(di);
-	builder->SetType("Notification");
-	builder->SetName(name);
-	builder->SetScope(frame.Locals->ShallowClone());
-	builder->SetIgnoreOnError(rule.GetIgnoreOnError());
+	ConfigItemBuilder builder{di};
+	builder.SetType(Notification::TypeInstance);
+	builder.SetName(name);
+	builder.SetScope(frame.Locals->ShallowClone());
+	builder.SetIgnoreOnError(rule.GetIgnoreOnError());
 
 	Host::Ptr host;
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "host_name"), OpSetLiteral, MakeLiteral(host->GetName()), di));
 
 	if (service)
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "service_name"), OpSetLiteral, MakeLiteral(service->GetShortName()), di));
 
 	String zone = checkable->GetZoneName();
 
 	if (!zone.IsEmpty())
-		builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
+		builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "zone"), OpSetLiteral, MakeLiteral(zone), di));
 
-	builder->AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
+	builder.AddExpression(new SetExpression(MakeIndexer(ScopeThis, "package"), OpSetLiteral, MakeLiteral(rule.GetPackage()), di));
 
-	builder->AddExpression(new OwnedExpression(rule.GetExpression()));
+	builder.AddExpression(new OwnedExpression(rule.GetExpression()));
 
-	ConfigItem::Ptr notificationItem = builder->Compile();
+	builder.AddExpression(new ImportDefaultTemplatesExpression());
+
+	ConfigItem::Ptr notificationItem = builder.Compile();
 	notificationItem->Register();
 
 	return true;
@@ -93,7 +90,7 @@ bool Notification::EvaluateApplyRule(const Checkable::Ptr& checkable, const Appl
 	Service::Ptr service;
 	tie(host, service) = GetHostService(checkable);
 
-	ScriptFrame frame;
+	ScriptFrame frame(true);
 	if (rule.GetScope())
 		rule.GetScope()->CopyTo(frame.Locals);
 	frame.Locals->Set("host", host);
@@ -110,9 +107,7 @@ bool Notification::EvaluateApplyRule(const Checkable::Ptr& checkable, const Appl
 			return false;
 		}
 	} else {
-		Array::Ptr instances = new Array();
-		instances->Add("");
-		vinstances = instances;
+		vinstances = new Array({ "" });
 	}
 
 	bool match = false;
@@ -124,7 +119,7 @@ bool Notification::EvaluateApplyRule(const Checkable::Ptr& checkable, const Appl
 		Array::Ptr arr = vinstances;
 
 		ObjectLock olock(arr);
-		BOOST_FOREACH(const Value& instance, arr) {
+		for (const Value& instance : arr) {
 			String name = rule.GetName();
 
 			if (!rule.GetFKVar().IsEmpty()) {
@@ -138,10 +133,10 @@ bool Notification::EvaluateApplyRule(const Checkable::Ptr& checkable, const Appl
 	} else if (vinstances.IsObjectType<Dictionary>()) {
 		if (rule.GetFVVar().IsEmpty())
 			BOOST_THROW_EXCEPTION(ScriptError("Array iterator requires value to be an array.", di));
-	
+
 		Dictionary::Ptr dict = vinstances;
 
-		BOOST_FOREACH(const String& key, dict->GetKeys()) {
+		for (const String& key : dict->GetKeys()) {
 			frame.Locals->Set(rule.GetFKVar(), key);
 			frame.Locals->Set(rule.GetFVVar(), dict->Get(key));
 
@@ -157,7 +152,7 @@ void Notification::EvaluateApplyRules(const Host::Ptr& host)
 {
 	CONTEXT("Evaluating 'apply' rules for host '" + host->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("Notification"))
+	for (ApplyRule& rule : ApplyRule::GetRules("Notification"))
 	{
 		if (rule.GetTargetType() != "Host")
 			continue;
@@ -171,7 +166,7 @@ void Notification::EvaluateApplyRules(const Service::Ptr& service)
 {
 	CONTEXT("Evaluating 'apply' rules for service '" + service->GetName() + "'");
 
-	BOOST_FOREACH(ApplyRule& rule, ApplyRule::GetRules("Notification")) {
+	for (ApplyRule& rule : ApplyRule::GetRules("Notification")) {
 		if (rule.GetTargetType() != "Service")
 			continue;
 

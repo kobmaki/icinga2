@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define ZONE_H
 
 #include "remote/i2-remote.hpp"
-#include "remote/zone.thpp"
+#include "remote/zone-ti.hpp"
 #include "remote/endpoint.hpp"
 
 namespace icinga
@@ -30,23 +30,27 @@ namespace icinga
 /**
  * @ingroup remote
  */
-class I2_REMOTE_API Zone : public ObjectImpl<Zone>
+class Zone final : public ObjectImpl<Zone>
 {
 public:
 	DECLARE_OBJECT(Zone);
 	DECLARE_OBJECTNAME(Zone);
 
-	virtual void OnAllConfigLoaded(void) override;
+	void OnAllConfigLoaded() override;
 
-	Zone::Ptr GetParent(void) const;
-	std::set<Endpoint::Ptr> GetEndpoints(void) const;
-	std::vector<Zone::Ptr> GetAllParents(void) const;
+	Zone::Ptr GetParent() const;
+	std::set<Endpoint::Ptr> GetEndpoints() const;
+	std::vector<Zone::Ptr> GetAllParents() const;
 
 	bool CanAccessObject(const ConfigObject::Ptr& object);
 	bool IsChildOf(const Zone::Ptr& zone);
-	bool IsGlobal(void) const;
+	bool IsGlobal() const;
+	bool IsSingleInstance() const;
 
-	static Zone::Ptr GetLocalZone(void);
+	static Zone::Ptr GetLocalZone();
+
+protected:
+	void ValidateEndpointsRaw(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 private:
 	Zone::Ptr m_Parent;

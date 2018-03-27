@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,24 +29,44 @@
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(get_host, &Host::GetByName);
-REGISTER_SCRIPTFUNCTION(get_service, &ObjectUtils::GetService);
-REGISTER_SCRIPTFUNCTION(get_user, &User::GetByName);
-REGISTER_SCRIPTFUNCTION(get_check_command, &CheckCommand::GetByName);
-REGISTER_SCRIPTFUNCTION(get_event_command, &EventCommand::GetByName);
-REGISTER_SCRIPTFUNCTION(get_notification_command, &NotificationCommand::GetByName);
-REGISTER_SCRIPTFUNCTION(get_host_group, &HostGroup::GetByName);
-REGISTER_SCRIPTFUNCTION(get_service_group, &ServiceGroup::GetByName);
-REGISTER_SCRIPTFUNCTION(get_user_group, &UserGroup::GetByName);
-REGISTER_SCRIPTFUNCTION(get_time_period, &TimePeriod::GetByName);
+REGISTER_SCRIPTFUNCTION_NS(System, get_host, &Host::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_service, &ObjectUtils::GetService, "host:name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_services, &ObjectUtils::GetServices, "host");
+REGISTER_SCRIPTFUNCTION_NS(System, get_user, &User::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_check_command, &CheckCommand::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_event_command, &EventCommand::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_notification_command, &NotificationCommand::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_host_group, &HostGroup::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_service_group, &ServiceGroup::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_user_group, &UserGroup::GetByName, "name");
+REGISTER_SCRIPTFUNCTION_NS(System, get_time_period, &TimePeriod::GetByName, "name");
 
-Service::Ptr ObjectUtils::GetService(const String& host, const String& name)
+Service::Ptr ObjectUtils::GetService(const Value& host, const String& name)
 {
-	Host::Ptr host_obj = Host::GetByName(host);
+	Host::Ptr hostObj;
 
-	if (!host_obj)
-		return Service::Ptr();
+	if (host.IsObjectType<Host>())
+		hostObj = host;
+	else
+		hostObj = Host::GetByName(host);
 
-	return host_obj->GetServiceByShortName(name);
+	if (!hostObj)
+		return nullptr;
+
+	return hostObj->GetServiceByShortName(name);
 }
 
+Array::Ptr ObjectUtils::GetServices(const Value& host)
+{
+	Host::Ptr hostObj;
+
+	if (host.IsObjectType<Host>())
+		hostObj = host;
+	else
+		hostObj = Host::GetByName(host);
+
+	if (!hostObj)
+		return nullptr;
+
+	return Array::FromVector(hostObj->GetServices());
+}

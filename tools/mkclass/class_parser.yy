@@ -1,7 +1,7 @@
 %{
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -113,9 +113,8 @@ int yylex(YYSTYPE *lvalp, YYLTYPE *llocp, void *scanner);
 
 void yyerror(YYLTYPE *locp, ClassCompiler *, const char *err)
 {
-	std::cerr << "in " << locp->path << " at " << locp->first_line << ":" << locp->first_column << "-" << locp->last_line << ":" << locp->last_column << ": "
-			  << err
-			  << std::endl;
+	std::cerr << "in " << locp->path << " at " << locp->first_line << ":" << locp->first_column << "-"
+		<< locp->last_line << ":" << locp->last_column << ": " << err << std::endl;
 	std::exit(1);
 }
 
@@ -248,11 +247,11 @@ class: class_attribute_list T_CLASS T_IDENTIFIER inherits_specifier type_base_sp
 
 		$$->Attributes = $1;
 
-		for (std::vector<Field>::iterator it = $7->begin(); it != $7->end(); it++) {
-			if (it->Attributes & FALoadDependency) {
-				$$->LoadDependencies.push_back(it->Name);
+		for (const Field& field : *$7) {
+			if (field.Attributes & FALoadDependency) {
+				$$->LoadDependencies.push_back(field.Name);
 			} else
-				$$->Fields.push_back(*it);
+				$$->Fields.push_back(field);
 		}
 
 		delete $7;
@@ -375,7 +374,7 @@ class_field: field_attribute_list field_type identifier alternative_name_specifi
 	}
 	| T_LOAD_AFTER identifier ';'
 	{
-		Field *field = new Field();
+		auto *field = new Field();
 		field->Attributes = FALoadDependency;
 		field->Name = $2;
 		std::free($2);

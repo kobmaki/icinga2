@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -40,6 +40,7 @@
 #endif /* __MINGW32__ */
 
 typedef int socklen_t;
+typedef SSIZE_T ssize_t;
 
 #define MAXPATHLEN MAX_PATH
 

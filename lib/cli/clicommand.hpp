@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,14 +26,12 @@
 #include "base/type.hpp"
 #include <vector>
 #include <boost/program_options.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 
 namespace icinga
 {
 
-std::vector<String> I2_CLI_API GetBashCompletionSuggestions(const String& type, const String& word);
-std::vector<String> I2_CLI_API GetFieldCompletionSuggestions(const Type::Ptr& type, const String& word);
+std::vector<String> GetBashCompletionSuggestions(const String& type, const String& word);
+std::vector<String> GetFieldCompletionSuggestions(const Type::Ptr& type, const String& word);
 
 enum ImpersonationLevel
 {
@@ -47,21 +45,22 @@ enum ImpersonationLevel
  *
  * @ingroup base
  */
-class I2_CLI_API CLICommand : public Object
+class CLICommand : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(CLICommand);
 
 	typedef std::vector<String>(*ArgumentCompletionCallback)(const String&, const String&);
 
-	virtual String GetDescription(void) const = 0;
-	virtual String GetShortDescription(void) const = 0;
-	virtual int GetMinArguments(void) const;
-	virtual int GetMaxArguments(void) const;
-	virtual bool IsHidden(void) const;
+	virtual String GetDescription() const = 0;
+	virtual String GetShortDescription() const = 0;
+	virtual int GetMinArguments() const;
+	virtual int GetMaxArguments() const;
+	virtual bool IsHidden() const;
+	virtual bool IsDeprecated() const;
 	virtual void InitParameters(boost::program_options::options_description& visibleDesc,
-	    boost::program_options::options_description& hiddenDesc) const;
-	virtual ImpersonationLevel GetImpersonationLevel(void) const;
+		boost::program_options::options_description& hiddenDesc) const;
+	virtual ImpersonationLevel GetImpersonationLevel() const;
 	virtual int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const = 0;
 	virtual std::vector<String> GetArgumentSuggestions(const String& argument, const String& word) const;
 	virtual std::vector<String> GetPositionalSuggestions(const String& word) const;
@@ -71,32 +70,26 @@ public:
 	static void Unregister(const std::vector<String>& name);
 
 	static bool ParseCommand(int argc, char **argv, boost::program_options::options_description& visibleDesc,
-	    boost::program_options::options_description& hiddenDesc,
-	    boost::program_options::positional_options_description& positionalDesc,
-	    boost::program_options::variables_map& vm, String& cmdname,
-	   CLICommand::Ptr& command, bool autocomplete);
+		boost::program_options::options_description& hiddenDesc,
+		boost::program_options::positional_options_description& positionalDesc,
+		boost::program_options::variables_map& vm, String& cmdname, CLICommand::Ptr& command, bool autocomplete);
 
 	static void ShowCommands(int argc, char **argv,
-	    boost::program_options::options_description *visibleDesc = NULL,
-	    boost::program_options::options_description *hiddenDesc = NULL,
-	    ArgumentCompletionCallback globalArgCompletionCallback = NULL,
-	    bool autocomplete = false, int autoindex = -1);
+		boost::program_options::options_description *visibleDesc = nullptr,
+		boost::program_options::options_description *hiddenDesc = nullptr,
+		ArgumentCompletionCallback globalArgCompletionCallback = nullptr,
+		bool autocomplete = false, int autoindex = -1);
 
 private:
-	static boost::mutex& GetRegistryMutex(void);
-	static std::map<std::vector<String>, CLICommand::Ptr>& GetRegistry(void);
+	static boost::mutex& GetRegistryMutex();
+	static std::map<std::vector<String>, CLICommand::Ptr>& GetRegistry();
 };
 
 #define REGISTER_CLICOMMAND(name, klass) \
-	namespace { namespace UNIQUE_NAME(cli) { \
-		void RegisterCommand(void) \
-		{ \
-			std::vector<String> vname; \
-			boost::algorithm::split(vname, name, boost::is_any_of("/")); \
-			CLICommand::Register(vname, new klass()); \
-		} \
-		INITIALIZE_ONCE(RegisterCommand); \
-	} }
+	INITIALIZE_ONCE([]() { \
+		std::vector<String> vname = String(name).Split("/"); \
+		CLICommand::Register(vname, new klass()); \
+	})
 
 }
 

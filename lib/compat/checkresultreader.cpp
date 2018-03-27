@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,7 +19,7 @@
 
 #include "icinga/compatutility.hpp"
 #include "compat/checkresultreader.hpp"
-#include "compat/checkresultreader.tcpp"
+#include "compat/checkresultreader-ti.cpp"
 #include "icinga/service.hpp"
 #include "icinga/pluginutility.hpp"
 #include "icinga/icingaapplication.hpp"
@@ -42,13 +42,13 @@ REGISTER_STATSFUNCTION(CheckResultReader, &CheckResultReader::StatsFunc);
 
 void CheckResultReader::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const CheckResultReader::Ptr& checkresultreader, ConfigType::GetObjectsByType<CheckResultReader>()) {
-		nodes->Set(checkresultreader->GetName(), 1); //add more stats
+	for (const CheckResultReader::Ptr& checkresultreader : ConfigType::GetObjectsByType<CheckResultReader>()) {
+		nodes.emplace_back(checkresultreader->GetName(), 1); //add more stats
 	}
 
-	status->Set("checkresultreader", nodes);
+	status->Set("checkresultreader", new Dictionary(std::move(nodes)));
 }
 
 /**
@@ -58,20 +58,38 @@ void CheckResultReader::Start(bool runtimeCreated)
 {
 	ObjectImpl<CheckResultReader>::Start(runtimeCreated);
 
+	Log(LogInformation, "CheckResultReader")
+		<< "'" << GetName() << "' started.";
+	Log(LogWarning, "CheckResultReader")
+		<< "The CheckResultReader feature is deprecated and will be removed with Icinga 2.10.0";
+
+#ifndef _WIN32
 	m_ReadTimer = new Timer();
-	m_ReadTimer->OnTimerExpired.connect(boost::bind(&CheckResultReader::ReadTimerHandler, this));
+	m_ReadTimer->OnTimerExpired.connect(std::bind(&CheckResultReader::ReadTimerHandler, this));
 	m_ReadTimer->SetInterval(5);
 	m_ReadTimer->Start();
+#endif /* _WIN32 */
 }
 
 /**
  * @threadsafety Always.
  */
-void CheckResultReader::ReadTimerHandler(void) const
+void CheckResultReader::Stop(bool runtimeRemoved)
+{
+	Log(LogInformation, "CheckResultReader")
+		<< "'" << GetName() << "' stopped.";
+
+	ObjectImpl<CheckResultReader>::Stop(runtimeRemoved);
+}
+
+/**
+ * @threadsafety Always.
+ */
+void CheckResultReader::ReadTimerHandler() const
 {
 	CONTEXT("Processing check result files in '" + GetSpoolDir() + "'");
 
-	Utility::Glob(GetSpoolDir() + "/c??????.ok", boost::bind(&CheckResultReader::ProcessCheckResultFile, this, _1), GlobFile);
+	Utility::Glob(GetSpoolDir() + "/c??????.ok", std::bind(&CheckResultReader::ProcessCheckResultFile, this, _1), GlobFile);
 }
 
 void CheckResultReader::ProcessCheckResultFile(const String& path) const
@@ -107,15 +125,15 @@ void CheckResultReader::ProcessCheckResultFile(const String& path) const
 	/* Remove the checkresult files. */
 	if (unlink(path.CStr()) < 0)
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("unlink")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(path));
+			<< boost::errinfo_api_function("unlink")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(path));
 
 	if (unlink(crfile.CStr()) < 0)
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("unlink")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(crfile));
+			<< boost::errinfo_api_function("unlink")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(crfile));
 
 	Checkable::Ptr checkable;
 
@@ -123,7 +141,7 @@ void CheckResultReader::ProcessCheckResultFile(const String& path) const
 
 	if (!host) {
 		Log(LogWarning, "CheckResultReader")
-		    << "Ignoring checkresult file for host '" << attrs["host_name"] << "': Host does not exist.";
+			<< "Ignoring checkresult file for host '" << attrs["host_name"] << "': Host does not exist.";
 
 		return;
 	}
@@ -133,8 +151,8 @@ void CheckResultReader::ProcessCheckResultFile(const String& path) const
 
 		if (!service) {
 			Log(LogWarning, "CheckResultReader")
-			    << "Ignoring checkresult file for host '" << attrs["host_name"]
-			    << "', service '" << attrs["service_description"] << "': Service does not exist.";
+				<< "Ignoring checkresult file for host '" << attrs["host_name"]
+				<< "', service '" << attrs["service_description"] << "': Service does not exist.";
 
 			return;
 		}
@@ -149,13 +167,21 @@ void CheckResultReader::ProcessCheckResultFile(const String& path) const
 	result->SetOutput(co.first);
 	result->SetPerformanceData(PluginUtility::SplitPerfdata(co.second));
 	result->SetState(PluginUtility::ExitStatusToState(Convert::ToLong(attrs["return_code"])));
-	result->SetExecutionStart(Convert::ToDouble(attrs["start_time"]));
-	result->SetExecutionEnd(Convert::ToDouble(attrs["finish_time"]));
+
+	if (attrs.find("start_time") != attrs.end())
+		result->SetExecutionStart(Convert::ToDouble(attrs["start_time"]));
+	else
+		result->SetExecutionStart(Utility::GetTime());
+
+	if (attrs.find("finish_time") != attrs.end())
+		result->SetExecutionEnd(Convert::ToDouble(attrs["finish_time"]));
+	else
+		result->SetExecutionEnd(result->GetExecutionStart());
 
 	checkable->ProcessCheckResult(result);
 
 	Log(LogDebug, "CheckResultReader")
-	    << "Processed checkresult file for object '" << checkable->GetName() << "'";
+		<< "Processed checkresult file for object '" << checkable->GetName() << "'";
 
 	/* Reschedule the next check. The side effect of this is that for as long
 	 * as we receive check result files for a host/service we won't execute any

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,11 +21,11 @@
 #define THREADPOOL_H
 
 #include "base/i2-base.hpp"
-#include <boost/function.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
 #include <deque>
+#include <thread>
 
 namespace icinga
 {
@@ -43,16 +43,16 @@ enum SchedulerPolicy
  *
  * @ingroup base
  */
-class I2_BASE_API ThreadPool
+class ThreadPool
 {
 public:
-	typedef boost::function<void ()> WorkFunction;
+	typedef std::function<void ()> WorkFunction;
 
 	ThreadPool(size_t max_threads = UINT_MAX);
-	~ThreadPool(void);
+	~ThreadPool();
 
-	void Start(void);
-	void Stop(void);
+	void Start();
+	void Stop();
 
 	bool Post(const WorkFunction& callback, SchedulerPolicy policy = DefaultScheduler);
 
@@ -75,14 +75,14 @@ private:
 
 	struct WorkerThread
 	{
-		ThreadState State;
-		bool Zombie;
-		double Utilization;
-		double LastUpdate;
-		boost::thread *Thread;
+		ThreadState State{ThreadDead};
+		bool Zombie{false};
+		double Utilization{0};
+		double LastUpdate{0};
+		boost::thread *Thread{nullptr};
 
 		WorkerThread(ThreadState state = ThreadDead)
-			: State(state), Zombie(false), Utilization(0), LastUpdate(0), Thread(NULL)
+			: State(state)
 		{ }
 
 		void UpdateUtilization(ThreadState state = ThreadUnspecified);
@@ -98,17 +98,13 @@ private:
 
 		std::deque<WorkItem> Items;
 
-		double WaitTime;
-		double ServiceTime;
-		int TaskCount;
+		double WaitTime{0};
+		double ServiceTime{0};
+		int TaskCount{0};
 
-		bool Stopped;
+		bool Stopped{false};
 
 		WorkerThread Threads[16];
-
-		Queue(void)
-			: WaitTime(0), ServiceTime(0), TaskCount(0), Stopped(false)
-		{ }
 
 		void SpawnWorker(boost::thread_group& group);
 		void KillWorker(boost::thread_group& group);
@@ -121,14 +117,14 @@ private:
 
 	boost::thread_group m_ThreadGroup;
 
-	boost::thread m_MgmtThread;
+	std::thread m_MgmtThread;
 	boost::mutex m_MgmtMutex;
 	boost::condition_variable m_MgmtCV;
-	bool m_Stopped;
+	bool m_Stopped{true};
 
 	Queue m_Queues[QUEUECOUNT];
 
-	void ManagerThreadProc(void);
+	void ManagerThreadProc();
 };
 
 }

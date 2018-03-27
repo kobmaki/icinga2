@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,15 +32,15 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API HttpUtility
+class HttpUtility
 {
 
 public:
 	static Dictionary::Ptr FetchRequestParameters(HttpRequest& request);
-	static void SendJsonBody(HttpResponse& response, const Value& val);
+	static void SendJsonBody(HttpResponse& response, const Dictionary::Ptr& params, const Value& val);
 	static Value GetLastParameter(const Dictionary::Ptr& params, const String& key);
-	static void SendJsonError(HttpResponse& response, const int code,
-	    const String& verbose = String(), const String& diagnosticInformation = String());
+	static void SendJsonError(HttpResponse& response, const Dictionary::Ptr& params, const int code,
+		const String& verbose = String(), const String& diagnosticInformation = String());
 
 private:
 	static String GetErrorNameByCode(int code);

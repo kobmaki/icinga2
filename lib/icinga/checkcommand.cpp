@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/checkcommand.hpp"
-#include "icinga/checkcommand.tcpp"
+#include "icinga/checkcommand-ti.cpp"
 #include "base/configtype.hpp"
 
 using namespace icinga;
@@ -26,12 +26,12 @@ using namespace icinga;
 REGISTER_TYPE(CheckCommand);
 
 void CheckCommand::Execute(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr,
-    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
+	const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
 {
-	std::vector<Value> arguments;
-	arguments.push_back(checkable);
-	arguments.push_back(cr);
-	arguments.push_back(resolvedMacros);
-	arguments.push_back(useResolvedMacros);
-	GetExecute()->Invoke(arguments);
+	GetExecute()->Invoke({
+		checkable,
+		cr,
+		resolvedMacros,
+		useResolvedMacros
+	});
 }

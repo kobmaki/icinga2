@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,6 @@
 #include "base/exception.hpp"
 #include "base/logger.hpp"
 #include <boost/thread/once.hpp>
-#include <boost/foreach.hpp>
 #include <map>
 
 using namespace icinga;
@@ -54,15 +53,21 @@ void SocketEventEnginePoll::ThreadProc(int tid)
 
 				typedef std::map<SOCKET, SocketEventDescriptor>::value_type kv_pair;
 
-				BOOST_FOREACH(const kv_pair& desc, m_Sockets[tid]) {
+				for (const kv_pair& desc : m_Sockets[tid]) {
 					if (desc.second.Events == 0)
 						continue;
 
-					if (desc.second.EventInterface)
+					int events = desc.second.Events;
+
+					if (desc.second.EventInterface) {
 						desc.second.EventInterface->m_EnginePrivate = &pfds[i];
 
+						if (!desc.second.EventInterface->m_Events)
+							events = 0;
+					}
+
 					pfds[i].fd = desc.first;
-					pfds[i].events = desc.second.Events;
+					pfds[i].events = events;
 					descriptors[i] = desc.second;
 
 					i++;
@@ -91,7 +96,7 @@ void SocketEventEnginePoll::ThreadProc(int tid)
 			if (m_FDChanged[tid])
 				continue;
 
-			for (int i = 0; i < pfds.size(); i++) {
+			for (std::vector<pollfd>::size_type i = 0; i < pfds.size(); i++) {
 				if ((pfds[i].revents & (POLLIN | POLLOUT | POLLHUP | POLLERR)) == 0)
 					continue;
 
@@ -109,17 +114,17 @@ void SocketEventEnginePoll::ThreadProc(int tid)
 				event.LifesupportReference = event.Descriptor.LifesupportObject;
 				VERIFY(event.LifesupportReference);
 
-				events.push_back(event);
+				events.emplace_back(std::move(event));
 			}
 		}
 
-		BOOST_FOREACH(const EventDescription& event, events) {
+		for (const EventDescription& event : events) {
 			try {
 				event.Descriptor.EventInterface->OnEvent(event.REvents);
 			} catch (const std::exception& ex) {
 				Log(LogCritical, "SocketEvents")
-				    << "Exception thrown in socket I/O handler:\n"
-				    << DiagnosticInformation(ex);
+					<< "Exception thrown in socket I/O handler:\n"
+					<< DiagnosticInformation(ex);
 			} catch (...) {
 				Log(LogCritical, "SocketEvents", "Exception of unknown type thrown in socket I/O handler.");
 			}
@@ -183,7 +188,7 @@ void SocketEventEnginePoll::ChangeEvents(SocketEvents *se, int events)
 	{
 		boost::mutex::scoped_lock lock(m_EventMutex[tid]);
 
-		std::map<SOCKET, SocketEventDescriptor>::iterator it = m_Sockets[tid].find(se->m_FD);
+		auto it = m_Sockets[tid].find(se->m_FD);
 
 		if (it == m_Sockets[tid].end())
 			return;
@@ -193,7 +198,7 @@ void SocketEventEnginePoll::ChangeEvents(SocketEvents *se, int events)
 
 		it->second.Events = events;
 
-		if (se->m_EnginePrivate && boost::this_thread::get_id() == m_Threads[tid].get_id())
+		if (se->m_EnginePrivate && std::this_thread::get_id() == m_Threads[tid].get_id())
 			((pollfd *)se->m_EnginePrivate)->events = events;
 		else
 			m_FDChanged[tid] = true;

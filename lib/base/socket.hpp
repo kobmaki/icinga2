@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,6 +22,7 @@
 
 #include "base/i2-base.hpp"
 #include "base/object.hpp"
+#include <boost/thread/mutex.hpp>
 
 namespace icinga
 {
@@ -31,43 +32,43 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API Socket : public Object
+class Socket : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(Socket);
 
-	Socket(void);
+	Socket() = default;
 	Socket(SOCKET fd);
-	~Socket(void);
+	~Socket() override;
 
-	SOCKET GetFD(void) const;
+	SOCKET GetFD() const;
 
-	void Close(void);
+	void Close();
 
-	String GetClientAddress(void);
-	String GetPeerAddress(void);
+	String GetClientAddress();
+	String GetPeerAddress();
 
 	size_t Read(void *buffer, size_t size);
 	size_t Write(const void *buffer, size_t size);
 
-	void Listen(void);
-	Socket::Ptr Accept(void);
+	void Listen();
+	Socket::Ptr Accept();
 
-	bool Poll(bool read, bool write, struct timeval *timeout = NULL);
+	bool Poll(bool read, bool write, struct timeval *timeout = nullptr);
 
-	void MakeNonBlocking(void);
+	void MakeNonBlocking();
 
 	static void SocketPair(SOCKET s[2]);
 
 protected:
 	void SetFD(SOCKET fd);
 
-	int GetError(void) const;
+	int GetError() const;
 
 	mutable boost::mutex m_SocketMutex;
 
 private:
-	SOCKET m_FD; /**< The socket descriptor. */
+	SOCKET m_FD{INVALID_SOCKET}; /**< The socket descriptor. */
 
 	static String GetAddressFromSockaddr(sockaddr *address, socklen_t len);
 };

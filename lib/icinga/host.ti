@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,6 +19,7 @@
 
 #include "icinga/checkable.hpp"
 #include "icinga/customvarobject.hpp"
+#impl_include "icinga/hostgroup.hpp"
 
 library icinga;
 
@@ -27,7 +28,11 @@ namespace icinga
 
 class Host : Checkable
 {
-	[config, no_user_modify] array(name(HostGroup)) groups {
+	load_after ApiListener;
+	load_after Endpoint;
+	load_after Zone;
+
+	[config, no_user_modify, required] array(name(HostGroup)) groups {
 		default {{{ return new Array(); }}}
 	};
 

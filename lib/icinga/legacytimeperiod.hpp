@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,7 +32,7 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API LegacyTimePeriod
+class LegacyTimePeriod
 {
 public:
 	static Array::Ptr ScriptFunc(const TimePeriod::Ptr& tp, double start, double end);
@@ -50,7 +50,7 @@ public:
 	static Dictionary::Ptr FindNextSegment(const String& daydef, const String& timeranges, tm *reference);
 
 private:
-	LegacyTimePeriod(void);
+	LegacyTimePeriod();
 };
 
 }

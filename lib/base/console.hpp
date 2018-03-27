@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define CONSOLE_H
 
 #include "base/i2-base.hpp"
-#include <ostream>
+#include <iosfwd>
 
 namespace icinga
 {
@@ -66,29 +66,29 @@ enum ConsoleType
 #endif /* _WIN32 */
 };
 
-class I2_BASE_API ConsoleColorTag
+class ConsoleColorTag
 {
 public:
 	ConsoleColorTag(int color, ConsoleType consoleType = Console_Autodetect);
 
-	friend I2_BASE_API std::ostream& operator<<(std::ostream& fp, const ConsoleColorTag& cct);
+	friend std::ostream& operator<<(std::ostream& fp, const ConsoleColorTag& cct);
 
 private:
 	int m_Color;
 	int m_ConsoleType;
 };
 
-I2_BASE_API std::ostream& operator<<(std::ostream& fp, const ConsoleColorTag& cct);
+std::ostream& operator<<(std::ostream& fp, const ConsoleColorTag& cct);
 
 /**
  * Console utilities.
  *
  * @ingroup base
  */
-class I2_BASE_API Console
+class Console
 {
 public:
-	static void DetectType(void);
+	static void DetectType();
 
 	static void SetType(std::ostream& fp, ConsoleType type);
 	static ConsoleType GetType(std::ostream& fp);
@@ -100,7 +100,7 @@ public:
 #endif /* _WIN32 */
 
 private:
-	Console(void);
+	Console();
 };
 
 }

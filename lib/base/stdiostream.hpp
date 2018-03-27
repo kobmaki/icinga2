@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,25 +22,25 @@
 
 #include "base/i2-base.hpp"
 #include "base/stream.hpp"
-#include <iostream>
+#include <iosfwd>
 
 namespace icinga {
 
-class I2_BASE_API StdioStream : public Stream
+class StdioStream final : public Stream
 {
 public:
 	DECLARE_PTR_TYPEDEFS(StdioStream);
 
 	StdioStream(std::iostream *innerStream, bool ownsStream);
-	~StdioStream(void);
+	~StdioStream() override;
 
-	virtual size_t Read(void *buffer, size_t size, bool allow_partial = false) override;
-	virtual void Write(const void *buffer, size_t size) override;
+	size_t Read(void *buffer, size_t size, bool allow_partial = false) override;
+	void Write(const void *buffer, size_t size) override;
 
-	virtual void Close(void) override;
+	void Close() override;
 
-	virtual bool IsDataAvailable(void) const override;
-	virtual bool IsEof(void) const override;
+	bool IsDataAvailable() const override;
+	bool IsEof() const override;
 
 private:
 	std::iostream *m_InnerStream;

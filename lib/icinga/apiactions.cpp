@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,6 +26,8 @@
 #include "icinga/eventcommand.hpp"
 #include "icinga/notificationcommand.hpp"
 #include "remote/apiaction.hpp"
+#include "remote/apilistener.hpp"
+#include "remote/pkiutility.hpp"
 #include "remote/httputility.hpp"
 #include "base/utility.hpp"
 #include "base/convert.hpp"
@@ -45,13 +47,15 @@ REGISTER_APIACTION(schedule_downtime, "Service;Host", &ApiActions::ScheduleDownt
 REGISTER_APIACTION(remove_downtime, "Service;Host;Downtime", &ApiActions::RemoveDowntime);
 REGISTER_APIACTION(shutdown_process, "", &ApiActions::ShutdownProcess);
 REGISTER_APIACTION(restart_process, "", &ApiActions::RestartProcess);
+REGISTER_APIACTION(generate_ticket, "", &ApiActions::GenerateTicket);
 
 Dictionary::Ptr ApiActions::CreateResult(int code, const String& status,
-    const Dictionary::Ptr& additional)
+	const Dictionary::Ptr& additional)
 {
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("code", code);
-	result->Set("status", status);
+	Dictionary::Ptr result = new Dictionary({
+		{ "code", code },
+		{ "status", status }
+	});
 
 	if (additional)
 		additional->CopyTo(result);
@@ -60,13 +64,13 @@ Dictionary::Ptr ApiActions::CreateResult(int code, const String& status,
 }
 
 Dictionary::Ptr ApiActions::ProcessCheckResult(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
 	if (!checkable)
 		return ApiActions::CreateResult(404,
-		    "Cannot process passive check result for non-existent object.");
+			"Cannot process passive check result for non-existent object.");
 
 	if (!checkable->GetEnablePassiveChecks())
 		return ApiActions::CreateResult(403, "Passive checks are disabled for object '" + checkable->GetName() + "'.");
@@ -76,7 +80,7 @@ Dictionary::Ptr ApiActions::ProcessCheckResult(const ConfigObject::Ptr& object,
 	tie(host, service) = GetHostService(checkable);
 
 	if (!params->Contains("exit_status"))
-		return ApiActions::CreateResult(403, "Parameter 'exit_status' is required.");
+		return ApiActions::CreateResult(400, "Parameter 'exit_status' is required.");
 
 	int exitStatus = HttpUtility::GetLastParameter(params, "exit_status");
 
@@ -88,25 +92,43 @@ Dictionary::Ptr ApiActions::ProcessCheckResult(const ConfigObject::Ptr& object,
 		else if (exitStatus == 1)
 			state = ServiceCritical;
 		else
-			return ApiActions::CreateResult(403, "Invalid 'exit_status' for Host "
-			    + checkable->GetName() + ".");
+			return ApiActions::CreateResult(400, "Invalid 'exit_status' for Host "
+				+ checkable->GetName() + ".");
 	} else {
 		state = PluginUtility::ExitStatusToState(exitStatus);
 	}
 
 	if (!params->Contains("plugin_output"))
-		return ApiActions::CreateResult(403, "Parameter 'plugin_output' is required");
+		return ApiActions::CreateResult(400, "Parameter 'plugin_output' is required");
 
 	CheckResult::Ptr cr = new CheckResult();
 	cr->SetOutput(HttpUtility::GetLastParameter(params, "plugin_output"));
 	cr->SetState(state);
 
+	if (params->Contains("execution_start"))
+		cr->SetExecutionStart(HttpUtility::GetLastParameter(params, "execution_start"));
+
+	if (params->Contains("execution_end"))
+		cr->SetExecutionEnd(HttpUtility::GetLastParameter(params, "execution_end"));
+
 	cr->SetCheckSource(HttpUtility::GetLastParameter(params, "check_source"));
-	cr->SetPerformanceData(params->Get("performance_data"));
+
+	Value perfData = params->Get("performance_data");
+
+	/* Allow to pass a performance data string from Icinga Web 2 next to the new Array notation. */
+	if (perfData.IsString())
+		cr->SetPerformanceData(PluginUtility::SplitPerfdata(perfData));
+	else
+		cr->SetPerformanceData(perfData);
+
 	cr->SetCommand(params->Get("check_command"));
 
 	/* Mark this check result as passive. */
 	cr->SetActive(false);
+
+	/* Result TTL allows to overrule the next expected freshness check. */
+	if (params->Contains("ttl"))
+		cr->SetTtl(HttpUtility::GetLastParameter(params, "ttl"));
 
 	checkable->ProcessCheckResult(cr);
 
@@ -114,7 +136,7 @@ Dictionary::Ptr ApiActions::ProcessCheckResult(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::RescheduleCheck(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -139,7 +161,7 @@ Dictionary::Ptr ApiActions::RescheduleCheck(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::SendCustomNotification(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -147,22 +169,22 @@ Dictionary::Ptr ApiActions::SendCustomNotification(const ConfigObject::Ptr& obje
 		return ApiActions::CreateResult(404, "Cannot send notification for non-existent object.");
 
 	if (!params->Contains("author"))
-		return ApiActions::CreateResult(403, "Parameter 'author' is required.");
+		return ApiActions::CreateResult(400, "Parameter 'author' is required.");
 
 	if (!params->Contains("comment"))
-		return ApiActions::CreateResult(403, "Parameter 'comment' is required.");
+		return ApiActions::CreateResult(400, "Parameter 'comment' is required.");
 
 	if (Convert::ToBool(HttpUtility::GetLastParameter(params, "force")))
 		checkable->SetForceNextNotification(true);
 
 	Checkable::OnNotificationsRequested(checkable, NotificationCustom, checkable->GetLastCheckResult(),
-	    HttpUtility::GetLastParameter(params, "author"), HttpUtility::GetLastParameter(params, "comment"), MessageOrigin::Ptr());
+		HttpUtility::GetLastParameter(params, "author"), HttpUtility::GetLastParameter(params, "comment"), nullptr);
 
 	return ApiActions::CreateResult(200, "Successfully sent custom notification for object '" + checkable->GetName() + "'.");
 }
 
 Dictionary::Ptr ApiActions::DelayNotification(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -170,9 +192,9 @@ Dictionary::Ptr ApiActions::DelayNotification(const ConfigObject::Ptr& object,
 		return ApiActions::CreateResult(404, "Cannot delay notifications for non-existent object");
 
 	if (!params->Contains("timestamp"))
-		return ApiActions::CreateResult(403, "A timestamp is required to delay notifications");
+		return ApiActions::CreateResult(400, "A timestamp is required to delay notifications");
 
-	BOOST_FOREACH(const Notification::Ptr& notification, checkable->GetNotifications()) {
+	for (const Notification::Ptr& notification : checkable->GetNotifications()) {
 		notification->SetNextNotification(HttpUtility::GetLastParameter(params, "timestamp"));
 	}
 
@@ -180,7 +202,7 @@ Dictionary::Ptr ApiActions::DelayNotification(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::AcknowledgeProblem(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -188,19 +210,25 @@ Dictionary::Ptr ApiActions::AcknowledgeProblem(const ConfigObject::Ptr& object,
 		return ApiActions::CreateResult(404, "Cannot acknowledge problem for non-existent object.");
 
 	if (!params->Contains("author") || !params->Contains("comment"))
-		return ApiActions::CreateResult(403, "Acknowledgements require author and comment.");
+		return ApiActions::CreateResult(400, "Acknowledgements require author and comment.");
 
 	AcknowledgementType sticky = AcknowledgementNormal;
 	bool notify = false;
+	bool persistent = false;
 	double timestamp = 0.0;
 
-	if (params->Contains("sticky"))
+	if (params->Contains("sticky") && HttpUtility::GetLastParameter(params, "sticky"))
 		sticky = AcknowledgementSticky;
 	if (params->Contains("notify"))
-		notify = true;
-	if (params->Contains("expiry"))
+		notify = HttpUtility::GetLastParameter(params, "notify");
+	if (params->Contains("persistent"))
+		persistent = HttpUtility::GetLastParameter(params, "persistent");
+	if (params->Contains("expiry")) {
 		timestamp = HttpUtility::GetLastParameter(params, "expiry");
-	else
+
+		if (timestamp <= Utility::GetTime())
+			return ApiActions::CreateResult(409, "Acknowledgement 'expiry' timestamp must be in the future for object " + checkable->GetName());
+	} else
 		timestamp = 0;
 
 	Host::Ptr host;
@@ -216,22 +244,22 @@ Dictionary::Ptr ApiActions::AcknowledgeProblem(const ConfigObject::Ptr& object,
 	}
 
 	Comment::AddComment(checkable, CommentAcknowledgement, HttpUtility::GetLastParameter(params, "author"),
-	    HttpUtility::GetLastParameter(params, "comment"), timestamp);
+		HttpUtility::GetLastParameter(params, "comment"), persistent, timestamp);
 	checkable->AcknowledgeProblem(HttpUtility::GetLastParameter(params, "author"),
-	    HttpUtility::GetLastParameter(params, "comment"), sticky, notify, timestamp);
+		HttpUtility::GetLastParameter(params, "comment"), sticky, notify, persistent, timestamp);
 
 	return ApiActions::CreateResult(200, "Successfully acknowledged problem for object '" + checkable->GetName() + "'.");
 }
 
 Dictionary::Ptr ApiActions::RemoveAcknowledgement(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
 	if (!checkable)
 		return ApiActions::CreateResult(404,
-		    "Cannot remove acknowlegement for non-existent checkable object "
-		    + object->GetName() + ".");
+			"Cannot remove acknowlegement for non-existent checkable object "
+			+ object->GetName() + ".");
 
 	checkable->ClearAcknowledgement();
 	checkable->RemoveCommentsByType(CommentAcknowledgement);
@@ -240,7 +268,7 @@ Dictionary::Ptr ApiActions::RemoveAcknowledgement(const ConfigObject::Ptr& objec
 }
 
 Dictionary::Ptr ApiActions::AddComment(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -248,32 +276,33 @@ Dictionary::Ptr ApiActions::AddComment(const ConfigObject::Ptr& object,
 		return ApiActions::CreateResult(404, "Cannot add comment for non-existent object");
 
 	if (!params->Contains("author") || !params->Contains("comment"))
-		return ApiActions::CreateResult(403, "Comments require author and comment.");
+		return ApiActions::CreateResult(400, "Comments require author and comment.");
 
 	String commentName = Comment::AddComment(checkable, CommentUser,
-	    HttpUtility::GetLastParameter(params, "author"),
-	    HttpUtility::GetLastParameter(params, "comment"), 0);
+		HttpUtility::GetLastParameter(params, "author"),
+		HttpUtility::GetLastParameter(params, "comment"), false, 0);
 
 	Comment::Ptr comment = Comment::GetByName(commentName);
 
-	Dictionary::Ptr additional = new Dictionary();
-	additional->Set("name", commentName);
-	additional->Set("legacy_id", comment->GetLegacyId());
+	Dictionary::Ptr additional = new Dictionary({
+		{ "name", commentName },
+		{ "legacy_id", comment->GetLegacyId() }
+	});
 
 	return ApiActions::CreateResult(200, "Successfully added comment '"
-	    + commentName + "' for object '" + checkable->GetName()
-	    + "'.", additional);
+		+ commentName + "' for object '" + checkable->GetName()
+		+ "'.", additional);
 }
 
 Dictionary::Ptr ApiActions::RemoveComment(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = dynamic_pointer_cast<Checkable>(object);
 
 	if (checkable) {
 		std::set<Comment::Ptr> comments = checkable->GetComments();
 
-		BOOST_FOREACH(const Comment::Ptr& comment, comments) {
+		for (const Comment::Ptr& comment : comments) {
 			Comment::RemoveComment(comment->GetName());
 		}
 
@@ -293,7 +322,7 @@ Dictionary::Ptr ApiActions::RemoveComment(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::ScheduleDowntime(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = static_pointer_cast<Checkable>(object);
 
@@ -301,43 +330,92 @@ Dictionary::Ptr ApiActions::ScheduleDowntime(const ConfigObject::Ptr& object,
 		return ApiActions::CreateResult(404, "Can't schedule downtime for non-existent object.");
 
 	if (!params->Contains("start_time") || !params->Contains("end_time") ||
-	    !params->Contains("duration") || !params->Contains("author") ||
-	    !params->Contains("comment")) {
+		!params->Contains("author") || !params->Contains("comment")) {
 
-		return ApiActions::CreateResult(404, "Options 'start_time', 'end_time', 'duration', 'author' and 'comment' are required");
+		return ApiActions::CreateResult(400, "Options 'start_time', 'end_time', 'author' and 'comment' are required");
 	}
 
 	bool fixed = true;
 	if (params->Contains("fixed"))
 		fixed = HttpUtility::GetLastParameter(params, "fixed");
 
-	String downtimeName = Downtime::AddDowntime(checkable,
-	    HttpUtility::GetLastParameter(params, "author"),
-	    HttpUtility::GetLastParameter(params, "comment"),
-	    HttpUtility::GetLastParameter(params, "start_time"),
-	    HttpUtility::GetLastParameter(params, "end_time"), fixed,
-	    HttpUtility::GetLastParameter(params, "trigger_name"),
-	    HttpUtility::GetLastParameter(params, "duration"));
+	if (!fixed && !params->Contains("duration"))
+		return ApiActions::CreateResult(400, "Option 'duration' is required for flexible downtime");
+
+	double duration = 0.0;
+	if (params->Contains("duration"))
+		duration = HttpUtility::GetLastParameter(params, "duration");
+
+	String triggerName;
+	if (params->Contains("trigger_name"))
+		triggerName = HttpUtility::GetLastParameter(params, "trigger_name");
+
+	String author = HttpUtility::GetLastParameter(params, "author");
+	String comment = HttpUtility::GetLastParameter(params, "comment");
+	double startTime = HttpUtility::GetLastParameter(params, "start_time");
+	double endTime = HttpUtility::GetLastParameter(params, "end_time");
+
+	String downtimeName = Downtime::AddDowntime(checkable, author, comment, startTime, endTime,
+		fixed, triggerName, duration);
 
 	Downtime::Ptr downtime = Downtime::GetByName(downtimeName);
 
-	Dictionary::Ptr additional = new Dictionary();
-	additional->Set("name", downtimeName);
-	additional->Set("legacy_id", downtime->GetLegacyId());
+	Dictionary::Ptr additional = new Dictionary({
+		{ "name", downtimeName },
+		{ "legacy_id", downtime->GetLegacyId() }
+	});
+
+	/* Schedule downtime for all child objects. */
+	int childOptions = 0;
+	if (params->Contains("child_options"))
+		childOptions = HttpUtility::GetLastParameter(params, "child_options");
+
+	if (childOptions > 0) {
+		/* '1' schedules child downtimes triggered by the parent downtime.
+		 * '2' schedules non-triggered downtimes for all children.
+		 */
+		if (childOptions == 1)
+			triggerName = downtimeName;
+
+		Log(LogCritical, "ApiActions")
+			<< "Processing child options " << childOptions << " for downtime " << downtimeName;
+
+		ArrayData childDowntimes;
+
+		for (const Checkable::Ptr& child : checkable->GetAllChildren()) {
+			Log(LogCritical, "ApiActions")
+				<< "Scheduling downtime for child object " << child->GetName();
+
+			String childDowntimeName = Downtime::AddDowntime(child, author, comment, startTime, endTime,
+				fixed, triggerName, duration);
+
+			Log(LogCritical, "ApiActions")
+				<< "Add child downtime '" << childDowntimeName << "'.";
+
+			Downtime::Ptr childDowntime = Downtime::GetByName(childDowntimeName);
+
+			childDowntimes.push_back(new Dictionary({
+				{ "name", childDowntimeName },
+				{ "legacy_id", childDowntime->GetLegacyId() }
+			}));
+		}
+
+		additional->Set("child_downtimes", new Array(std::move(childDowntimes)));
+	}
 
 	return ApiActions::CreateResult(200, "Successfully scheduled downtime '" +
-	     downtimeName + "' for object '" + checkable->GetName() + "'.", additional);
+		downtimeName + "' for object '" + checkable->GetName() + "'.", additional);
 }
 
 Dictionary::Ptr ApiActions::RemoveDowntime(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Checkable::Ptr checkable = dynamic_pointer_cast<Checkable>(object);
 
 	if (checkable) {
 		std::set<Downtime::Ptr> downtimes = checkable->GetDowntimes();
 
-		BOOST_FOREACH(const Downtime::Ptr& downtime, downtimes) {
+		for (const Downtime::Ptr& downtime : downtimes) {
 			Downtime::RemoveDowntime(downtime->GetName(), true);
 		}
 
@@ -357,7 +435,7 @@ Dictionary::Ptr ApiActions::RemoveDowntime(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::ShutdownProcess(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Application::RequestShutdown();
 
@@ -365,10 +443,33 @@ Dictionary::Ptr ApiActions::ShutdownProcess(const ConfigObject::Ptr& object,
 }
 
 Dictionary::Ptr ApiActions::RestartProcess(const ConfigObject::Ptr& object,
-    const Dictionary::Ptr& params)
+	const Dictionary::Ptr& params)
 {
 	Application::RequestRestart();
 
 	return ApiActions::CreateResult(200, "Restarting Icinga 2.");
 }
 
+Dictionary::Ptr ApiActions::GenerateTicket(const ConfigObject::Ptr&,
+	const Dictionary::Ptr& params)
+{
+	if (!params->Contains("cn"))
+		return ApiActions::CreateResult(400, "Option 'cn' is required");
+
+	String cn = HttpUtility::GetLastParameter(params, "cn");
+
+	ApiListener::Ptr listener = ApiListener::GetInstance();
+	String salt = listener->GetTicketSalt();
+
+	if (salt.IsEmpty())
+		return ApiActions::CreateResult(500, "Ticket salt is not configured in ApiListener object");
+
+	String ticket = PBKDF2_SHA1(cn, salt, 50000);
+
+	Dictionary::Ptr additional = new Dictionary({
+		{ "ticket", ticket }
+	});
+
+	return ApiActions::CreateResult(200, "Generated PKI ticket '" + ticket + "' for common name '"
+		+ cn + "'.", additional);
+}

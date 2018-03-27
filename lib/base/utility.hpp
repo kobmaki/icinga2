@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,7 +24,6 @@
 #include "base/string.hpp"
 #include "base/array.hpp"
 #include "base/threadpool.hpp"
-#include <boost/function.hpp>
 #include <boost/thread/tss.hpp>
 #include <typeinfo>
 #include <vector>
@@ -57,7 +56,7 @@ enum GlobType
  *
  * @ingroup base
  */
-class I2_BASE_API Utility
+class Utility
 {
 public:
 	static String DemangleSymbolName(const String& sym);
@@ -72,24 +71,24 @@ public:
 
 	static void NullDeleter(void *);
 
-	static double GetTime(void);
+	static double GetTime();
 
-	static pid_t GetPid(void);
+	static pid_t GetPid();
 
 	static void Sleep(double timeout);
 
-	static String NewUniqueID(void);
+	static String NewUniqueID();
 
-	static bool Glob(const String& pathSpec, const boost::function<void (const String&)>& callback, int type = GlobFile | GlobDirectory);
-	static bool GlobRecursive(const String& path, const String& pattern, const boost::function<void (const String&)>& callback, int type = GlobFile | GlobDirectory);
+	static bool Glob(const String& pathSpec, const std::function<void (const String&)>& callback, int type = GlobFile | GlobDirectory);
+	static bool GlobRecursive(const String& path, const String& pattern, const std::function<void (const String&)>& callback, int type = GlobFile | GlobDirectory);
 	static void MkDir(const String& path, int mode);
 	static void MkDirP(const String& path, int mode);
 	static bool SetFileOwnership(const String& file, const String& user, const String& group);
 
-	static void QueueAsyncCallback(const boost::function<void (void)>& callback, SchedulerPolicy policy = DefaultScheduler);
+	static void QueueAsyncCallback(const std::function<void ()>& callback, SchedulerPolicy policy = DefaultScheduler);
 
 	static String NaturalJoin(const std::vector<String>& tokens);
-	static String Join(const Array::Ptr& tokens, char separator);
+	static String Join(const Array::Ptr& tokens, char separator, bool escapeSeparator = true);
 
 	static String FormatDuration(double duration);
 	static String FormatDateTime(const char *format, double ts);
@@ -112,16 +111,16 @@ public:
 	static String UnescapeString(const String& s);
 
 	static void SetThreadName(const String& name, bool os = true);
-	static String GetThreadName(void);
+	static String GetThreadName();
 
 	static unsigned long SDBM(const String& str, size_t len = String::NPos);
 
 	static int CompareVersion(const String& v1, const String& v2);
 
-	static int Random(void);
+	static int Random();
 
-	static String GetHostName(void);
-	static String GetFQDN(void);
+	static String GetHostName();
+	static String GetFQDN();
 
 	static tm LocalTime(time_t ts);
 
@@ -133,20 +132,22 @@ public:
 	static Value LoadJsonFile(const String& path);
 	static void SaveJsonFile(const String& path, int mode, const Value& value);
 
-	static String GetPlatformKernel(void);
-	static String GetPlatformKernelVersion(void);
-	static String GetPlatformName(void);
-	static String GetPlatformVersion(void);
-	static String GetPlatformArchitecture(void);
+	static String GetPlatformKernel();
+	static String GetPlatformKernelVersion();
+	static String GetPlatformName();
+	static String GetPlatformVersion();
+	static String GetPlatformArchitecture();
 
 	static String ValidateUTF8(const String& input);
 
 	static String CreateTempFile(const String& path, int mode, std::fstream& fp);
 
 #ifdef _WIN32
-	static String GetIcingaInstallPath(void);
-	static String GetIcingaDataPath(void);
+	static String GetIcingaInstallPath();
+	static String GetIcingaDataPath();
 #endif /* _WIN32 */
+
+	static String GetFromSysconfig(const String& env);
 
 #ifdef I2_DEBUG
 	static void SetTime(double);
@@ -154,7 +155,7 @@ public:
 #endif /* I2_DEBUG */
 
 private:
-	Utility(void);
+	Utility();
 	static void CollectPaths(const String& path, std::vector<String>& paths);
 
 #ifdef _WIN32

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,33 +26,29 @@
 namespace icinga
 {
 
-struct I2_REMOTE_API ApiScriptFrame
+struct ApiScriptFrame
 {
-	double Seen;
-	int NextLine;
+	double Seen{0};
+	int NextLine{1};
 	std::map<String, String> Lines;
 	Dictionary::Ptr Locals;
-
-	ApiScriptFrame(void)
-		: Seen(0), NextLine(1)
-	{ }
 };
 
-class I2_REMOTE_API ConsoleHandler : public HttpHandler
+class ConsoleHandler final : public HttpHandler
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConsoleHandler);
 
-	virtual bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request,
-	    HttpResponse& response, const Dictionary::Ptr& params) override;
+	bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request,
+		HttpResponse& response, const Dictionary::Ptr& params) override;
 
 	static std::vector<String> GetAutocompletionSuggestions(const String& word, ScriptFrame& frame);
 
 private:
 	static bool ExecuteScriptHelper(HttpRequest& request, HttpResponse& response,
-	    const String& command, const String& session, bool sandboxed);
+		const Dictionary::Ptr& params, const String& command, const String& session, bool sandboxed);
 	static bool AutocompleteScriptHelper(HttpRequest& request, HttpResponse& response,
-	    const String& command, const String& session, bool sandboxed);
+		const Dictionary::Ptr& params, const String& command, const String& session, bool sandboxed);
 
 };
 

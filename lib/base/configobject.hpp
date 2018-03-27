@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -17,11 +17,11 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.             *
  ******************************************************************************/
 
-#ifndef DYNAMICOBJECT_H
-#define DYNAMICOBJECT_H
+#ifndef CONFIGOBJECT_H
+#define CONFIGOBJECT_H
 
 #include "base/i2-base.hpp"
-#include "base/configobject.thpp"
+#include "base/configobject-ti.hpp"
 #include "base/object.hpp"
 #include "base/type.hpp"
 #include "base/dictionary.hpp"
@@ -37,66 +37,64 @@ class ConfigType;
  *
  * @ingroup base
  */
-class I2_BASE_API ConfigObject : public ObjectImpl<ConfigObject>
+class ConfigObject : public ObjectImpl<ConfigObject>
 {
 public:
 	DECLARE_OBJECT(ConfigObject);
 
 	static boost::signals2::signal<void (const ConfigObject::Ptr&)> OnStateChanged;
 
-	intrusive_ptr<ConfigType> GetType(void) const;
-
-	bool IsActive(void) const;
-	bool IsPaused(void) const;
+	bool IsActive() const;
+	bool IsPaused() const;
 
 	void SetExtension(const String& key, const Value& value);
 	Value GetExtension(const String& key);
 	void ClearExtension(const String& key);
 
-	ConfigObject::Ptr GetZone(void) const;
+	ConfigObject::Ptr GetZone() const;
 
 	void ModifyAttribute(const String& attr, const Value& value, bool updateVersion = true);
 	void RestoreAttribute(const String& attr, bool updateVersion = true);
 	bool IsAttributeModified(const String& attr) const;
 
-	void Register(void);
-	void Unregister(void);
+	void Register();
+	void Unregister();
 
+	void PreActivate();
 	void Activate(bool runtimeCreated = false);
 	void Deactivate(bool runtimeRemoved = false);
 	void SetAuthority(bool authority);
 
-	virtual void Start(bool runtimeCreated = false) override;
-	virtual void Stop(bool runtimeRemoved = false) override;
+	void Start(bool runtimeCreated = false) override;
+	void Stop(bool runtimeRemoved = false) override;
 
-	virtual void Pause(void);
-	virtual void Resume(void);
+	virtual void Pause();
+	virtual void Resume();
 
-	virtual void OnConfigLoaded(void);
+	virtual void OnConfigLoaded();
 	virtual void CreateChildObjects(const Type::Ptr& childType);
-	virtual void OnAllConfigLoaded(void);
-	virtual void OnStateLoaded(void);
+	virtual void OnAllConfigLoaded();
+	virtual void OnStateLoaded();
+
+	Dictionary::Ptr GetSourceLocation() const override;
 
 	template<typename T>
 	static intrusive_ptr<T> GetObject(const String& name)
 	{
-		ConfigObject::Ptr object = GetObject(T::GetTypeName(), name);
-
-		return static_pointer_cast<T>(object);
+		typedef TypeImpl<T> ObjType;
+		auto *ptype = static_cast<ObjType *>(T::TypeInstance.get());
+		return static_pointer_cast<T>(ptype->GetObject(name));
 	}
 
 	static ConfigObject::Ptr GetObject(const String& type, const String& name);
 
 	static void DumpObjects(const String& filename, int attributeTypes = FAState);
 	static void RestoreObjects(const String& filename, int attributeTypes = FAState);
-	static void StopObjects(void);
+	static void StopObjects();
 
-	static void DumpModifiedAttributes(const boost::function<void(const ConfigObject::Ptr&, const String&, const Value&)>& callback);
+	static void DumpModifiedAttributes(const std::function<void(const ConfigObject::Ptr&, const String&, const Value&)>& callback);
 
-	static Object::Ptr GetPrototype(void);
-
-protected:
-	explicit ConfigObject(void);
+	static Object::Ptr GetPrototype();
 
 private:
 	ConfigObject::Ptr m_Zone;
@@ -105,7 +103,7 @@ private:
 };
 
 #define DECLARE_OBJECTNAME(klass)						\
-	inline static String GetTypeName(void)					\
+	inline static String GetTypeName()					\
 	{									\
 		return #klass;							\
 	}									\
@@ -117,4 +115,4 @@ private:
 
 }
 
-#endif /* DYNAMICOBJECT_H */
+#endif /* CONFIGOBJECT_H */

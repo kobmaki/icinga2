@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,21 +21,42 @@
 
 using namespace icinga;
 
-MinAggregator::MinAggregator(const String& attr)
-    : m_Min(0), m_MinAttr(attr)
+MinAggregator::MinAggregator(String attr)
+	: m_MinAttr(std::move(attr))
 { }
 
-void MinAggregator::Apply(const Table::Ptr& table, const Value& row)
+MinAggregatorState *MinAggregator::EnsureState(AggregatorState **state)
+{
+	if (!*state)
+		*state = new MinAggregatorState();
+
+	return static_cast<MinAggregatorState *>(*state);
+}
+
+void MinAggregator::Apply(const Table::Ptr& table, const Value& row, AggregatorState **state)
 {
 	Column column = table->GetColumn(m_MinAttr);
 
 	Value value = column.ExtractValue(row);
 
-	if (value < m_Min)
-		m_Min = value;
+	MinAggregatorState *pstate = EnsureState(state);
+
+	if (value < pstate->Min)
+		pstate->Min = value;
 }
 
-double MinAggregator::GetResult(void) const
+double MinAggregator::GetResultAndFreeState(AggregatorState *state) const
 {
-	return m_Min;
+	MinAggregatorState *pstate = EnsureState(&state);
+
+	double result;
+
+	if (pstate->Min == DBL_MAX)
+		result = 0;
+	else
+		result = pstate->Min;
+
+	delete pstate;
+
+	return result;
 }

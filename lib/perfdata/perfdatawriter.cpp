@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "perfdata/perfdatawriter.hpp"
-#include "perfdata/perfdatawriter.tcpp"
+#include "perfdata/perfdatawriter-ti.cpp"
 #include "icinga/service.hpp"
 #include "icinga/macroprocessor.hpp"
 #include "icinga/icingaapplication.hpp"
@@ -40,28 +40,39 @@ REGISTER_STATSFUNCTION(PerfdataWriter, &PerfdataWriter::StatsFunc);
 
 void PerfdataWriter::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const PerfdataWriter::Ptr& perfdatawriter, ConfigType::GetObjectsByType<PerfdataWriter>()) {
-		nodes->Set(perfdatawriter->GetName(), 1); //add more stats
+	for (const PerfdataWriter::Ptr& perfdatawriter : ConfigType::GetObjectsByType<PerfdataWriter>()) {
+		nodes.emplace_back(perfdatawriter->GetName(), 1); //add more stats
 	}
 
-	status->Set("perfdatawriter", nodes);
+	status->Set("perfdatawriter", new Dictionary(std::move(nodes)));
 }
 
 void PerfdataWriter::Start(bool runtimeCreated)
 {
 	ObjectImpl<PerfdataWriter>::Start(runtimeCreated);
 
-	Checkable::OnNewCheckResult.connect(boost::bind(&PerfdataWriter::CheckResultHandler, this, _1, _2));
+	Log(LogInformation, "PerfdataWriter")
+		<< "'" << GetName() << "' started.";
+
+	Checkable::OnNewCheckResult.connect(std::bind(&PerfdataWriter::CheckResultHandler, this, _1, _2));
 
 	m_RotationTimer = new Timer();
-	m_RotationTimer->OnTimerExpired.connect(boost::bind(&PerfdataWriter::RotationTimerHandler, this));
+	m_RotationTimer->OnTimerExpired.connect(std::bind(&PerfdataWriter::RotationTimerHandler, this));
 	m_RotationTimer->SetInterval(GetRotationInterval());
 	m_RotationTimer->Start();
 
 	RotateFile(m_ServiceOutputFile, GetServiceTempPath(), GetServicePerfdataPath());
 	RotateFile(m_HostOutputFile, GetHostTempPath(), GetHostPerfdataPath());
+}
+
+void PerfdataWriter::Stop(bool runtimeRemoved)
+{
+	Log(LogInformation, "PerfdataWriter")
+		<< "'" << GetName() << "' stopped.";
+
+	ObjectImpl<PerfdataWriter>::Stop(runtimeRemoved);
 }
 
 Value PerfdataWriter::EscapeMacroMetric(const Value& value)
@@ -89,12 +100,12 @@ void PerfdataWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 
 	MacroProcessor::ResolverList resolvers;
 	if (service)
-		resolvers.push_back(std::make_pair("service", service));
-	resolvers.push_back(std::make_pair("host", host));
-	resolvers.push_back(std::make_pair("icinga", IcingaApplication::GetInstance()));
+		resolvers.emplace_back("service", service);
+	resolvers.emplace_back("host", host);
+	resolvers.emplace_back("icinga", IcingaApplication::GetInstance());
 
 	if (service) {
-		String line = MacroProcessor::ResolveMacros(GetServiceFormatTemplate(), resolvers, cr, NULL, &PerfdataWriter::EscapeMacroMetric);
+		String line = MacroProcessor::ResolveMacros(GetServiceFormatTemplate(), resolvers, cr, nullptr, &PerfdataWriter::EscapeMacroMetric);
 
 		{
 			ObjectLock olock(this);
@@ -104,7 +115,7 @@ void PerfdataWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 			m_ServiceOutputFile << line << "\n";
 		}
 	} else {
-		String line = MacroProcessor::ResolveMacros(GetHostFormatTemplate(), resolvers, cr, NULL, &PerfdataWriter::EscapeMacroMetric);
+		String line = MacroProcessor::ResolveMacros(GetHostFormatTemplate(), resolvers, cr, nullptr, &PerfdataWriter::EscapeMacroMetric);
 
 		{
 			ObjectLock olock(this);
@@ -127,9 +138,9 @@ void PerfdataWriter::RotateFile(std::ofstream& output, const String& temp_path, 
 			String finalFile = perfdata_path + "." + Convert::ToString((long)Utility::GetTime());
 			if (rename(temp_path.CStr(), finalFile.CStr()) < 0) {
 				BOOST_THROW_EXCEPTION(posix_error()
-				    << boost::errinfo_api_function("rename")
-				    << boost::errinfo_errno(errno)
-				    << boost::errinfo_file_name(temp_path));
+					<< boost::errinfo_api_function("rename")
+					<< boost::errinfo_errno(errno)
+					<< boost::errinfo_file_name(temp_path));
 			}
 		}
 	}
@@ -138,27 +149,27 @@ void PerfdataWriter::RotateFile(std::ofstream& output, const String& temp_path, 
 
 	if (!output.good())
 		Log(LogWarning, "PerfdataWriter")
-		    << "Could not open perfdata file '" << temp_path << "' for writing. Perfdata will be lost.";
+			<< "Could not open perfdata file '" << temp_path << "' for writing. Perfdata will be lost.";
 }
 
-void PerfdataWriter::RotationTimerHandler(void)
+void PerfdataWriter::RotationTimerHandler()
 {
 	RotateFile(m_ServiceOutputFile, GetServiceTempPath(), GetServicePerfdataPath());
 	RotateFile(m_HostOutputFile, GetHostTempPath(), GetHostPerfdataPath());
 }
 
-void PerfdataWriter::ValidateHostFormatTemplate(const String& value, const ValidationUtils& utils)
+void PerfdataWriter::ValidateHostFormatTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<PerfdataWriter>::ValidateHostFormatTemplate(value, utils);
+	ObjectImpl<PerfdataWriter>::ValidateHostFormatTemplate(lvalue, utils);
 
-	if (!MacroProcessor::ValidateMacroString(value))
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("host_format_template"), "Closing $ not found in macro format string '" + value + "'."));
+	if (!MacroProcessor::ValidateMacroString(lvalue()))
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "host_format_template" }, "Closing $ not found in macro format string '" + lvalue() + "'."));
 }
 
-void PerfdataWriter::ValidateServiceFormatTemplate(const String& value, const ValidationUtils& utils)
+void PerfdataWriter::ValidateServiceFormatTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils)
 {
-	ObjectImpl<PerfdataWriter>::ValidateServiceFormatTemplate(value, utils);
+	ObjectImpl<PerfdataWriter>::ValidateServiceFormatTemplate(lvalue, utils);
 
-	if (!MacroProcessor::ValidateMacroString(value))
-		BOOST_THROW_EXCEPTION(ValidationError(this, boost::assign::list_of("service_format_template"), "Closing $ not found in macro format string '" + value + "'."));
+	if (!MacroProcessor::ValidateMacroString(lvalue()))
+		BOOST_THROW_EXCEPTION(ValidationError(this, { "service_format_template" }, "Closing $ not found in macro format string '" + lvalue() + "'."));
 }

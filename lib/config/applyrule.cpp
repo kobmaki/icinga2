@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,7 +19,6 @@
 
 #include "config/applyrule.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 #include <set>
 
 using namespace icinga;
@@ -27,71 +26,71 @@ using namespace icinga;
 ApplyRule::RuleMap ApplyRule::m_Rules;
 ApplyRule::TypeMap ApplyRule::m_Types;
 
-ApplyRule::ApplyRule(const String& targetType, const String& name, const boost::shared_ptr<Expression>& expression,
-    const boost::shared_ptr<Expression>& filter, const String& package, const String& fkvar, const String& fvvar, const boost::shared_ptr<Expression>& fterm,
-    bool ignoreOnError, const DebugInfo& di, const Dictionary::Ptr& scope)
-	: m_TargetType(targetType), m_Name(name), m_Expression(expression), m_Filter(filter), m_Package(package), m_FKVar(fkvar),
-	  m_FVVar(fvvar), m_FTerm(fterm), m_IgnoreOnError(ignoreOnError), m_DebugInfo(di), m_Scope(scope), m_HasMatches(false)
+ApplyRule::ApplyRule(String targetType, String name, std::shared_ptr<Expression> expression,
+	std::shared_ptr<Expression> filter, String package, String fkvar, String fvvar, std::shared_ptr<Expression> fterm,
+	bool ignoreOnError, DebugInfo di, Dictionary::Ptr scope)
+	: m_TargetType(std::move(targetType)), m_Name(std::move(name)), m_Expression(std::move(expression)), m_Filter(std::move(filter)), m_Package(std::move(package)), m_FKVar(std::move(fkvar)),
+	m_FVVar(std::move(fvvar)), m_FTerm(std::move(fterm)), m_IgnoreOnError(ignoreOnError), m_DebugInfo(std::move(di)), m_Scope(std::move(scope)), m_HasMatches(false)
 { }
 
-String ApplyRule::GetTargetType(void) const
+String ApplyRule::GetTargetType() const
 {
 	return m_TargetType;
 }
 
-String ApplyRule::GetName(void) const
+String ApplyRule::GetName() const
 {
 	return m_Name;
 }
 
-boost::shared_ptr<Expression> ApplyRule::GetExpression(void) const
+std::shared_ptr<Expression> ApplyRule::GetExpression() const
 {
 	return m_Expression;
 }
 
-boost::shared_ptr<Expression> ApplyRule::GetFilter(void) const
+std::shared_ptr<Expression> ApplyRule::GetFilter() const
 {
 	return m_Filter;
 }
 
-String ApplyRule::GetPackage(void) const
+String ApplyRule::GetPackage() const
 {
 	return m_Package;
 }
 
-String ApplyRule::GetFKVar(void) const
+String ApplyRule::GetFKVar() const
 {
 	return m_FKVar;
 }
 
-String ApplyRule::GetFVVar(void) const
+String ApplyRule::GetFVVar() const
 {
 	return m_FVVar;
 }
 
-boost::shared_ptr<Expression> ApplyRule::GetFTerm(void) const
+std::shared_ptr<Expression> ApplyRule::GetFTerm() const
 {
 	return m_FTerm;
 }
 
-bool ApplyRule::GetIgnoreOnError(void) const
+bool ApplyRule::GetIgnoreOnError() const
 {
 	return m_IgnoreOnError;
 }
 
-DebugInfo ApplyRule::GetDebugInfo(void) const
+DebugInfo ApplyRule::GetDebugInfo() const
 {
 	return m_DebugInfo;
 }
 
-Dictionary::Ptr ApplyRule::GetScope(void) const
+Dictionary::Ptr ApplyRule::GetScope() const
 {
 	return m_Scope;
 }
 
 void ApplyRule::AddRule(const String& sourceType, const String& targetType, const String& name,
-    const boost::shared_ptr<Expression>& expression, const boost::shared_ptr<Expression>& filter, const String& package, const String& fkvar,
-    const String& fvvar, const boost::shared_ptr<Expression>& fterm, bool ignoreOnError, const DebugInfo& di, const Dictionary::Ptr& scope)
+	const std::shared_ptr<Expression>& expression, const std::shared_ptr<Expression>& filter, const String& package, const String& fkvar,
+	const String& fvvar, const std::shared_ptr<Expression>& fterm, bool ignoreOnError, const DebugInfo& di, const Dictionary::Ptr& scope)
 {
 	m_Rules[sourceType].push_back(ApplyRule(targetType, name, expression, filter, package, fkvar, fvvar, fterm, ignoreOnError, di, scope));
 }
@@ -113,7 +112,7 @@ bool ApplyRule::IsValidSourceType(const String& sourceType)
 
 bool ApplyRule::IsValidTargetType(const String& sourceType, const String& targetType)
 {
-	TypeMap::const_iterator it = m_Types.find(sourceType);
+	auto it = m_Types.find(sourceType);
 
 	if (it == m_Types.end())
 		return false;
@@ -121,7 +120,7 @@ bool ApplyRule::IsValidTargetType(const String& sourceType, const String& target
 	if (it->second.size() == 1 && targetType == "")
 		return true;
 
-	BOOST_FOREACH(const String& type, it->second) {
+	for (const String& type : it->second) {
 		if (type == targetType)
 			return true;
 	}
@@ -131,7 +130,7 @@ bool ApplyRule::IsValidTargetType(const String& sourceType, const String& target
 
 std::vector<String> ApplyRule::GetTargetTypes(const String& sourceType)
 {
-	TypeMap::const_iterator it = m_Types.find(sourceType);
+	auto it = m_Types.find(sourceType);
 
 	if (it == m_Types.end())
 		return std::vector<String>();
@@ -139,19 +138,19 @@ std::vector<String> ApplyRule::GetTargetTypes(const String& sourceType)
 	return it->second;
 }
 
-void ApplyRule::AddMatch(void)
+void ApplyRule::AddMatch()
 {
 	m_HasMatches = true;
 }
 
-bool ApplyRule::HasMatches(void) const
+bool ApplyRule::HasMatches() const
 {
 	return m_HasMatches;
 }
 
 std::vector<ApplyRule>& ApplyRule::GetRules(const String& type)
 {
-	RuleMap::iterator it = m_Rules.find(type);
+	auto it = m_Rules.find(type);
 	if (it == m_Rules.end()) {
 		static std::vector<ApplyRule> emptyList;
 		return emptyList;
@@ -159,19 +158,13 @@ std::vector<ApplyRule>& ApplyRule::GetRules(const String& type)
 	return it->second;
 }
 
-void ApplyRule::CheckMatches(void)
+void ApplyRule::CheckMatches()
 {
-	BOOST_FOREACH(const RuleMap::value_type& kv, m_Rules) {
-		BOOST_FOREACH(const ApplyRule& rule, kv.second) {
+	for (const RuleMap::value_type& kv : m_Rules) {
+		for (const ApplyRule& rule : kv.second) {
 			if (!rule.HasMatches())
 				Log(LogWarning, "ApplyRule")
-				    << "Apply rule '" << rule.GetName() << "' (" << rule.GetDebugInfo() << ") for type '" << kv.first << "' does not match anywhere!";
+					<< "Apply rule '" << rule.GetName() << "' (" << rule.GetDebugInfo() << ") for type '" << kv.first << "' does not match anywhere!";
 		}
 	}
 }
-
-void ApplyRule::DiscardRules(void)
-{
-	m_Rules.clear();
-}
-

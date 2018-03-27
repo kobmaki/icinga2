@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,21 +20,44 @@
 #include "methods/icingachecktask.hpp"
 #include "icinga/cib.hpp"
 #include "icinga/service.hpp"
+#include "icinga/checkcommand.hpp"
+#include "icinga/macroprocessor.hpp"
 #include "icinga/icingaapplication.hpp"
-#include "icinga/perfdatavalue.hpp"
+#include "icinga/clusterevents.hpp"
+#include "icinga/checkable.hpp"
 #include "base/application.hpp"
 #include "base/objectlock.hpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/function.hpp"
 #include "base/configtype.hpp"
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(IcingaCheck, &IcingaCheckTask::ScriptFunc);
+REGISTER_SCRIPTFUNCTION_NS(Internal, IcingaCheck, &IcingaCheckTask::ScriptFunc, "checkable:cr:resolvedMacros:useResolvedMacros");
 
-void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& service, const CheckResult::Ptr& cr,
-    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
+void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr,
+	const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
 {
+	REQUIRE_NOT_NULL(checkable);
+	REQUIRE_NOT_NULL(cr);
+
+	CheckCommand::Ptr commandObj = checkable->GetCheckCommand();
+
+	Host::Ptr host;
+	Service::Ptr service;
+	tie(host, service) = GetHostService(checkable);
+
+	MacroProcessor::ResolverList resolvers;
+	if (service)
+		resolvers.emplace_back("service", service);
+	resolvers.emplace_back("host", host);
+	resolvers.emplace_back("command", commandObj);
+	resolvers.emplace_back("icinga", IcingaApplication::GetInstance());
+
+	String icingaMinVersion = MacroProcessor::ResolveMacros("$icinga_min_version$", resolvers, checkable->GetLastCheckResult(),
+		nullptr, MacroProcessor::EscapeCallback(), resolvedMacros, useResolvedMacros);
+
 	if (resolvedMacros && !useResolvedMacros)
 		return;
 
@@ -43,7 +66,10 @@ void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& service, const CheckResul
 	if (interval > 60)
 		interval = 60;
 
-	Array::Ptr perfdata = new Array();
+	/* use feature stats perfdata */
+	std::pair<Dictionary::Ptr, Array::Ptr> feature_stats = CIB::GetFeatureStats();
+
+	Array::Ptr perfdata = feature_stats.second;
 
 	perfdata->Add(new PerfdataValue("active_host_checks", CIB::GetActiveHostChecksStatistics(interval) / interval));
 	perfdata->Add(new PerfdataValue("passive_host_checks", CIB::GetPassiveHostChecksStatistics(interval) / interval));
@@ -63,13 +89,16 @@ void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& service, const CheckResul
 	perfdata->Add(new PerfdataValue("active_service_checks_15min", CIB::GetActiveServiceChecksStatistics(60 * 15)));
 	perfdata->Add(new PerfdataValue("passive_service_checks_15min", CIB::GetPassiveServiceChecksStatistics(60 * 15)));
 
+	perfdata->Add(new PerfdataValue("current_concurrent_checks", Checkable::GetPendingChecks()));
+	perfdata->Add(new PerfdataValue("remote_check_queue", ClusterEvents::GetCheckRequestQueueSize()));
+
 	CheckableCheckStatistics scs = CIB::CalculateServiceCheckStats();
 
 	perfdata->Add(new PerfdataValue("min_latency", scs.min_latency));
 	perfdata->Add(new PerfdataValue("max_latency", scs.max_latency));
 	perfdata->Add(new PerfdataValue("avg_latency", scs.avg_latency));
-	perfdata->Add(new PerfdataValue("min_execution_time", scs.min_latency));
-	perfdata->Add(new PerfdataValue("max_execution_time", scs.max_latency));
+	perfdata->Add(new PerfdataValue("min_execution_time", scs.min_execution_time));
+	perfdata->Add(new PerfdataValue("max_execution_time", scs.max_execution_time));
 	perfdata->Add(new PerfdataValue("avg_execution_time", scs.avg_execution_time));
 
 	ServiceStatistics ss = CIB::CalculateServiceStats();
@@ -97,17 +126,61 @@ void IcingaCheckTask::ScriptFunc(const Checkable::Ptr& service, const CheckResul
 	perfdata->Add(new PerfdataValue("num_hosts_in_downtime", hs.hosts_in_downtime));
 	perfdata->Add(new PerfdataValue("num_hosts_acknowledged", hs.hosts_acknowledged));
 
-	cr->SetOutput("Icinga 2 has been running for " + Utility::FormatDuration(uptime) +
-	    ". Version: " + Application::GetAppVersion());
-	cr->SetPerformanceData(perfdata);
+	std::vector<Endpoint::Ptr> endpoints = ConfigType::GetObjectsByType<Endpoint>();
 
+	double lastMessageSent = 0;
+	double lastMessageReceived = 0;
+	double messagesSentPerSecond = 0;
+	double messagesReceivedPerSecond = 0;
+	double bytesSentPerSecond = 0;
+	double bytesReceivedPerSecond = 0;
+
+	for (const Endpoint::Ptr& endpoint : endpoints)
+	{
+		if (endpoint->GetLastMessageSent() > lastMessageSent)
+			lastMessageSent = endpoint->GetLastMessageSent();
+
+		if (endpoint->GetLastMessageReceived() > lastMessageReceived)
+			lastMessageReceived = endpoint->GetLastMessageReceived();
+
+		messagesSentPerSecond += endpoint->GetMessagesSentPerSecond();
+		messagesReceivedPerSecond += endpoint->GetMessagesReceivedPerSecond();
+		bytesSentPerSecond += endpoint->GetBytesSentPerSecond();
+		bytesReceivedPerSecond += endpoint->GetBytesReceivedPerSecond();
+	}
+
+	perfdata->Add(new PerfdataValue("last_messages_sent", lastMessageSent));
+	perfdata->Add(new PerfdataValue("last_messages_received", lastMessageReceived));
+	perfdata->Add(new PerfdataValue("sum_messages_sent_per_second", messagesSentPerSecond));
+	perfdata->Add(new PerfdataValue("sum_messages_received_per_second", messagesReceivedPerSecond));
+	perfdata->Add(new PerfdataValue("sum_bytes_sent_per_second", bytesSentPerSecond));
+	perfdata->Add(new PerfdataValue("sum_bytes_received_per_second", bytesReceivedPerSecond));
+
+	cr->SetPerformanceData(perfdata);
+	cr->SetState(ServiceOK);
+
+	String appVersion = Application::GetAppVersion();
+
+	String output = "Icinga 2 has been running for " + Utility::FormatDuration(uptime) +
+		". Version: " + appVersion;
+
+	/* Indicate a warning if the last reload failed. */
 	double lastReloadFailed = Application::GetLastReloadFailed();
 
 	if (lastReloadFailed > 0) {
-		cr->SetOutput(cr->GetOutput() + "; Last reload attempt failed at " + Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", lastReloadFailed));
+		output += "; Last reload attempt failed at " + Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", lastReloadFailed);
 		cr->SetState(ServiceWarning);
-	} else
-		cr->SetState(ServiceOK);
+	}
 
-	service->ProcessCheckResult(cr);
+	/* Return an error if the version is less than specified (optional). */
+	String parsedAppVersion = appVersion.SubStr(1,5);
+
+	if (!icingaMinVersion.IsEmpty() && Utility::CompareVersion(icingaMinVersion, parsedAppVersion) < 0) {
+		output += "; Minimum version " + icingaMinVersion + " is not installed.";
+		cr->SetState(ServiceCritical);
+	}
+
+	cr->SetOutput(output);
+
+	checkable->ProcessCheckResult(cr);
 }

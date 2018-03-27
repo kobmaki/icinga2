@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -21,10 +21,65 @@ else()
   set(WindowsSources "")
 endif()
 
-add_executable(icinga-app icinga.cpp ${WindowsSources})
+set(icingaloader_SOURCES
+  icinga.cpp
+  ${WindowsSources}
+)
+
+add_library(icingaloader OBJECT ${icingaloader_SOURCES})
+add_dependencies(icingaloader base config cli)
+
+set_target_properties (
+  icingaloader PROPERTIES
+  FOLDER Lib
+)
 
 include_directories(${Boost_INCLUDE_DIRS})
-target_link_libraries(icinga-app ${Boost_LIBRARIES} base config cli)
+
+if(ICINGA2_WITH_CHECKER)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:checker>)
+endif()
+
+if(ICINGA2_WITH_COMPAT)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:compat>)
+endif()
+
+if(ICINGA2_WITH_MYSQL OR ICINGA2_WITH_PGSQL)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:db_ido>)
+endif()
+
+if(ICINGA2_WITH_MYSQL)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:db_ido_mysql>)
+endif()
+
+if(ICINGA2_WITH_PGSQL)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:db_ido_pgsql>)
+endif()
+
+if(ICINGA2_WITH_LIVESTATUS)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:livestatus>)
+endif()
+
+if(ICINGA2_WITH_NOTIFICATION)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:notification>)
+endif()
+
+if(ICINGA2_WITH_PERFDATA)
+  list(APPEND icinga_app_SOURCES $<TARGET_OBJECTS:perfdata>)
+endif()
+
+add_executable(icinga-app
+  $<TARGET_OBJECTS:icingaloader>
+  ${base_OBJS}
+  $<TARGET_OBJECTS:config>
+  $<TARGET_OBJECTS:remote>
+  $<TARGET_OBJECTS:cli>
+  $<TARGET_OBJECTS:icinga>
+  $<TARGET_OBJECTS:methods>
+  ${icinga_app_SOURCES}
+)
+
+target_link_libraries(icinga-app ${base_DEPS})
 
 set_target_properties (
   icinga-app PROPERTIES

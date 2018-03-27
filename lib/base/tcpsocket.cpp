@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -58,25 +58,25 @@ void TcpSocket::Bind(const String& node, const String& service, int family)
 	hints.ai_protocol = IPPROTO_TCP;
 	hints.ai_flags = AI_PASSIVE;
 
-	int rc = getaddrinfo(node.IsEmpty() ? NULL : node.CStr(),
-	    service.CStr(), &hints, &result);
+	int rc = getaddrinfo(node.IsEmpty() ? nullptr : node.CStr(),
+		service.CStr(), &hints, &result);
 
 	if (rc != 0) {
 		Log(LogCritical, "TcpSocket")
-		    << "getaddrinfo() failed with error code " << rc << ", \"" << gai_strerror(rc) << "\"";
+			<< "getaddrinfo() failed with error code " << rc << ", \"" << gai_strerror(rc) << "\"";
 
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function("getaddrinfo")
-		    << errinfo_getaddrinfo_error(rc));
+			<< boost::errinfo_api_function("getaddrinfo")
+			<< errinfo_getaddrinfo_error(rc));
 	}
 
 	int fd = INVALID_SOCKET;
 
-	for (addrinfo *info = result; info != NULL; info = info->ai_next) {
+	for (addrinfo *info = result; info != nullptr; info = info->ai_next) {
 		fd = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
 
 		if (fd == INVALID_SOCKET) {
-#ifdef _WIN32           
+#ifdef _WIN32
 			error = WSAGetLastError();
 #else /* _WIN32 */
 			error = errno;
@@ -118,16 +118,16 @@ void TcpSocket::Bind(const String& node, const String& service, int family)
 
 	if (GetFD() == INVALID_SOCKET) {
 		Log(LogCritical, "TcpSocket")
-		    << "Invalid socket: " << Utility::FormatErrorNumber(error);
+			<< "Invalid socket: " << Utility::FormatErrorNumber(error);
 
 #ifndef _WIN32
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function(func)
-		    << boost::errinfo_errno(error));
+			<< boost::errinfo_api_function(func)
+			<< boost::errinfo_errno(error));
 #else /* _WIN32 */
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function(func)
-		    << errinfo_win32_error(error));
+			<< boost::errinfo_api_function(func)
+			<< errinfo_win32_error(error));
 #endif /* _WIN32 */
 	}
 }
@@ -154,16 +154,16 @@ void TcpSocket::Connect(const String& node, const String& service)
 
 	if (rc != 0) {
 		Log(LogCritical, "TcpSocket")
-		    << "getaddrinfo() failed with error code " << rc << ", \"" << gai_strerror(rc) << "\"";
+			<< "getaddrinfo() failed with error code " << rc << ", \"" << gai_strerror(rc) << "\"";
 
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function("getaddrinfo")
-		    << errinfo_getaddrinfo_error(rc));
+			<< boost::errinfo_api_function("getaddrinfo")
+			<< errinfo_getaddrinfo_error(rc));
 	}
 
-	int fd = INVALID_SOCKET;
+	SOCKET fd = INVALID_SOCKET;
 
-	for (addrinfo *info = result; info != NULL; info = info->ai_next) {
+	for (addrinfo *info = result; info != nullptr; info = info->ai_next) {
 		fd = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
 
 		if (fd == INVALID_SOCKET) {
@@ -185,7 +185,7 @@ void TcpSocket::Connect(const String& node, const String& service)
 			error = errno;
 #endif /* _WIN32 */
 			Log(LogWarning, "TcpSocket")
-			    << "setsockopt() unable to enable TCP keep-alives with error code " << rc;
+				<< "setsockopt() unable to enable TCP keep-alives with error code " << rc;
 		}
 
 		rc = connect(fd, info->ai_addr, info->ai_addrlen);
@@ -212,16 +212,16 @@ void TcpSocket::Connect(const String& node, const String& service)
 
 	if (GetFD() == INVALID_SOCKET) {
 		Log(LogCritical, "TcpSocket")
-		    << "Invalid socket: " << Utility::FormatErrorNumber(error);
+			<< "Invalid socket: " << Utility::FormatErrorNumber(error);
 
 #ifndef _WIN32
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function(func)
-		    << boost::errinfo_errno(error));
+			<< boost::errinfo_api_function(func)
+			<< boost::errinfo_errno(error));
 #else /* _WIN32 */
 		BOOST_THROW_EXCEPTION(socket_error()
-		    << boost::errinfo_api_function(func)
-		    << errinfo_win32_error(error));
+			<< boost::errinfo_api_function(func)
+			<< errinfo_win32_error(error));
 #endif /* _WIN32 */
 	}
 }

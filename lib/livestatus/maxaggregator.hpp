@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,19 +29,28 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API MaxAggregator : public Aggregator
+struct MaxAggregatorState final : public AggregatorState
+{
+	double Max{0};
+};
+
+/**
+ * @ingroup livestatus
+ */
+class MaxAggregator final : public Aggregator
 {
 public:
 	DECLARE_PTR_TYPEDEFS(MaxAggregator);
 
-	MaxAggregator(const String& attr);
+	MaxAggregator(String attr);
 
-	virtual void Apply(const Table::Ptr& table, const Value& row) override;
-	virtual double GetResult(void) const override;
+	void Apply(const Table::Ptr& table, const Value& row, AggregatorState **state) override;
+	double GetResultAndFreeState(AggregatorState *state) const override;
 
 private:
-	double m_Max;
 	String m_MaxAttr;
+
+	static MaxAggregatorState *EnsureState(AggregatorState **state);
 };
 
 }

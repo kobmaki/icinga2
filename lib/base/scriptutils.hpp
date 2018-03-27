@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,13 +33,16 @@ namespace icinga
 /**
  * @ingroup base
  */
-class I2_BASE_API ScriptUtils
+class ScriptUtils
 {
 public:
+	static void StaticInitialize();
 	static String CastString(const Value& value);
 	static double CastNumber(const Value& value);
 	static bool CastBool(const Value& value);
-	static bool Regex(const String& pattern, const String& text);
+	static bool Regex(const std::vector<Value>& args);
+	static bool Match(const std::vector<Value>& args);
+	static bool CidrMatch(const std::vector<Value>& args);
 	static double Len(const Value& value);
 	static Array::Ptr Union(const std::vector<Value>& arguments);
 	static Array::Ptr Intersection(const std::vector<Value>& arguments);
@@ -53,9 +56,11 @@ public:
 	static String MsiGetComponentPathShim(const String& component);
 	static Array::Ptr TrackParents(const Object::Ptr& parent);
 	static double Ptr(const Object::Ptr& object);
+	static Value Glob(const std::vector<Value>& args);
+	static Value GlobRecursive(const std::vector<Value>& args);
 
 private:
-	ScriptUtils(void);
+	ScriptUtils();
 };
 
 }

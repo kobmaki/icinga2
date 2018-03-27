@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,7 +26,6 @@
 #include "base/convert.hpp"
 #include "base/objectlock.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
 #include <fstream>
 
 using namespace icinga;
@@ -35,19 +34,48 @@ Dictionary::Ptr ScriptGlobal::m_Globals = new Dictionary();
 
 Value ScriptGlobal::Get(const String& name, const Value *defaultValue)
 {
-	if (!m_Globals->Contains(name)) {
+	Value result;
+
+	if (!m_Globals->Get(name, &result)) {
 		if (defaultValue)
 			return *defaultValue;
 
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Tried to access undefined script variable '" + name + "'"));
 	}
 
-	return m_Globals->Get(name);
+	return result;
 }
 
 void ScriptGlobal::Set(const String& name, const Value& value)
 {
-	m_Globals->Set(name, value);
+	std::vector<String> tokens = name.Split(".");
+
+	if (tokens.empty())
+		BOOST_THROW_EXCEPTION(std::invalid_argument("Name must not be empty"));
+
+	{
+		ObjectLock olock(m_Globals);
+
+		Dictionary::Ptr parent = m_Globals;
+
+		for (std::vector<String>::size_type i = 0; i < tokens.size(); i++) {
+			const String& token = tokens[i];
+
+			if (i + 1 != tokens.size()) {
+				Value vparent;
+
+				if (!parent->Get(token, &vparent)) {
+					Dictionary::Ptr dict = new Dictionary();
+					parent->Set(token, dict);
+					parent = dict;
+				} else {
+					parent = vparent;
+				}
+			}
+		}
+
+		parent->Set(tokens[tokens.size() - 1], value);
+	}
 }
 
 bool ScriptGlobal::Exists(const String& name)
@@ -55,7 +83,7 @@ bool ScriptGlobal::Exists(const String& name)
 	return m_Globals->Contains(name);
 }
 
-Dictionary::Ptr ScriptGlobal::GetGlobals(void)
+Dictionary::Ptr ScriptGlobal::GetGlobals()
 {
 	return m_Globals;
 }
@@ -74,17 +102,16 @@ void ScriptGlobal::WriteToFile(const String& filename)
 	StdioStream::Ptr sfp = new StdioStream(&fp, false);
 
 	ObjectLock olock(m_Globals);
-	BOOST_FOREACH(const Dictionary::Pair& kv, m_Globals) {
-		Dictionary::Ptr persistentVariable = new Dictionary();
-
-		persistentVariable->Set("name", kv.first);
-
+	for (const Dictionary::Pair& kv : m_Globals) {
 		Value value = kv.second;
 
 		if (value.IsObject())
 			value = Convert::ToString(value);
 
-		persistentVariable->Set("value", value);
+		Dictionary::Ptr persistentVariable = new Dictionary({
+			{ "name", kv.first },
+			{ "value", value }
+		});
 
 		String json = JsonEncode(persistentVariable);
 

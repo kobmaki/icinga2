@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,30 +22,29 @@
 #include "base/objectlock.hpp"
 #include "base/debug.hpp"
 #include <boost/thread/once.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-DbType::DbType(const String& name, const String& table, long tid, const String& idcolumn, const DbType::ObjectFactory& factory)
-	: m_Name(name), m_Table(table), m_TypeID(tid), m_IDColumn(idcolumn), m_ObjectFactory(factory)
+DbType::DbType(String name, String table, long tid, String idcolumn, DbType::ObjectFactory factory)
+	: m_Name(std::move(name)), m_Table(std::move(table)), m_TypeID(tid), m_IDColumn(std::move(idcolumn)), m_ObjectFactory(std::move(factory))
 { }
 
-String DbType::GetName(void) const
+String DbType::GetName() const
 {
 	return m_Name;
 }
 
-String DbType::GetTable(void) const
+String DbType::GetTable() const
 {
 	return m_Table;
 }
 
-long DbType::GetTypeID(void) const
+long DbType::GetTypeID() const
 {
 	return m_TypeID;
 }
 
-String DbType::GetIDColumn(void) const
+String DbType::GetIDColumn() const
 {
 	return m_IDColumn;
 }
@@ -66,10 +65,10 @@ DbType::Ptr DbType::GetByName(const String& name)
 		typeName = name;
 
 	boost::mutex::scoped_lock lock(GetStaticMutex());
-	DbType::TypeMap::const_iterator it = GetTypes().find(typeName);
+	auto it = GetTypes().find(typeName);
 
 	if (it == GetTypes().end())
-		return DbType::Ptr();
+		return nullptr;
 
 	return it->second;
 }
@@ -78,19 +77,19 @@ DbType::Ptr DbType::GetByID(long tid)
 {
 	boost::mutex::scoped_lock lock(GetStaticMutex());
 
-	BOOST_FOREACH(const TypeMap::value_type& kv, GetTypes()) {
+	for (const TypeMap::value_type& kv : GetTypes()) {
 		if (kv.second->GetTypeID() == tid)
 			return kv.second;
 	}
 
-	return DbType::Ptr();
+	return nullptr;
 }
 
 DbObject::Ptr DbType::GetOrCreateObjectByName(const String& name1, const String& name2)
 {
 	ObjectLock olock(this);
 
-	DbType::ObjectMap::const_iterator it = m_Objects.find(std::make_pair(name1, name2));
+	auto it = m_Objects.find(std::make_pair(name1, name2));
 
 	if (it != m_Objects.end())
 		return it->second;
@@ -123,7 +122,7 @@ DbObject::Ptr DbType::GetOrCreateObjectByName(const String& name1, const String&
 	return dbobj;
 }
 
-boost::mutex& DbType::GetStaticMutex(void)
+boost::mutex& DbType::GetStaticMutex()
 {
 	static boost::mutex mutex;
 	return mutex;
@@ -132,26 +131,27 @@ boost::mutex& DbType::GetStaticMutex(void)
 /**
  * Caller must hold static mutex.
  */
-DbType::TypeMap& DbType::GetTypes(void)
+DbType::TypeMap& DbType::GetTypes()
 {
 	static DbType::TypeMap tm;
 	return tm;
 }
 
-std::set<DbType::Ptr> DbType::GetAllTypes(void)
+std::set<DbType::Ptr> DbType::GetAllTypes()
 {
 	std::set<DbType::Ptr> result;
 
-	boost::mutex::scoped_lock lock(GetStaticMutex());
-	std::pair<String, DbType::Ptr> kv;
-	BOOST_FOREACH(kv, GetTypes()) {
-		result.insert(kv.second);
+	{
+		boost::mutex::scoped_lock lock(GetStaticMutex());
+		for (const auto& kv : GetTypes()) {
+			result.insert(kv.second);
+		}
 	}
 
 	return result;
 }
 
-DbTypeRegistry *DbTypeRegistry::GetInstance(void)
+DbTypeRegistry *DbTypeRegistry::GetInstance()
 {
 	return Singleton<DbTypeRegistry>::GetInstance();
 }

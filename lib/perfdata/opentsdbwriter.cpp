@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,27 +18,24 @@
  ******************************************************************************/
 
 #include "perfdata/opentsdbwriter.hpp"
-#include "perfdata/opentsdbwriter.tcpp"
+#include "perfdata/opentsdbwriter-ti.cpp"
 #include "icinga/service.hpp"
 #include "icinga/macroprocessor.hpp"
 #include "icinga/icingaapplication.hpp"
 #include "icinga/compatutility.hpp"
-#include "icinga/perfdatavalue.hpp"
 #include "base/tcpsocket.hpp"
 #include "base/configtype.hpp"
 #include "base/objectlock.hpp"
 #include "base/logger.hpp"
 #include "base/convert.hpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/application.hpp"
 #include "base/stream.hpp"
 #include "base/networkstream.hpp"
 #include "base/exception.hpp"
 #include "base/statsfunction.hpp"
 #include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/replace.hpp>
 
 using namespace icinga;
@@ -49,29 +46,40 @@ REGISTER_STATSFUNCTION(OpenTsdbWriter, &OpenTsdbWriter::StatsFunc);
 
 void OpenTsdbWriter::StatsFunc(const Dictionary::Ptr& status, const Array::Ptr&)
 {
-	Dictionary::Ptr nodes = new Dictionary();
+	DictionaryData nodes;
 
-	BOOST_FOREACH(const OpenTsdbWriter::Ptr& opentsdbwriter, ConfigType::GetObjectsByType<OpenTsdbWriter>()) {
-		nodes->Set(opentsdbwriter->GetName(), 1); //add more stats
+	for (const OpenTsdbWriter::Ptr& opentsdbwriter : ConfigType::GetObjectsByType<OpenTsdbWriter>()) {
+		nodes.emplace_back(opentsdbwriter->GetName(), 1); //add more stats
 	}
 
-	status->Set("opentsdbwriter", nodes);
+	status->Set("opentsdbwriter", new Dictionary(std::move(nodes)));
 }
 
 void OpenTsdbWriter::Start(bool runtimeCreated)
 {
 	ObjectImpl<OpenTsdbWriter>::Start(runtimeCreated);
 
+	Log(LogInformation, "OpentsdbWriter")
+		<< "'" << GetName() << "' started.";
+
 	m_ReconnectTimer = new Timer();
 	m_ReconnectTimer->SetInterval(10);
-	m_ReconnectTimer->OnTimerExpired.connect(boost::bind(&OpenTsdbWriter::ReconnectTimerHandler, this));
+	m_ReconnectTimer->OnTimerExpired.connect(std::bind(&OpenTsdbWriter::ReconnectTimerHandler, this));
 	m_ReconnectTimer->Start();
 	m_ReconnectTimer->Reschedule(0);
 
-	Service::OnNewCheckResult.connect(boost::bind(&OpenTsdbWriter::CheckResultHandler, this, _1, _2));
+	Service::OnNewCheckResult.connect(std::bind(&OpenTsdbWriter::CheckResultHandler, this, _1, _2));
 }
 
-void OpenTsdbWriter::ReconnectTimerHandler(void)
+void OpenTsdbWriter::Stop(bool runtimeRemoved)
+{
+	Log(LogInformation, "OpentsdbWriter")
+		<< "'" << GetName() << "' stopped.";
+
+	ObjectImpl<OpenTsdbWriter>::Stop(runtimeRemoved);
+}
+
+void OpenTsdbWriter::ReconnectTimerHandler()
 {
 	if (m_Stream)
 		return;
@@ -110,7 +118,7 @@ void OpenTsdbWriter::CheckResultHandler(const Checkable::Ptr& checkable, const C
 	String metric;
 	std::map<String, String> tags;
 
-	String escaped_hostName = EscapeMetric(host->GetName());
+	String escaped_hostName = EscapeTag(host->GetName());
 	tags["host"] = escaped_hostName;
 
 	double ts = cr->GetExecutionEnd();
@@ -158,7 +166,7 @@ void OpenTsdbWriter::SendPerfdata(const String& metric, const std::map<String, S
 		return;
 
 	ObjectLock olock(perfdata);
-	BOOST_FOREACH(const Value& val, perfdata) {
+	for (const Value& val : perfdata) {
 		PerfdataValue::Ptr pdv;
 
 		if (val.IsObjectType<PerfdataValue>())
@@ -192,7 +200,7 @@ void OpenTsdbWriter::SendPerfdata(const String& metric, const std::map<String, S
 void OpenTsdbWriter::SendMetric(const String& metric, const std::map<String, String>& tags, double value, double ts)
 {
 	String tags_string = "";
-	BOOST_FOREACH(const Dictionary::Pair& tag, tags) {
+	for (const Dictionary::Pair& tag : tags) {
 		tags_string += " " + tag.first + "=" + Convert::ToString(tag.second);
 	}
 

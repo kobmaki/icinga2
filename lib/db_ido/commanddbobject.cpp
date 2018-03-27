@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,7 +24,6 @@
 #include "icinga/compatutility.hpp"
 #include "base/objectlock.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -34,22 +33,16 @@ CommandDbObject::CommandDbObject(const DbType::Ptr& type, const String& name1, c
 	: DbObject(type, name1, name2)
 { }
 
-Dictionary::Ptr CommandDbObject::GetConfigFields(void) const
+Dictionary::Ptr CommandDbObject::GetConfigFields() const
 {
-	Dictionary::Ptr fields = new Dictionary();
 	Command::Ptr command = static_pointer_cast<Command>(GetObject());
 
-	fields->Set("command_line", CompatUtility::GetCommandLine(command));
-
-	return fields;
+	return new Dictionary({
+		{ "command_line", CompatUtility::GetCommandLine(command) }
+	});
 }
 
-Dictionary::Ptr CommandDbObject::GetStatusFields(void) const
+Dictionary::Ptr CommandDbObject::GetStatusFields() const
 {
-	return Empty;
-}
-
-void CommandDbObject::OnConfigUpdate(void)
-{
-	return;
+	return nullptr;
 }

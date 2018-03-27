@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,23 +15,13 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-add_library(execvpe SHARED execvpe.c execvpe.h)
+set(execvpe_SOURCES
+  execvpe.c execvpe.h
+)
+
+add_library(execvpe OBJECT ${execvpe_SOURCES})
 
 set_target_properties (
   execvpe PROPERTIES
-  DEFINE_SYMBOL I2_EXECVPE_BUILD
   FOLDER Lib
 )
-
-install(
-  TARGETS execvpe
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
-)
-
-if(APPLE)
-  install(
-    TARGETS execvpe
-    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/icinga-studio.app/Contents
-  )
-endif()

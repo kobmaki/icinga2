@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,27 +15,13 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-add_library(socketpair SHARED socketpair.c socketpair.h)
+set(socketpair_SOURCES
+  socketpair.c socketpair.h
+)
+
+add_library(socketpair OBJECT ${socketpair_SOURCES})
 
 set_target_properties (
   socketpair PROPERTIES
-  DEFINE_SYMBOL I2_SOCKETPAIR_BUILD
   FOLDER Lib
 )
-
-if(WIN32)
-  target_link_libraries(socketpair ws2_32)
-endif()
-
-install(
-  TARGETS socketpair
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
-)
-
-if(APPLE)
-  install(
-    TARGETS socketpair
-    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/icinga-studio.app/Contents
-  )
-endif()

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,17 +24,16 @@
 #include "base/configtype.hpp"
 #include "base/objectlock.hpp"
 #include <boost/tuple/tuple.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-CommentsTable::CommentsTable(void)
+CommentsTable::CommentsTable()
 {
 	AddColumns(this);
 }
 
 void CommentsTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "author", Column(&CommentsTable::AuthorAccessor, objectAccessor));
 	table->AddColumn(prefix + "comment", Column(&CommentsTable::CommentAccessor, objectAccessor));
@@ -49,23 +48,23 @@ void CommentsTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "expire_time", Column(&CommentsTable::ExpireTimeAccessor, objectAccessor));
 
 	/* order is important - host w/o services must not be empty */
-	ServicesTable::AddColumns(table, "service_", boost::bind(&CommentsTable::ServiceAccessor, _1, objectAccessor));
-	HostsTable::AddColumns(table, "host_", boost::bind(&CommentsTable::HostAccessor, _1, objectAccessor));
+	ServicesTable::AddColumns(table, "service_", std::bind(&CommentsTable::ServiceAccessor, _1, objectAccessor));
+	HostsTable::AddColumns(table, "host_", std::bind(&CommentsTable::HostAccessor, _1, objectAccessor));
 }
 
-String CommentsTable::GetName(void) const
+String CommentsTable::GetName() const
 {
 	return "comments";
 }
 
-String CommentsTable::GetPrefix(void) const
+String CommentsTable::GetPrefix() const
 {
 	return "comment";
 }
 
 void CommentsTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const Comment::Ptr& comment, ConfigType::GetObjectsByType<Comment>()) {
+	for (const Comment::Ptr& comment : ConfigType::GetObjectsByType<Comment>()) {
 		if (!addRowFn(comment, LivestatusGroupByNone, Empty))
 			return;
 	}

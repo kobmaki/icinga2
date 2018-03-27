@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "base/datetime.hpp"
-#include "base/datetime.tcpp"
+#include "base/datetime-ti.cpp"
 #include "base/utility.hpp"
 #include "base/primitivetype.hpp"
 
@@ -59,7 +59,7 @@ DateTime::DateTime(const std::vector<Value>& args)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid number of arguments for the DateTime constructor."));
 }
 
-double DateTime::GetValue(void) const
+double DateTime::GetValue() const
 {
 	return m_Value;
 }
@@ -69,7 +69,7 @@ String DateTime::Format(const String& format) const
 	return Utility::FormatDateTime(format.CStr(), m_Value);
 }
 
-String DateTime::ToString(void) const
+String DateTime::ToString() const
 {
 	return Format("%Y-%m-%d %H:%M:%S %z");
 }

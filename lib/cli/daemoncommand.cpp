@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -35,7 +35,6 @@
 #include "config.h"
 #include <boost/program_options.hpp>
 #include <boost/tuple/tuple.hpp>
-#include <boost/foreach.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -53,7 +52,7 @@ static void SigHupHandler(int)
 }
 #endif /* _WIN32 */
 
-static bool Daemonize(void)
+static bool Daemonize()
 {
 #ifndef _WIN32
 	Application::UninitializeBase();
@@ -82,7 +81,7 @@ static bool Daemonize(void)
 			_exit(EXIT_FAILURE);
 		} else if (ret == -1) {
 			Log(LogCritical, "cli")
-			    << "waitpid() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
+				<< "waitpid() failed with error code " << errno << ", \"" << Utility::FormatErrorNumber(errno) << "\"";
 			_exit(EXIT_FAILURE);
 		}
 
@@ -137,51 +136,18 @@ static bool SetDaemonIO(const String& stderrFile)
 	return true;
 }
 
-/**
- * Terminate another process and wait till it has ended
- *
- * @params target PID of the process to end
- */
-static void TerminateAndWaitForEnd(pid_t target)
-{
-#ifndef _WIN32
-	// allow 30 seconds timeout
-	double timeout = Utility::GetTime() + 30;
-
-	int ret = kill(target, SIGTERM);
-
-	while (Utility::GetTime() < timeout && (ret == 0 || errno != ESRCH)) {
-		Utility::Sleep(0.1);
-		ret = kill(target, 0);
-	}
-
-	// timeout and the process still seems to live: update pid and kill it
-	if (ret == 0 || errno != ESRCH) {
-		String pidFile = Application::GetPidPath();
-		std::ofstream fp(pidFile.CStr());
-		fp << Utility::GetPid();
-		fp.close();
-
-		kill(target, SIGKILL);
-	}
-
-#else
-	// TODO: implement this for Win32
-#endif /* _WIN32 */
-}
-
-String DaemonCommand::GetDescription(void) const
+String DaemonCommand::GetDescription() const
 {
 	return "Starts Icinga 2.";
 }
 
-String DaemonCommand::GetShortDescription(void) const
+String DaemonCommand::GetShortDescription() const
 {
 	return "starts Icinga 2";
 }
 
 void DaemonCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
 		("config,c", po::value<std::vector<std::string> >(), "parse a configuration file")
@@ -196,6 +162,9 @@ void DaemonCommand::InitParameters(boost::program_options::options_description& 
 #ifndef _WIN32
 	hiddenDesc.add_options()
 		("reload-internal", po::value<int>(), "used internally to implement config reload: do not call manually, send SIGHUP instead");
+#else
+	hiddenDesc.add_options()
+		("restart-service", po::value<std::string>(), "tries to restart the Icinga 2 service");
 #endif /* _WIN32 */
 }
 
@@ -218,24 +187,24 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 		Logger::DisableTimestamp(false);
 
 	Log(LogInformation, "cli")
-	    << "Icinga application loader (version: " << Application::GetAppVersion()
+		<< "Icinga application loader (version: " << Application::GetAppVersion()
 #ifdef I2_DEBUG
-	    << "; debug"
+		<< "; debug"
 #endif /* I2_DEBUG */
-	    << ")";
+		<< ")";
 
 	if (!vm.count("validate") && !vm.count("reload-internal")) {
 		pid_t runningpid = Application::ReadPidFile(Application::GetPidPath());
 		if (runningpid > 0) {
 			Log(LogCritical, "cli")
-			    << "Another instance of Icinga already running with PID " << runningpid;
+				<< "Another instance of Icinga already running with PID " << runningpid;
 			return EXIT_FAILURE;
 		}
 	}
 
 	std::vector<std::string> configs;
 	if (vm.count("config") > 0)
-		configs = vm["config"].as < std::vector<std::string> >() ;
+		configs = vm["config"].as<std::vector<std::string> >();
 	else if (!vm.count("no-config"))
 		configs.push_back(Application::GetSysconfDir() + "/icinga2/icinga2.conf");
 
@@ -246,18 +215,59 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 	if (!DaemonUtility::LoadConfigFiles(configs, newItems, Application::GetObjectsPath(), Application::GetVarsPath()))
 		return EXIT_FAILURE;
 
+#ifdef _WIN32
+	if (vm.count("restart-service")) {
+		SC_HANDLE handleManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+		if (!handleManager) {
+			Log(LogCritical, "cli") << "Failed to open service manager. Error code: " << GetLastError();
+			return EXIT_FAILURE;
+		}
+
+		std::string service = vm["restart-service"].as<std::string>();
+
+		SC_HANDLE handleService = OpenService(handleManager, service.c_str(), SERVICE_START | SERVICE_STOP);
+		if (!handleService) {
+			Log(LogCritical, "cli") << "Failed to open service handle of '" << service << "'. Error code: " << GetLastError();
+			return EXIT_FAILURE;
+		}
+
+		SERVICE_STATUS serviceStatus;
+		if (!ControlService(handleService, SERVICE_CONTROL_STOP, &serviceStatus)) {
+			DWORD error = GetLastError();
+			if (error = ERROR_SERVICE_NOT_ACTIVE)
+				Log(LogInformation, "cli") << "Service '" << service << "' is not running.";
+			else {
+				Log(LogCritical, "cli") << "Failed to stop service. Error code: " << GetLastError();
+				return EXIT_FAILURE;
+			}
+		}
+
+		if (!StartService(handleService, 0, NULL)) {
+			Log(LogCritical, "cli") << "Failed to start up service '" << service << "'. Error code: " << GetLastError();
+			return EXIT_FAILURE;
+		}
+
+		return EXIT_SUCCESS;
+	}
+#endif /* _WIN32 */
+
 	if (vm.count("validate")) {
 		Log(LogInformation, "cli", "Finished validating the configuration file(s).");
 		return EXIT_SUCCESS;
 	}
 
+#ifndef _WIN32
 	if (vm.count("reload-internal")) {
-		int parentpid = vm["reload-internal"].as<int>();
-		Log(LogInformation, "cli")
-		    << "Terminating previous instance of Icinga (PID " << parentpid << ")";
-		TerminateAndWaitForEnd(parentpid);
-		Log(LogInformation, "cli", "Previous instance has ended, taking over now.");
+		/* We went through validation and now ask the old process kindly to die */
+		Log(LogInformation, "cli", "Requesting to take over.");
+		int rc = kill(vm["reload-internal"].as<int>(), SIGUSR2);
+		if (rc) {
+			Log(LogCritical, "Application")
+				<< "Failed to send signal to \"" << vm["reload-internal"].as<int>() <<  "\" with " << strerror(errno);
+			return EXIT_FAILURE;
+		}
 	}
+#endif /* _WIN32 */
 
 	if (vm.count("daemonize")) {
 		if (!vm.count("reload-internal")) {
@@ -276,15 +286,16 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 		ConfigObject::RestoreObjects(Application::GetStatePath());
 	} catch (const std::exception& ex) {
 		Log(LogCritical, "cli")
-		    << "Failed to restore state file: " << DiagnosticInformation(ex);
+			<< "Failed to restore state file: " << DiagnosticInformation(ex);
 		return EXIT_FAILURE;
 	}
 
 	{
 		WorkQueue upq(25000, Application::GetConcurrency());
+		upq.SetName("DaemonCommand::Run");
 
 		// activate config only after daemonization: it starts threads and that is not compatible with fork()
-		if (!ConfigItem::ActivateItems(upq, newItems)) {
+		if (!ConfigItem::ActivateItems(upq, newItems, false, false, true)) {
 			Log(LogCritical, "cli", "Error activating configuration.");
 			return EXIT_FAILURE;
 		}
@@ -306,7 +317,7 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = &SigHupHandler;
-	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGHUP, &sa, nullptr);
 #endif /* _WIN32 */
 
 	ApiListener::UpdateObjectAuthority();

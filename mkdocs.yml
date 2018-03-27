@@ -2,30 +2,32 @@ site_name: Icinga 2
 docs_dir: doc
 dev_addr: 0.0.0.0:8000
 pages:
-- [1-about.md, About Icinga 2]
-- [2-getting-started.md, Getting Started]
-- [3-monitoring-basics.md, Monitoring Basics]
-- [4-configuring-icinga-2.md, Configuring Icinga 2]
-- [5-advanced-topics.md, Advanced Topics]
-- [6-object-types.md, Object Types]
-- [7-icinga-template-library.md, Icinga Template Library]
-- [8-cli-commands.md, CLI Commands]
-- [9-icinga2-api.md, Icinga 2 API]
-- [10-monitoring-remote-systems.md, Monitoring Remote Systems]
-- [11-icinga2-client.md, Icinga 2 Client]
-- [12-agent-based-checks.md, Additional Agent-based Checks]
-- [13-distributed-monitoring-ha.md, Distributed Monitoring and High Availability]
-- [14-addons-plugins.md, Addons and Plugins]
-- [15-features.md, Features]
-- [16-troubleshooting.md, Troubleshooting]
-- [17-upgrading-icinga-2.md, Upgrading Icinga 2]
-- [18-language-reference.md, Language Reference]
-- [19-library-reference.md, Library Reference]
-- [20-script-debugger.md, Script Debugger]
-- [21-development.md, Development]
-- [22-migrating-from-icinga-1x.md, Migrating from Icinga 1.x]
-- [23-appendix.md, Appendix]
+  - 'About Icinga 2': '01-about.md'
+  - 'Getting Started': '02-getting-started.md'
+  - 'Monitoring Basics': '03-monitoring-basics.md'
+  - 'Configuring Icinga 2': '04-configuring-icinga-2.md'
+  - 'Service Monitoring': '05-service-monitoring.md'
+  - 'Distributed Monitoring': '06-distributed-monitoring.md'
+  - 'Agent Based Monitoring': '07-agent-based-monitoring.md'
+  - 'Advanced Topics': '08-advanced-topics.md'
+  - 'Object Types': '09-object-types.md'
+  - 'Icinga Template Library': '10-icinga-template-library.md'
+  - 'CLI Commands': '11-cli-commands.md'
+  - 'Icinga 2 API': '12-icinga2-api.md'
+  - 'Addons': '13-addons.md'
+  - 'Features': '14-features.md'
+  - 'Troubleshooting': '15-troubleshooting.md'
+  - 'Upgrading Icinga 2': '16-upgrading-icinga-2.md'
+  - 'Language Reference': '17-language-reference.md'
+  - 'Library Reference': '18-library-reference.md'
+  - 'Technical Concepts': '19-technical-concepts.md'
+  - 'Script Debugger': '20-script-debugger.md'
+  - 'Development': '21-development.md'
+  - 'SELinux': '22-selinux.md'
+  - 'Migrating from Icinga 1.x': '23-migrating-from-icinga-1x.md'
+  - 'Appendix': '24-appendix.md'
 theme: readthedocs
-markdown_extensions: [smarty]
-extra_javascript: [scroll.js]
-include_search: true
+markdown_extensions:
+  - smarty
+extra_javascript:
+  - scroll.js

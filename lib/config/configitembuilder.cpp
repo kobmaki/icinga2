@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,27 +20,16 @@
 #include "config/configitembuilder.hpp"
 #include "base/configtype.hpp"
 #include <sstream>
-#include <boost/foreach.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
 
 using namespace icinga;
 
-ConfigItemBuilder::ConfigItemBuilder(void)
-	: m_Abstract(false)
-{
-	m_DebugInfo.FirstLine = 0;
-	m_DebugInfo.FirstColumn = 0;
-	m_DebugInfo.LastLine = 0;
-	m_DebugInfo.LastColumn = 0;
-}
-
 ConfigItemBuilder::ConfigItemBuilder(const DebugInfo& debugInfo)
-	: m_Abstract(false)
+	: m_Abstract(false), m_DefaultTmpl(false), m_IgnoreOnError(false)
 {
 	m_DebugInfo = debugInfo;
 }
 
-void ConfigItemBuilder::SetType(const String& type)
+void ConfigItemBuilder::SetType(const Type::Ptr& type)
 {
 	m_Type = type;
 }
@@ -72,12 +61,17 @@ void ConfigItemBuilder::SetPackage(const String& package)
 
 void ConfigItemBuilder::AddExpression(Expression *expr)
 {
-	m_Expressions.push_back(expr);
+	m_Expressions.emplace_back(expr);
 }
 
-void ConfigItemBuilder::SetFilter(const boost::shared_ptr<Expression>& filter)
+void ConfigItemBuilder::SetFilter(const std::shared_ptr<Expression>& filter)
 {
 	m_Filter = filter;
+}
+
+void ConfigItemBuilder::SetDefaultTemplate(bool defaultTmpl)
+{
+	m_DefaultTmpl = defaultTmpl;
 }
 
 void ConfigItemBuilder::SetIgnoreOnError(bool ignoreOnError)
@@ -85,42 +79,58 @@ void ConfigItemBuilder::SetIgnoreOnError(bool ignoreOnError)
 	m_IgnoreOnError = ignoreOnError;
 }
 
-ConfigItem::Ptr ConfigItemBuilder::Compile(void)
+ConfigItem::Ptr ConfigItemBuilder::Compile()
 {
-	if (m_Type.IsEmpty()) {
+	if (!m_Type) {
 		std::ostringstream msgbuf;
-		msgbuf << "The type name of an object may not be empty";
+		msgbuf << "The type of an object must be specified";
 		BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), m_DebugInfo));
 	}
 
-	if (!ConfigType::GetByName(m_Type)) {
+	auto *ctype = dynamic_cast<ConfigType *>(m_Type.get());
+
+	if (!ctype) {
 		std::ostringstream msgbuf;
-		msgbuf << "The type '" + m_Type + "' is unknown";
+		msgbuf << "The type '" + m_Type->GetName() + "' cannot be used for config objects";
 		BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), m_DebugInfo));
 	}
 
 	if (m_Name.FindFirstOf("!") != String::NPos) {
 		std::ostringstream msgbuf;
-		msgbuf << "Name for object '" << m_Name << "' of type '" << m_Type << "' is invalid: Object names may not contain '!'";
+		msgbuf << "Name for object '" << m_Name << "' of type '" << m_Type->GetName() << "' is invalid: Object names may not contain '!'";
 		BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), m_DebugInfo));
 	}
 
-	std::vector<Expression *> exprs;
+	std::vector<std::unique_ptr<Expression> > exprs;
 
-	Array::Ptr templateArray = new Array();
-	templateArray->Add(m_Name);
+	Array::Ptr templateArray = new Array({ m_Name });
 
-	exprs.push_back(new SetExpression(MakeIndexer(ScopeThis, "templates"), OpSetAdd,
-	    new LiteralExpression(templateArray), m_DebugInfo));
+	exprs.emplace_back(new SetExpression(MakeIndexer(ScopeThis, "templates"), OpSetAdd,
+		std::unique_ptr<LiteralExpression>(new LiteralExpression(templateArray)), m_DebugInfo));
 
-	DictExpression *dexpr = new DictExpression(m_Expressions, m_DebugInfo);
+#ifdef I2_DEBUG
+	if (!m_Abstract) {
+		bool foundDefaultImport = false;
+
+		for (const std::unique_ptr<Expression>& expr : m_Expressions) {
+			if (dynamic_cast<ImportDefaultTemplatesExpression *>(expr.get())) {
+				foundDefaultImport = true;
+				break;
+			}
+		}
+
+		ASSERT(foundDefaultImport);
+	}
+#endif /* I2_DEBUG */
+
+	auto *dexpr = new DictExpression(std::move(m_Expressions), m_DebugInfo);
 	dexpr->MakeInline();
-	exprs.push_back(dexpr);
+	exprs.emplace_back(dexpr);
 
-	boost::shared_ptr<DictExpression> exprl = boost::make_shared<DictExpression>(exprs, m_DebugInfo);
+	std::shared_ptr<DictExpression> exprl = std::make_shared<DictExpression>(std::move(exprs), m_DebugInfo);
 	exprl->MakeInline();
 
 	return new ConfigItem(m_Type, m_Name, m_Abstract, exprl, m_Filter,
-	    m_IgnoreOnError, m_DebugInfo, m_Scope, m_Zone, m_Package);
+		m_DefaultTmpl, m_IgnoreOnError, m_DebugInfo, m_Scope, m_Zone, m_Package);
 }
 

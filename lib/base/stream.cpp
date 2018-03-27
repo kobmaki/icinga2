@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,7 +22,7 @@
 
 using namespace icinga;
 
-void Stream::RegisterDataHandler(const boost::function<void(const Stream::Ptr&)>& handler)
+void Stream::RegisterDataHandler(const std::function<void(const Stream::Ptr&)>& handler)
 {
 	if (SupportsWaiting())
 		OnDataAvailable.connect(handler);
@@ -30,17 +30,17 @@ void Stream::RegisterDataHandler(const boost::function<void(const Stream::Ptr&)>
 		BOOST_THROW_EXCEPTION(std::runtime_error("Stream does not support waiting."));
 }
 
-bool Stream::SupportsWaiting(void) const
+bool Stream::SupportsWaiting() const
 {
 	return false;
 }
 
-bool Stream::IsDataAvailable(void) const
+bool Stream::IsDataAvailable() const
 {
 	return false;
 }
 
-void Stream::Shutdown(void)
+void Stream::Shutdown()
 {
 	BOOST_THROW_EXCEPTION(std::runtime_error("Stream does not support Shutdown()."));
 }
@@ -50,7 +50,7 @@ size_t Stream::Peek(void *buffer, size_t count, bool allow_partial)
 	BOOST_THROW_EXCEPTION(std::runtime_error("Stream does not support Peek()."));
 }
 
-void Stream::SignalDataAvailable(void)
+void Stream::SignalDataAvailable()
 {
 	OnDataAvailable(this);
 
@@ -60,7 +60,7 @@ void Stream::SignalDataAvailable(void)
 	}
 }
 
-bool Stream::WaitForData(int timeout)
+bool Stream::WaitForData()
 {
 	if (!SupportsWaiting())
 		BOOST_THROW_EXCEPTION(std::runtime_error("Stream does not support waiting."));
@@ -68,24 +68,49 @@ bool Stream::WaitForData(int timeout)
 	boost::mutex::scoped_lock lock(m_Mutex);
 
 	while (!IsDataAvailable() && !IsEof())
-		if (timeout < 0)
-			m_CV.wait(lock);
-		else
-			m_CV.timed_wait(lock, boost::posix_time::milliseconds(timeout * 1000));
+		m_CV.wait(lock);
 
 	return IsDataAvailable() || IsEof();
 }
 
-static void StreamDummyCallback(void)
+bool Stream::WaitForData(int timeout)
+{
+	if (!SupportsWaiting())
+		BOOST_THROW_EXCEPTION(std::runtime_error("Stream does not support waiting."));
+
+	if (timeout < 0)
+		BOOST_THROW_EXCEPTION(std::runtime_error("Timeout can't be negative"));
+
+	boost::system_time const point_of_timeout = boost::get_system_time() + boost::posix_time::seconds(timeout);
+
+	boost::mutex::scoped_lock lock(m_Mutex);
+
+	while (!IsDataAvailable() && !IsEof() && point_of_timeout > boost::get_system_time())
+		m_CV.timed_wait(lock, point_of_timeout);
+
+	return IsDataAvailable() || IsEof();
+}
+
+void Stream::SetCorked(bool corked)
+{
+	m_Corked = corked;
+}
+
+bool Stream::IsCorked() const
+{
+	return m_Corked;
+}
+
+static void StreamDummyCallback()
 { }
 
-void Stream::Close(void)
+void Stream::Close()
 {
 	OnDataAvailable.disconnect_all_slots();
 
 	/* Force signals2 to remove the slots, see https://stackoverflow.com/questions/2049291/force-deletion-of-slot-in-boostsignals2
 	 * for details. */
-	OnDataAvailable.connect(boost::bind(&StreamDummyCallback));
+	OnDataAvailable.connect(std::bind(&StreamDummyCallback));
 }
 
 StreamReadStatus Stream::ReadLine(String *line, StreamReadContext& context, bool may_wait)
@@ -144,6 +169,9 @@ bool StreamReadContext::FillFromStream(const Stream::Ptr& stream, bool may_wait)
 
 		if (!Buffer)
 			throw std::bad_alloc();
+
+		if (stream->IsEof())
+			break;
 
 		size_t rc = stream->Read(Buffer + Size, 4096, true);
 

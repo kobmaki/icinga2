@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,38 +24,51 @@
 #include "base/configtype.hpp"
 #include "base/scriptglobal.hpp"
 #include "base/logger.hpp"
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 #include <set>
 
 using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/templates", TemplateQueryHandler);
 
-class TemplateTargetProvider : public TargetProvider
+class TemplateTargetProvider final : public TargetProvider
 {
 public:
 	DECLARE_PTR_TYPEDEFS(TemplateTargetProvider);
 
 	static Dictionary::Ptr GetTargetForTemplate(const ConfigItem::Ptr& item)
 	{
-		Dictionary::Ptr target = new Dictionary();
-		target->Set("name", item->GetName());
-		target->Set("type", item->GetType());
-		return target;
+		DebugInfo di = item->GetDebugInfo();
+
+		return new Dictionary({
+			{ "name", item->GetName() },
+			{ "type", item->GetType()->GetName() },
+			{ "location", new Dictionary({
+				{ "path", di.Path },
+				{ "first_line", di.FirstLine },
+				{ "first_column", di.FirstColumn },
+				{ "last_line", di.LastLine },
+				{ "last_column", di.LastColumn }
+			}) }
+		});
 	}
 
-	virtual void FindTargets(const String& type,
-	    const boost::function<void (const Value&)>& addTarget) const override
+	void FindTargets(const String& type,
+		const std::function<void (const Value&)>& addTarget) const override
 	{
-		BOOST_FOREACH(const ConfigItem::Ptr& item, ConfigItem::GetItems(type)) {
+		Type::Ptr ptype = Type::GetByName(type);
+
+		for (const ConfigItem::Ptr& item : ConfigItem::GetItems(ptype)) {
 			if (item->IsAbstract())
 				addTarget(GetTargetForTemplate(item));
 		}
 	}
 
-	virtual Value GetTargetByName(const String& type, const String& name) const override
+	Value GetTargetByName(const String& type, const String& name) const override
 	{
-		ConfigItem::Ptr item = ConfigItem::GetByTypeAndName(type, name);
+		Type::Ptr ptype = Type::GetByName(type);
+
+		ConfigItem::Ptr item = ConfigItem::GetByTypeAndName(ptype, name);
 
 		if (!item || !item->IsAbstract())
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Template does not exist."));
@@ -63,7 +76,7 @@ public:
 		return GetTargetForTemplate(item);
 	}
 
-	virtual bool IsValidType(const String& type) const override
+	bool IsValidType(const String& type) const override
 	{
 		Type::Ptr ptype = Type::GetByName(type);
 
@@ -73,7 +86,7 @@ public:
 		return ConfigObject::TypeInstance->IsAssignableFrom(ptype);
 	}
 
-	virtual String GetPluralName(const String& type) const override
+	String GetPluralName(const String& type) const override
 	{
 		return Type::GetByName(type)->GetPluralName();
 	}
@@ -90,7 +103,7 @@ bool TemplateQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& 
 	Type::Ptr type = FilterUtility::TypeFromPluralName(request.RequestUrl->GetPath()[2]);
 
 	if (!type) {
-		HttpUtility::SendJsonError(response, 400, "Invalid type specified.");
+		HttpUtility::SendJsonError(response, params, 400, "Invalid type specified.");
 		return true;
 	}
 
@@ -112,24 +125,18 @@ bool TemplateQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& 
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user, "tmpl");
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No templates found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No templates found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
-	Array::Ptr results = new Array();
-
-	BOOST_FOREACH(const Dictionary::Ptr& obj, objs) {
-		results->Add(obj);
-	}
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(objs)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
-

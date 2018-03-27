@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,17 +26,16 @@
 #include "base/configtype.hpp"
 #include "base/utility.hpp"
 #include "base/application.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-StatusTable::StatusTable(void)
+StatusTable::StatusTable()
 {
 	AddColumns(this);
 }
 
 void StatusTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "neb_callbacks", Column(&Table::ZeroAccessor, objectAccessor));
 	table->AddColumn(prefix + "neb_callbacks_rate", Column(&Table::ZeroAccessor, objectAccessor));
@@ -103,12 +102,12 @@ void StatusTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "custom_variables", Column(&StatusTable::CustomVariablesAccessor, objectAccessor));
 }
 
-String StatusTable::GetName(void) const
+String StatusTable::GetName() const
 {
 	return "status";
 }
 
-String StatusTable::GetPrefix(void) const
+String StatusTable::GetPrefix() const
 {
 	return "status";
 }
@@ -133,25 +132,25 @@ Value StatusTable::ConnectionsRateAccessor(const Value&)
 
 Value StatusTable::HostChecksAccessor(const Value&)
 {
-	long timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
+	auto timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
 	return CIB::GetActiveHostChecksStatistics(timespan);
 }
 
 Value StatusTable::HostChecksRateAccessor(const Value&)
 {
-	long timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
+	auto timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
 	return (CIB::GetActiveHostChecksStatistics(timespan) / (Utility::GetTime() - Application::GetStartTime()));
 }
 
 Value StatusTable::ServiceChecksAccessor(const Value&)
 {
-	long timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
+	auto timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
 	return CIB::GetActiveServiceChecksStatistics(timespan);
 }
 
 Value StatusTable::ServiceChecksRateAccessor(const Value&)
 {
-	long timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
+	auto timespan = static_cast<long>(Utility::GetTime() - Application::GetStartTime());
 	return (CIB::GetActiveServiceChecksStatistics(timespan) / (Utility::GetTime() - Application::GetStartTime()));
 }
 
@@ -207,12 +206,12 @@ Value StatusTable::ProgramStartAccessor(const Value&)
 
 Value StatusTable::NumHostsAccessor(const Value&)
 {
-	return std::distance(ConfigType::GetObjectsByType<Host>().first, ConfigType::GetObjectsByType<Host>().second);
+	return ConfigType::Get<Host>()->GetObjectCount();
 }
 
 Value StatusTable::NumServicesAccessor(const Value&)
 {
-	return std::distance(ConfigType::GetObjectsByType<Service>().first, ConfigType::GetObjectsByType<Service>().second);
+	return ConfigType::Get<Service>()->GetObjectCount();
 }
 
 Value StatusTable::ProgramVersionAccessor(const Value&)
@@ -234,55 +233,49 @@ Value StatusTable::CustomVariableNamesAccessor(const Value&)
 {
 	Dictionary::Ptr vars = IcingaApplication::GetInstance()->GetVars();
 
-	if (!vars)
-		return Empty;
+	ArrayData result;
 
-	Array::Ptr cv = new Array();
-
-	String key;
-	Value value;
-	BOOST_FOREACH(tie(key, value), vars) {
-		cv->Add(key);
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const auto& kv : vars) {
+			result.push_back(kv.first);
+		}
 	}
 
-	return cv;
+	return new Array(std::move(result));
 }
 
 Value StatusTable::CustomVariableValuesAccessor(const Value&)
 {
 	Dictionary::Ptr vars = IcingaApplication::GetInstance()->GetVars();
 
-	if (!vars)
-		return Empty;
+	ArrayData result;
 
-	Array::Ptr cv = new Array();
-
-	String key;
-	Value value;
-	BOOST_FOREACH(tie(key, value), vars) {
-		cv->Add(value);
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const auto& kv : vars) {
+			result.push_back(kv.second);
+		}
 	}
 
-	return cv;
+	return new Array(std::move(result));
 }
 
 Value StatusTable::CustomVariablesAccessor(const Value&)
 {
 	Dictionary::Ptr vars = IcingaApplication::GetInstance()->GetVars();
 
-	if (!vars)
-		return Empty;
+	ArrayData result;
 
-	Array::Ptr cv = new Array();
-
-	String key;
-	Value value;
-	BOOST_FOREACH(tie(key, value), vars) {
-		Array::Ptr key_val = new Array();
-		key_val->Add(key);
-		key_val->Add(value);
-		cv->Add(key_val);
+	if (vars) {
+		ObjectLock olock(vars);
+		for (const auto& kv : vars) {
+			result.push_back(new Array({
+				kv.first,
+				kv.second
+			}));
+		}
 	}
 
-	return cv;
+	return new Array(std::move(result));
 }

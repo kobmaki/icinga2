@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,7 @@
 #ifndef PERFDATAWRITER_H
 #define PERFDATAWRITER_H
 
-#include "perfdata/perfdatawriter.thpp"
+#include "perfdata/perfdatawriter-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/timer.hpp"
@@ -34,7 +34,7 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class PerfdataWriter : public ObjectImpl<PerfdataWriter>
+class PerfdataWriter final : public ObjectImpl<PerfdataWriter>
 {
 public:
 	DECLARE_OBJECT(PerfdataWriter);
@@ -42,18 +42,19 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual void ValidateHostFormatTemplate(const String& value, const ValidationUtils& utils) override;
-	virtual void ValidateServiceFormatTemplate(const String& value, const ValidationUtils& utils) override;
+	void ValidateHostFormatTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
+	void ValidateServiceFormatTemplate(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	void CheckResultHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr);
 	static Value EscapeMacroMetric(const Value& value);
 
 	Timer::Ptr m_RotationTimer;
-	void RotationTimerHandler(void);
+	void RotationTimerHandler();
 
 	std::ofstream m_ServiceOutputFile;
 	std::ofstream m_HostOutputFile;

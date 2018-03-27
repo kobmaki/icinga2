@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,16 +33,16 @@ namespace icinga
  *
  * @ingroup cli
  */
-class ObjectListCommand : public CLICommand
+class ObjectListCommand final : public CLICommand
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ObjectListCommand);
 
-	virtual String GetDescription(void) const override;
-	virtual String GetShortDescription(void) const override;
-	virtual void InitParameters(boost::program_options::options_description& visibleDesc,
-	    boost::program_options::options_description& hiddenDesc) const override;
-	virtual int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
+	String GetDescription() const override;
+	String GetShortDescription() const override;
+	void InitParameters(boost::program_options::options_description& visibleDesc,
+		boost::program_options::options_description& hiddenDesc) const override;
+	int Run(const boost::program_options::variables_map& vm, const std::vector<std::string>& ap) const override;
 
 private:
 	static void PrintTypeCounts(std::ostream& fp, const std::map<String, int>& type_count);

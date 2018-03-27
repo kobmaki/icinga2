@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,7 +25,6 @@
 #include "base/context.hpp"
 #include "base/exception.hpp"
 #include <fstream>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -37,14 +36,14 @@ std::map<String, std::vector<ZoneFragment> > ConfigCompiler::m_ZoneDirs;
  * Constructor for the ConfigCompiler class.
  *
  * @param path The path of the configuration file (or another name that
- *	       identifies the source of the configuration text).
+ *        identifies the source of the configuration text).
  * @param input Input stream for the configuration file.
  * @param zone The zone.
  */
-ConfigCompiler::ConfigCompiler(const String& path, std::istream *input,
-    const String& zone, const String& package)
-	: m_Path(path), m_Input(input), m_Zone(zone), m_Package(package),
-	  m_Eof(false), m_OpenBraces(0)
+ConfigCompiler::ConfigCompiler(String path, std::istream *input,
+	String zone, String package)
+	: m_Path(std::move(path)), m_Input(input), m_Zone(std::move(zone)),
+	m_Package(std::move(package)), m_Eof(false), m_OpenBraces(0)
 {
 	InitializeScanner();
 }
@@ -52,7 +51,7 @@ ConfigCompiler::ConfigCompiler(const String& path, std::istream *input,
 /**
  * Destructor for the ConfigCompiler class.
  */
-ConfigCompiler::~ConfigCompiler(void)
+ConfigCompiler::~ConfigCompiler()
 {
 	DestroyScanner();
 }
@@ -75,7 +74,7 @@ size_t ConfigCompiler::ReadInput(char *buffer, size_t max_size)
  *
  * @returns The scanner object.
  */
-void *ConfigCompiler::GetScanner(void) const
+void *ConfigCompiler::GetScanner() const
 {
 	return m_Scanner;
 }
@@ -85,7 +84,7 @@ void *ConfigCompiler::GetScanner(void) const
  *
  * @returns The path.
  */
-const char *ConfigCompiler::GetPath(void) const
+const char *ConfigCompiler::GetPath() const
 {
 	return m_Path.CStr();
 }
@@ -95,7 +94,7 @@ void ConfigCompiler::SetZone(const String& zone)
 	m_Zone = zone;
 }
 
-String ConfigCompiler::GetZone(void) const
+String ConfigCompiler::GetZone() const
 {
 	return m_Zone;
 }
@@ -105,21 +104,20 @@ void ConfigCompiler::SetPackage(const String& package)
 	m_Package = package;
 }
 
-String ConfigCompiler::GetPackage(void) const
+String ConfigCompiler::GetPackage() const
 {
 	return m_Package;
 }
 
-void ConfigCompiler::CollectIncludes(std::vector<Expression *>& expressions,
-    const String& file, const String& zone, const String& package)
+void ConfigCompiler::CollectIncludes(std::vector<std::unique_ptr<Expression> >& expressions,
+	const String& file, const String& zone, const String& package)
 {
 	try {
-		Expression *expr = CompileFile(file, zone, package);
-		expressions.push_back(expr);
+		expressions.emplace_back(CompileFile(file, zone, package));
 	} catch (const std::exception& ex) {
 		Log(LogWarning, "ConfigCompiler")
-		    << "Cannot compile file '"
-		    << file << "': " << DiagnosticInformation(ex);
+			<< "Cannot compile file '"
+			<< file << "': " << DiagnosticInformation(ex);
 	}
 }
 
@@ -131,12 +129,12 @@ void ConfigCompiler::CollectIncludes(std::vector<Expression *>& expressions,
  * @param search Whether to search global include dirs.
  * @param debuginfo Debug information.
  */
-Expression *ConfigCompiler::HandleInclude(const String& relativeBase, const String& path,
-    bool search, const String& zone, const String& package, const DebugInfo& debuginfo)
+std::unique_ptr<Expression> ConfigCompiler::HandleInclude(const String& relativeBase, const String& path,
+	bool search, const String& zone, const String& package, const DebugInfo& debuginfo)
 {
 	String upath;
 
-	if (search || (path.GetLength() > 0 && path[0] == '/'))
+	if (search || (IsAbsolutePath(path)))
 		upath = path;
 	else
 		upath = relativeBase + "/" + path;
@@ -144,7 +142,7 @@ Expression *ConfigCompiler::HandleInclude(const String& relativeBase, const Stri
 	String includePath = upath;
 
 	if (search) {
-		BOOST_FOREACH(const String& dir, m_IncludeSearchDirs) {
+		for (const String& dir : m_IncludeSearchDirs) {
 			String spath = dir + "/" + path;
 
 			if (Utility::PathExists(spath)) {
@@ -154,17 +152,17 @@ Expression *ConfigCompiler::HandleInclude(const String& relativeBase, const Stri
 		}
 	}
 
-	std::vector<Expression *> expressions;
+	std::vector<std::unique_ptr<Expression> > expressions;
 
-	if (!Utility::Glob(includePath, boost::bind(&ConfigCompiler::CollectIncludes, boost::ref(expressions), _1, zone, package), GlobFile) && includePath.FindFirstOf("*?") == String::NPos) {
+	if (!Utility::Glob(includePath, std::bind(&ConfigCompiler::CollectIncludes, std::ref(expressions), _1, zone, package), GlobFile) && includePath.FindFirstOf("*?") == String::NPos) {
 		std::ostringstream msgbuf;
 		msgbuf << "Include file '" + path + "' does not exist";
 		BOOST_THROW_EXCEPTION(ScriptError(msgbuf.str(), debuginfo));
 	}
 
-	DictExpression *expr = new DictExpression(expressions);
+	std::unique_ptr<DictExpression> expr{new DictExpression(std::move(expressions))};
 	expr->MakeInline();
-	return expr;
+	return std::move(expr);
 }
 
 /**
@@ -175,38 +173,38 @@ Expression *ConfigCompiler::HandleInclude(const String& relativeBase, const Stri
  * @param pattern The file pattern.
  * @param debuginfo Debug information.
  */
-Expression *ConfigCompiler::HandleIncludeRecursive(const String& relativeBase, const String& path,
-    const String& pattern, const String& zone, const String& package, const DebugInfo&)
+std::unique_ptr<Expression> ConfigCompiler::HandleIncludeRecursive(const String& relativeBase, const String& path,
+	const String& pattern, const String& zone, const String& package, const DebugInfo&)
 {
 	String ppath;
 
-	if (path.GetLength() > 0 && path[0] == '/')
+	if (IsAbsolutePath(path))
 		ppath = path;
 	else
 		ppath = relativeBase + "/" + path;
 
-	std::vector<Expression *> expressions;
-	Utility::GlobRecursive(ppath, pattern, boost::bind(&ConfigCompiler::CollectIncludes, boost::ref(expressions), _1, zone, package), GlobFile);
+	std::vector<std::unique_ptr<Expression> > expressions;
+	Utility::GlobRecursive(ppath, pattern, std::bind(&ConfigCompiler::CollectIncludes, std::ref(expressions), _1, zone, package), GlobFile);
 
-	DictExpression *dict = new DictExpression(expressions);
+	std::unique_ptr<DictExpression> dict{new DictExpression(std::move(expressions))};
 	dict->MakeInline();
-	return dict;
+	return std::move(dict);
 }
 
-void ConfigCompiler::HandleIncludeZone(const String& relativeBase, const String& tag, const String& path, const String& pattern, const String& package, std::vector<Expression *>& expressions)
+void ConfigCompiler::HandleIncludeZone(const String& relativeBase, const String& tag, const String& path, const String& pattern, const String& package, std::vector<std::unique_ptr<Expression> >& expressions)
 {
 	String zoneName = Utility::BaseName(path);
 
 	String ppath;
 
-	if (path.GetLength() > 0 && path[0] == '/')
+	if (IsAbsolutePath(path))
 		ppath = path;
 	else
 		ppath = relativeBase + "/" + path;
 
 	RegisterZoneDir(tag, ppath, zoneName);
 
-	Utility::GlobRecursive(ppath, pattern, boost::bind(&ConfigCompiler::CollectIncludes, boost::ref(expressions), _1, zoneName, package), GlobFile);
+	Utility::GlobRecursive(ppath, pattern, std::bind(&ConfigCompiler::CollectIncludes, std::ref(expressions), _1, zoneName, package), GlobFile);
 }
 
 /**
@@ -218,22 +216,22 @@ void ConfigCompiler::HandleIncludeZone(const String& relativeBase, const String&
  * @param pattern The file pattern.
  * @param debuginfo Debug information.
  */
-Expression *ConfigCompiler::HandleIncludeZones(const String& relativeBase, const String& tag,
-    const String& path, const String& pattern, const String& package, const DebugInfo&)
+std::unique_ptr<Expression> ConfigCompiler::HandleIncludeZones(const String& relativeBase, const String& tag,
+	const String& path, const String& pattern, const String& package, const DebugInfo&)
 {
 	String ppath;
 	String newRelativeBase = relativeBase;
 
-	if (path.GetLength() > 0 && path[0] == '/')
+	if (IsAbsolutePath(path))
 		ppath = path;
 	else {
 		ppath = relativeBase + "/" + path;
 		newRelativeBase = ".";
 	}
 
-	std::vector<Expression *> expressions;
-	Utility::Glob(ppath + "/*", boost::bind(&ConfigCompiler::HandleIncludeZone, newRelativeBase, tag, _1, pattern, package, boost::ref(expressions)), GlobDirectory);
-	return new DictExpression(expressions);
+	std::vector<std::unique_ptr<Expression> > expressions;
+	Utility::Glob(ppath + "/*", std::bind(&ConfigCompiler::HandleIncludeZone, newRelativeBase, tag, _1, pattern, package, std::ref(expressions)), GlobDirectory);
+	return std::unique_ptr<Expression>(new DictExpression(std::move(expressions)));
 }
 
 /**
@@ -243,8 +241,8 @@ Expression *ConfigCompiler::HandleIncludeZones(const String& relativeBase, const
  * @param stream The input stream.
  * @returns Configuration items.
  */
-Expression *ConfigCompiler::CompileStream(const String& path,
-    std::istream *stream, const String& zone, const String& package)
+std::unique_ptr<Expression> ConfigCompiler::CompileStream(const String& path,
+	std::istream *stream, const String& zone, const String& package)
 {
 	CONTEXT("Compiling configuration stream with name '" + path + "'");
 
@@ -255,9 +253,9 @@ Expression *ConfigCompiler::CompileStream(const String& path,
 	try {
 		return ctx.Compile();
 	} catch (const ScriptError& ex) {
-		return new ThrowExpression(MakeLiteral(ex.what()), ex.IsIncompleteExpression(), ex.GetDebugInfo());
+		return std::unique_ptr<Expression>(new ThrowExpression(MakeLiteral(ex.what()), ex.IsIncompleteExpression(), ex.GetDebugInfo()));
 	} catch (const std::exception& ex) {
-		return new ThrowExpression(MakeLiteral(DiagnosticInformation(ex)), false);
+		return std::unique_ptr<Expression>(new ThrowExpression(MakeLiteral(DiagnosticInformation(ex)), false));
 	}
 }
 
@@ -267,8 +265,8 @@ Expression *ConfigCompiler::CompileStream(const String& path,
  * @param path The path.
  * @returns Configuration items.
  */
-Expression *ConfigCompiler::CompileFile(const String& path, const String& zone,
-    const String& package)
+std::unique_ptr<Expression> ConfigCompiler::CompileFile(const String& path, const String& zone,
+	const String& package)
 {
 	CONTEXT("Compiling configuration file '" + path + "'");
 
@@ -281,7 +279,7 @@ Expression *ConfigCompiler::CompileFile(const String& path, const String& zone,
 			<< boost::errinfo_file_name(path));
 
 	Log(LogNotice, "ConfigCompiler")
-	    << "Compiling config file: " << path;
+		<< "Compiling config file: " << path;
 
 	return CompileStream(path, &stream, zone, package);
 }
@@ -293,8 +291,8 @@ Expression *ConfigCompiler::CompileFile(const String& path, const String& zone,
  * @param text The text.
  * @returns Configuration items.
  */
-Expression *ConfigCompiler::CompileText(const String& path, const String& text,
-    const String& zone, const String& package)
+std::unique_ptr<Expression> ConfigCompiler::CompileText(const String& path, const String& text,
+	const String& zone, const String& package)
 {
 	std::stringstream stream(text);
 	return CompileStream(path, &stream, zone, package);
@@ -308,7 +306,7 @@ Expression *ConfigCompiler::CompileText(const String& path, const String& text,
 void ConfigCompiler::AddIncludeSearchDir(const String& dir)
 {
 	Log(LogInformation, "ConfigCompiler")
-	    << "Adding include search dir: " << dir;
+		<< "Adding include search dir: " << dir;
 
 	m_IncludeSearchDirs.push_back(dir);
 }
@@ -316,7 +314,7 @@ void ConfigCompiler::AddIncludeSearchDir(const String& dir)
 std::vector<ZoneFragment> ConfigCompiler::GetZoneDirs(const String& zone)
 {
 	boost::mutex::scoped_lock lock(m_ZoneDirsMutex);
-	std::map<String, std::vector<ZoneFragment> >::const_iterator it = m_ZoneDirs.find(zone);
+	auto it = m_ZoneDirs.find(zone);
 	if (it == m_ZoneDirs.end())
 		return std::vector<ZoneFragment>();
 	else
@@ -341,14 +339,25 @@ bool ConfigCompiler::HasZoneConfigAuthority(const String& zoneName)
 
 	if (!empty) {
 		std::vector<String> paths;
-		BOOST_FOREACH(const ZoneFragment& zf, zoneDirs) {
+		paths.reserve(zoneDirs.size());
+for (const ZoneFragment& zf : zoneDirs) {
 			paths.push_back(zf.Path);
 		}
 
 		Log(LogNotice, "ConfigCompiler")
-		    << "Registered authoritative config directories for zone '" << zoneName << "': " << Utility::NaturalJoin(paths);
+			<< "Registered authoritative config directories for zone '" << zoneName << "': " << Utility::NaturalJoin(paths);
 	}
 
 	return !empty;
+}
+
+
+bool ConfigCompiler::IsAbsolutePath(const String& path)
+{
+#ifndef _WIN32
+	return (path.GetLength() > 0 && path[0] == '/');
+#else /* _WIN32 */
+	return !PathIsRelative(path.CStr());
+#endif /* _WIN32 */
 }
 

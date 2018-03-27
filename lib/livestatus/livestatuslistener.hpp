@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,10 +21,10 @@
 #define LIVESTATUSLISTENER_H
 
 #include "livestatus/i2-livestatus.hpp"
-#include "livestatus/livestatuslistener.thpp"
+#include "livestatus/livestatuslistener-ti.hpp"
 #include "livestatus/livestatusquery.hpp"
 #include "base/socket.hpp"
-#include <boost/thread/thread.hpp>
+#include <thread>
 
 using namespace icinga;
 
@@ -34,7 +34,7 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API LivestatusListener : public ObjectImpl<LivestatusListener>
+class LivestatusListener final : public ObjectImpl<LivestatusListener>
 {
 public:
 	DECLARE_OBJECT(LivestatusListener);
@@ -42,21 +42,21 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	static int GetClientsConnected(void);
-	static int GetConnections(void);
+	static int GetClientsConnected();
+	static int GetConnections();
 
-	virtual void ValidateSocketType(const String& value, const ValidationUtils& utils) override;
+	void ValidateSocketType(const Lazy<String>& lvalue, const ValidationUtils& utils) override;
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
-	virtual void Stop(bool runtimeRemoved) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
-	void ServerThreadProc(void);
+	void ServerThreadProc();
 	void ClientHandler(const Socket::Ptr& client);
 
 	Socket::Ptr m_Listener;
-	boost::thread m_Thread;
+	std::thread m_Thread;
 };
 
 }

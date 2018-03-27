@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,7 +26,6 @@
 #include "base/value.hpp"
 #include "base/dictionary.hpp"
 #include <vector>
-#include <boost/function.hpp>
 
 namespace icinga
 {
@@ -36,14 +35,14 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_REMOTE_API ApiFunction : public Object
+class ApiFunction final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ApiFunction);
 
-	typedef boost::function<Value(const MessageOrigin::Ptr& origin, const Dictionary::Ptr&)> Callback;
+	typedef std::function<Value(const MessageOrigin::Ptr& origin, const Dictionary::Ptr&)> Callback;
 
-	ApiFunction(const Callback& function);
+	ApiFunction(Callback function);
 
 	Value Invoke(const MessageOrigin::Ptr& origin, const Dictionary::Ptr& arguments);
 
@@ -60,21 +59,17 @@ private:
  *
  * @ingroup base
  */
-class I2_REMOTE_API ApiFunctionRegistry : public Registry<ApiFunctionRegistry, ApiFunction::Ptr>
+class ApiFunctionRegistry : public Registry<ApiFunctionRegistry, ApiFunction::Ptr>
 {
 public:
-	static ApiFunctionRegistry *GetInstance(void);
+	static ApiFunctionRegistry *GetInstance();
 };
 
 #define REGISTER_APIFUNCTION(name, ns, callback) \
-	namespace { namespace UNIQUE_NAME(apif) { namespace apif ## name { \
-		void RegisterFunction(void) \
-		{ \
-			ApiFunction::Ptr func = new ApiFunction(callback); \
-			ApiFunctionRegistry::GetInstance()->Register(#ns "::" #name, func); \
-		} \
-		INITIALIZE_ONCE(RegisterFunction); \
-	} } }
+	INITIALIZE_ONCE([]() { \
+		ApiFunction::Ptr func = new ApiFunction(callback); \
+		ApiFunctionRegistry::GetInstance()->Register(#ns "::" #name, func); \
+	})
 
 }
 

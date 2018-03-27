@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,12 +23,8 @@
 #include "remote/url.hpp"
 #include "remote/url-characters.hpp"
 #include <boost/tokenizer.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
-
-Url::Url()
-{ }
 
 Url::Url(const String& base_url)
 {
@@ -37,7 +33,9 @@ Url::Url(const String& base_url)
 	if (url.GetLength() == 0)
 		BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid URL Empty URL."));
 
-	size_t pHelper = url.Find(":");
+	size_t pHelper = String::NPos;
+	if (url[0] != '/')
+		pHelper = url.Find(":");
 
 	if (pHelper != String::NPos) {
 		if (!ParseScheme(url.SubStr(0, pHelper)))
@@ -89,12 +87,12 @@ Url::Url(const String& base_url)
 	}
 }
 
-String Url::GetScheme(void) const
+String Url::GetScheme() const
 {
 	return m_Scheme;
 }
 
-String Url::GetAuthority(void) const
+String Url::GetAuthority() const
 {
 	if (m_Host.IsEmpty())
 		return "";
@@ -115,39 +113,39 @@ String Url::GetAuthority(void) const
 	return auth;
 }
 
-String Url::GetUsername(void) const
+String Url::GetUsername() const
 {
 	return m_Username;
 }
 
-String Url::GetPassword(void) const
+String Url::GetPassword() const
 {
 	return m_Password;
 }
 
-String Url::GetHost(void) const
+String Url::GetHost() const
 {
 	return m_Host;
 }
 
-String Url::GetPort(void) const
+String Url::GetPort() const
 {
 	return m_Port;
 }
 
-const std::vector<String>& Url::GetPath(void) const
+const std::vector<String>& Url::GetPath() const
 {
 	return m_Path;
 }
 
-const std::map<String, std::vector<String> >& Url::GetQuery(void) const
+const std::map<String, std::vector<String> >& Url::GetQuery() const
 {
 	return m_Query;
 }
 
 String Url::GetQueryElement(const String& name) const
 {
-	std::map<String, std::vector<String> >::const_iterator it = m_Query.find(name);
+	auto it = m_Query.find(name);
 
 	if (it == m_Query.end())
 		return String();
@@ -157,7 +155,7 @@ String Url::GetQueryElement(const String& name) const
 
 const std::vector<String>& Url::GetQueryElements(const String& name) const
 {
-	std::map<String, std::vector<String> >::const_iterator it = m_Query.find(name);
+	auto it = m_Query.find(name);
 
 	if (it == m_Query.end()) {
 		static std::vector<String> emptyVector;
@@ -167,7 +165,7 @@ const std::vector<String>& Url::GetQueryElements(const String& name) const
 	return it->second;
 }
 
-String Url::GetFragment(void) const
+String Url::GetFragment() const
 {
 	return m_Fragment;
 }
@@ -209,10 +207,9 @@ void Url::SetQuery(const std::map<String, std::vector<String> >& query)
 
 void Url::AddQueryElement(const String& name, const String& value)
 {
-	std::map<String, std::vector<String> >::iterator it = m_Query.find(name);
+	auto it = m_Query.find(name);
 	if (it == m_Query.end()) {
-		m_Query[name] = std::vector<String>();
-		m_Query[name].push_back(value);
+		m_Query[name] = std::vector<String> { value };
 	} else
 		m_Query[name].push_back(value);
 }
@@ -226,24 +223,26 @@ void Url::SetFragment(const String& fragment) {
 	m_Fragment = fragment;
 }
 
-String Url::Format(bool print_credentials) const
+String Url::Format(bool onlyPathAndQuery, bool printCredentials) const
 {
 	String url;
 
-	if (!m_Scheme.IsEmpty())
-		url += m_Scheme + ":";
+	if (!onlyPathAndQuery) {
+		if (!m_Scheme.IsEmpty())
+			url += m_Scheme + ":";
 
-	if (print_credentials && !GetAuthority().IsEmpty())
-		url += "//" + GetAuthority();
-	else if (!GetHost().IsEmpty())
-		url += "//" + GetHost() + (!GetPort().IsEmpty() ? ":" + GetPort() : "");
+		if (printCredentials && !GetAuthority().IsEmpty())
+			url += "//" + GetAuthority();
+		else if (!GetHost().IsEmpty())
+			url += "//" + GetHost() + (!GetPort().IsEmpty() ? ":" + GetPort() : "");
+	}
 
 	if (m_Path.empty())
 		url += "/";
 	else {
-		BOOST_FOREACH (const String& segment, m_Path) {
+		for (const String& segment : m_Path) {
 			url += "/";
-			url += Utility::EscapeString(segment, ACPATHSEGMENT, false);
+			url += Utility::EscapeString(segment, ACPATHSEGMENT_ENCODE, false);
 		}
 	}
 
@@ -251,24 +250,33 @@ String Url::Format(bool print_credentials) const
 	if (!m_Query.empty()) {
 		typedef std::pair<String, std::vector<String> > kv_pair;
 
-		BOOST_FOREACH (const kv_pair& kv, m_Query) {
-			String key = Utility::EscapeString(kv.first, ACQUERY, false);
+		for (const kv_pair& kv : m_Query) {
+			String key = Utility::EscapeString(kv.first, ACQUERY_ENCODE, false);
 			if (param.IsEmpty())
 				param = "?";
 			else
 				param += "&";
 
+			// Just one (or one empty) value
+			if (kv.second.size() == 1) {
+				param += key;
+				param += kv.second[0].IsEmpty() ?
+					String() : "=" + Utility::EscapeString(kv.second[0], ACQUERY_ENCODE, false);
+				continue;
+			}
+
+			// Array
 			String temp;
-			BOOST_FOREACH (const String s, kv.second) {
+			for (const String& s : kv.second) {
 				if (!temp.IsEmpty())
 					temp += "&";
 
 				temp += key;
-
 				if (kv.second.size() > 1)
 					temp += "[]";
 
-				temp += "=" + Utility::EscapeString(s, ACQUERY, false);
+				if (!s.IsEmpty())
+					temp += "=" + Utility::EscapeString(s, ACQUERY_ENCODE, false);
 			}
 			param += temp;
 		}
@@ -277,7 +285,7 @@ String Url::Format(bool print_credentials) const
 	url += param;
 
 	if (!m_Fragment.IsEmpty())
-		url += "#" + Utility::EscapeString(m_Fragment, ACFRAGMENT, false);
+		url += "#" + Utility::EscapeString(m_Fragment, ACFRAGMENT_ENCODE, false);
 
 	return url;
 }
@@ -340,20 +348,18 @@ bool Url::ParsePort(const String& port)
 
 bool Url::ParsePath(const String& path)
 {
-	std::string pathStr = path;
+	const std::string& pathStr = path;
 	boost::char_separator<char> sep("/");
 	boost::tokenizer<boost::char_separator<char> > tokens(pathStr, sep);
 
-	BOOST_FOREACH(const String& token, tokens) {
+	for (const String& token : tokens) {
 		if (token.IsEmpty())
 			continue;
 
 		if (!ValidateToken(token, ACPATHSEGMENT))
 			return false;
 
-		String decodedToken = Utility::UnescapeString(token);
-
-		m_Path.push_back(decodedToken);
+		m_Path.emplace_back(Utility::UnescapeString(token));
 	}
 
 	return true;
@@ -362,11 +368,11 @@ bool Url::ParsePath(const String& path)
 bool Url::ParseQuery(const String& query)
 {
 	/* Tokenizer does not like String AT ALL */
-	std::string queryStr = query;
+	const std::string& queryStr = query;
 	boost::char_separator<char> sep("&");
 	boost::tokenizer<boost::char_separator<char> > tokens(queryStr, sep);
 
-	BOOST_FOREACH(const String& token, tokens) {
+	for (const String& token : tokens) {
 		size_t pHelper = token.Find("=");
 
 		if (pHelper == 0)
@@ -376,7 +382,7 @@ bool Url::ParseQuery(const String& query)
 		String key = token.SubStr(0, pHelper);
 		String value = Empty;
 
-		if (pHelper != token.GetLength() - 1)
+		if (pHelper != String::NPos && pHelper != token.GetLength() - 1)
 			value = token.SubStr(pHelper+1);
 
 		if (!ValidateToken(value, ACQUERY))
@@ -396,14 +402,12 @@ bool Url::ParseQuery(const String& query)
 
 		key = Utility::UnescapeString(key);
 
-		std::map<String, std::vector<String> >::iterator it = m_Query.find(key);
+		auto it = m_Query.find(key);
 
 		if (it == m_Query.end()) {
-			m_Query[key] = std::vector<String>();
-			m_Query[key].push_back(value);
+			m_Query[key] = std::vector<String> { std::move(value) };
 		} else
-			m_Query[key].push_back(value);
-
+			m_Query[key].emplace_back(std::move(value));
 	}
 
 	return true;
@@ -418,8 +422,8 @@ bool Url::ParseFragment(const String& fragment)
 
 bool Url::ValidateToken(const String& token, const String& symbols)
 {
-	BOOST_FOREACH (const char c, token.CStr()) {
-		if (symbols.FindFirstOf(c) == String::NPos)
+	for (const char ch : token) {
+		if (symbols.FindFirstOf(ch) == String::NPos)
 			return false;
 	}
 

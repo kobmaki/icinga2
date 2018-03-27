@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,7 +34,7 @@ void HttpHandler::Register(const Url::Ptr& url, const HttpHandler::Ptr& handler)
 
 	Dictionary::Ptr node = m_UrlTree;
 
-	BOOST_FOREACH(const String& elem, url->GetPath()) {
+	for (const String& elem : url->GetPath()) {
 		Dictionary::Ptr children = node->Get("children");
 
 		if (!children) {
@@ -67,12 +67,12 @@ void HttpHandler::ProcessRequest(const ApiUser::Ptr& user, HttpRequest& request,
 	std::vector<HttpHandler::Ptr> handlers;
 	const std::vector<String>& path = request.RequestUrl->GetPath();
 
-	for (int i = 0; i <= path.size(); i++) {
+	for (std::vector<String>::size_type i = 0; i <= path.size(); i++) {
 		Array::Ptr current_handlers = node->Get("handlers");
 
 		if (current_handlers) {
 			ObjectLock olock(current_handlers);
-			BOOST_FOREACH(const HttpHandler::Ptr current_handler, current_handlers) {
+			for (const HttpHandler::Ptr& current_handler : current_handlers) {
 				handlers.push_back(current_handler);
 			}
 		}
@@ -100,12 +100,12 @@ void HttpHandler::ProcessRequest(const ApiUser::Ptr& user, HttpRequest& request,
 	try {
 		params = HttpUtility::FetchRequestParameters(request);
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 400, "Invalid request body: " + DiagnosticInformation(ex, false));
+		HttpUtility::SendJsonError(response, params, 400, "Invalid request body: " + DiagnosticInformation(ex, false));
 		return;
 	}
 
 	bool processed = false;
-	BOOST_FOREACH(const HttpHandler::Ptr& handler, handlers) {
+	for (const HttpHandler::Ptr& handler : handlers) {
 		if (handler->HandleRequest(user, request, response, params)) {
 			processed = true;
 			break;
@@ -114,7 +114,7 @@ void HttpHandler::ProcessRequest(const ApiUser::Ptr& user, HttpRequest& request,
 
 	if (!processed) {
 		String path = boost::algorithm::join(request.RequestUrl->GetPath(), "/");
-		HttpUtility::SendJsonError(response, 404, "The requested path '" + path +
+		HttpUtility::SendJsonError(response, params, 404, "The requested path '" + path +
 				"' could not be found or the request method is not valid for this path.");
 		return;
 	}

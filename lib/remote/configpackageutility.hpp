@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -35,28 +35,30 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API ConfigPackageUtility
+class ConfigPackageUtility
 {
 
 public:
-	static String GetPackageDir(void);
+	static String GetPackageDir();
 
 	static void CreatePackage(const String& name);
 	static void DeletePackage(const String& name);
-	static std::vector<String> GetPackages(void);
+	static std::vector<String> GetPackages();
 	static bool PackageExists(const String& name);
 
-	static String CreateStage(const String& packageName, const Dictionary::Ptr& files = Dictionary::Ptr());
+	static String CreateStage(const String& packageName, const Dictionary::Ptr& files = nullptr);
 	static void DeleteStage(const String& packageName, const String& stageName);
 	static std::vector<String> GetStages(const String& packageName);
 	static String GetActiveStage(const String& packageName);
 	static void ActivateStage(const String& packageName, const String& stageName);
-	static void AsyncTryActivateStage(const String& packageName, const String& stageName);
+	static void AsyncTryActivateStage(const String& packageName, const String& stageName, bool reload);
 
 	static std::vector<std::pair<String, bool> > GetFiles(const String& packageName, const String& stageName);
 
 	static bool ContainsDotDot(const String& path);
 	static bool ValidateName(const String& name);
+
+	static boost::mutex& GetStaticMutex();
 
 private:
 	static void CollectDirNames(const String& path, std::vector<String>& dirs);
@@ -65,7 +67,7 @@ private:
 	static void WritePackageConfig(const String& packageName);
 	static void WriteStageConfig(const String& packageName, const String& stageName);
 
-	static void TryActivateStageCallback(const ProcessResult& pr, const String& packageName, const String& stageName);
+	static void TryActivateStageCallback(const ProcessResult& pr, const String& packageName, const String& stageName, bool reload);
 };
 
 }

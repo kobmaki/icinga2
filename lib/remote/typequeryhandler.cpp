@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,38 +23,26 @@
 #include "base/configtype.hpp"
 #include "base/scriptglobal.hpp"
 #include "base/logger.hpp"
-#include <boost/algorithm/string.hpp>
 #include <set>
 
 using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/types", TypeQueryHandler);
 
-class TypeTargetProvider : public TargetProvider
+class TypeTargetProvider final : public TargetProvider
 {
 public:
 	DECLARE_PTR_TYPEDEFS(TypeTargetProvider);
 
-	virtual void FindTargets(const String& type,
-	    const boost::function<void (const Value&)>& addTarget) const override
+	void FindTargets(const String& type,
+		const std::function<void (const Value&)>& addTarget) const override
 	{
-		std::vector<Type::Ptr> targets;
-
-		{
-			Dictionary::Ptr globals = ScriptGlobal::GetGlobals();
-			ObjectLock olock(globals);
-			BOOST_FOREACH(const Dictionary::Pair& kv, globals) {
-				if (kv.second.IsObjectType<Type>())
-					targets.push_back(kv.second);
-			}
-		}
-
-		BOOST_FOREACH(const Type::Ptr& target, targets) {
+		for (const Type::Ptr& target : Type::GetAllTypes()) {
 			addTarget(target);
 		}
 	}
 
-	virtual Value GetTargetByName(const String& type, const String& name) const override
+	Value GetTargetByName(const String& type, const String& name) const override
 	{
 		Type::Ptr ptype = Type::GetByName(name);
 
@@ -64,12 +52,12 @@ public:
 		return ptype;
 	}
 
-	virtual bool IsValidType(const String& type) const override
+	bool IsValidType(const String& type) const override
 	{
 		return type == "Type";
 	}
 
-	virtual String GetPluralName(const String& type) const override
+	String GetPluralName(const String& type) const override
 	{
 		return "types";
 	}
@@ -85,6 +73,7 @@ bool TypeQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& requ
 
 	QueryDescription qd;
 	qd.Types.insert("Type");
+	qd.Permission = "types";
 	qd.Provider = new TypeTargetProvider();
 
 	if (params->Contains("type"))
@@ -100,17 +89,17 @@ bool TypeQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& requ
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user);
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No objects found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No objects found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
-	Array::Ptr results = new Array();
+	ArrayData results;
 
-	BOOST_FOREACH(const Type::Ptr& obj, objs) {
+	for (const Type::Ptr& obj : objs) {
 		Dictionary::Ptr result1 = new Dictionary();
-		results->Add(result1);
+		results.push_back(result1);
 
 		Dictionary::Ptr resultAttrs = new Dictionary();
 		result1->Set("name", obj->GetName());
@@ -126,7 +115,7 @@ bool TypeQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& requ
 
 		if (prototype) {
 			ObjectLock olock(prototype);
-			BOOST_FOREACH(const Dictionary::Pair& kv, prototype) {
+			for (const Dictionary::Pair& kv : prototype) {
 				prototypeKeys->Add(kv.first);
 			}
 		}
@@ -150,24 +139,24 @@ bool TypeQueryHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& requ
 				fieldInfo->Set("navigation_name", field.NavigationName);
 			fieldInfo->Set("array_rank", field.ArrayRank);
 
-			Dictionary::Ptr attributeInfo = new Dictionary();
-			fieldInfo->Set("attributes", attributeInfo);
-
-			attributeInfo->Set("config", static_cast<bool>(field.Attributes & FAConfig));
-			attributeInfo->Set("state", static_cast<bool>(field.Attributes & FAState));
-			attributeInfo->Set("required", static_cast<bool>(field.Attributes & FARequired));
-			attributeInfo->Set("navigation", static_cast<bool>(field.Attributes & FANavigation));
-			attributeInfo->Set("no_user_modify", static_cast<bool>(field.Attributes & FANoUserModify));
-			attributeInfo->Set("no_user_view", static_cast<bool>(field.Attributes & FANoUserView));
+			fieldInfo->Set("attributes", new Dictionary({
+				{ "config", static_cast<bool>(field.Attributes & FAConfig) },
+				{ "state", static_cast<bool>(field.Attributes & FAState) },
+				{ "required", static_cast<bool>(field.Attributes & FARequired) },
+				{ "navigation", static_cast<bool>(field.Attributes & FANavigation) },
+				{ "no_user_modify", static_cast<bool>(field.Attributes & FANoUserModify) },
+				{ "no_user_view", static_cast<bool>(field.Attributes & FANoUserView) },
+				{ "deprecated", static_cast<bool>(field.Attributes & FADeprecated) }
+			}));
 		}
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }
-

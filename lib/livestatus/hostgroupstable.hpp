@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,21 +30,21 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API HostGroupsTable : public Table
+class HostGroupsTable final : public Table
 {
 public:
 	DECLARE_PTR_TYPEDEFS(HostGroupsTable);
 
-	HostGroupsTable(void);
+	HostGroupsTable();
 
 	static void AddColumns(Table *table, const String& prefix = String(),
-	    const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
+		const Column::ObjectAccessor& objectAccessor = Column::ObjectAccessor());
 
-	virtual String GetName(void) const override;
-	virtual String GetPrefix(void) const override;
+	String GetName() const override;
+	String GetPrefix() const override;
 
 protected:
-	virtual void FetchRows(const AddRowFunction& addRowFn) override;
+	void FetchRows(const AddRowFunction& addRowFn) override;
 
 	static Value NameAccessor(const Value& row);
 	static Value AliasAccessor(const Value& row);
@@ -60,7 +60,7 @@ protected:
 	static Value NumHostsDownAccessor(const Value& row);
 	static Value NumHostsUnreachAccessor(const Value& row);
 	static Value NumServicesAccessor(const Value& row);
-	static Value WorstServicesStateAccessor(const Value& row);
+	static Value WorstServiceStateAccessor(const Value& row);
 	static Value NumServicesPendingAccessor(const Value& row);
 	static Value NumServicesOkAccessor(const Value& row);
 	static Value NumServicesWarnAccessor(const Value& row);

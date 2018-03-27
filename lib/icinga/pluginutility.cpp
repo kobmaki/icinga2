@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,24 +19,21 @@
 
 #include "icinga/pluginutility.hpp"
 #include "icinga/macroprocessor.hpp"
-#include "icinga/perfdatavalue.hpp"
 #include "base/logger.hpp"
 #include "base/utility.hpp"
+#include "base/perfdatavalue.hpp"
 #include "base/convert.hpp"
 #include "base/process.hpp"
 #include "base/objectlock.hpp"
 #include "base/exception.hpp"
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 void PluginUtility::ExecuteCommand(const Command::Ptr& commandObj, const Checkable::Ptr& checkable,
-    const CheckResult::Ptr& cr, const MacroProcessor::ResolverList& macroResolvers,
-    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros,
-    const boost::function<void(const Value& commandLine, const ProcessResult&)>& callback)
+	const CheckResult::Ptr& cr, const MacroProcessor::ResolverList& macroResolvers,
+	const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros,
+	const std::function<void(const Value& commandLine, const ProcessResult&)>& callback)
 {
 	Value raw_command = commandObj->GetCommandLine();
 	Dictionary::Ptr raw_arguments = commandObj->GetArguments();
@@ -45,7 +42,7 @@ void PluginUtility::ExecuteCommand(const Command::Ptr& commandObj, const Checkab
 
 	try {
 		command = MacroProcessor::ResolveArguments(raw_command, raw_arguments,
-		    macroResolvers, cr, resolvedMacros, useResolvedMacros);
+			macroResolvers, cr, resolvedMacros, useResolvedMacros);
 	} catch (const std::exception& ex) {
 		String message = DiagnosticInformation(ex);
 
@@ -70,12 +67,12 @@ void PluginUtility::ExecuteCommand(const Command::Ptr& commandObj, const Checkab
 
 	if (env) {
 		ObjectLock olock(env);
-		BOOST_FOREACH(const Dictionary::Pair& kv, env) {
+		for (const Dictionary::Pair& kv : env) {
 			String name = kv.second;
 
 			Value value = MacroProcessor::ResolveMacros(name, macroResolvers, cr,
-			    NULL, MacroProcessor::EscapeCallback(), resolvedMacros,
-			    useResolvedMacros);
+				nullptr, MacroProcessor::EscapeCallback(), resolvedMacros,
+				useResolvedMacros);
 
 			if (value.IsObjectType<Array>())
 				value = Utility::Join(value, ';');
@@ -94,7 +91,9 @@ void PluginUtility::ExecuteCommand(const Command::Ptr& commandObj, const Checkab
 	else
 		process->SetTimeout(checkable->GetCheckTimeout());
 
-	process->Run(boost::bind(callback, command, _1));
+	process->SetAdjustPriority(true);
+
+	process->Run(std::bind(callback, command, _1));
 }
 
 ServiceState PluginUtility::ExitStatusToState(int exitStatus)
@@ -116,10 +115,9 @@ std::pair<String, String> PluginUtility::ParseCheckOutput(const String& output)
 	String text;
 	String perfdata;
 
-	std::vector<String> lines;
-	boost::algorithm::split(lines, output, boost::is_any_of("\r\n"));
+	std::vector<String> lines = output.Split("\r\n");
 
-	BOOST_FOREACH (const String& line, lines) {
+	for (const String& line : lines) {
 		size_t delim = line.FindFirstOf("|");
 
 		if (!text.IsEmpty())
@@ -144,7 +142,7 @@ std::pair<String, String> PluginUtility::ParseCheckOutput(const String& output)
 
 Array::Ptr PluginUtility::SplitPerfdata(const String& perfdata)
 {
-	Array::Ptr result = new Array();
+	ArrayData result;
 
 	size_t begin = 0;
 	String multi_prefix;
@@ -181,7 +179,7 @@ Array::Ptr PluginUtility::SplitPerfdata(const String& perfdata)
 		else
 			pdv = label + "=" + value;
 
-		result->Add(pdv);
+		result.emplace_back(std::move(pdv));
 
 		if (multi_index != String::NPos)
 			multi_prefix = label.SubStr(0, multi_index);
@@ -189,7 +187,7 @@ Array::Ptr PluginUtility::SplitPerfdata(const String& perfdata)
 		begin = spq + 1;
 	}
 
-	return result;
+	return new Array(std::move(result));
 }
 
 String PluginUtility::FormatPerfdata(const Array::Ptr& perfdata)
@@ -202,7 +200,7 @@ String PluginUtility::FormatPerfdata(const Array::Ptr& perfdata)
 	ObjectLock olock(perfdata);
 
 	bool first = true;
-	BOOST_FOREACH(const Value& pdv, perfdata) {
+	for (const Value& pdv : perfdata) {
 		if (!first)
 			result << " ";
 		else

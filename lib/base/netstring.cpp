@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -32,7 +32,8 @@ using namespace icinga;
  * @exception invalid_argument The input stream is invalid.
  * @see https://github.com/PeterScott/netstring-c/blob/master/netstring.c
  */
-StreamReadStatus NetString::ReadStringFromStream(const Stream::Ptr& stream, String *str, StreamReadContext& context, bool may_wait)
+StreamReadStatus NetString::ReadStringFromStream(const Stream::Ptr& stream, String *str, StreamReadContext& context,
+	bool may_wait, ssize_t maxMessageLength)
 {
 	if (context.Eof)
 		return StatusEof;
@@ -84,6 +85,13 @@ StreamReadStatus NetString::ReadStringFromStream(const Stream::Ptr& stream, Stri
 	/* read the whole message */
 	size_t data_length = len + 1;
 
+	if (maxMessageLength >= 0 && data_length > maxMessageLength) {
+		std::stringstream errorMessage;
+		errorMessage << "Max data length exceeded: " << (maxMessageLength / 1024) << " KB";
+
+		BOOST_THROW_EXCEPTION(std::invalid_argument(errorMessage.str()));
+	}
+
 	char *data = context.Buffer + header_length + 1;
 
 	if (context.Size < header_length + 1 + data_length) {
@@ -102,16 +110,30 @@ StreamReadStatus NetString::ReadStringFromStream(const Stream::Ptr& stream, Stri
 }
 
 /**
+ * Writes data into a stream using the netstring format and returns bytes written.
+ *
+ * @param stream The stream.
+ * @param str The String that is to be written.
+ *
+ * @return The amount of bytes written.
+ */
+size_t NetString::WriteStringToStream(const Stream::Ptr& stream, const String& str)
+{
+	std::ostringstream msgbuf;
+	WriteStringToStream(msgbuf, str);
+
+	String msg = msgbuf.str();
+	stream->Write(msg.CStr(), msg.GetLength());
+	return msg.GetLength();
+}
+
+/**
  * Writes data into a stream using the netstring format.
  *
  * @param stream The stream.
  * @param str The String that is to be written.
  */
-void NetString::WriteStringToStream(const Stream::Ptr& stream, const String& str)
+void NetString::WriteStringToStream(std::ostream& stream, const String& str)
 {
-	std::ostringstream msgbuf;
-	msgbuf << str.GetLength() << ":" << str << ",";
-
-	String msg = msgbuf.str();
-	stream->Write(msg.CStr(), msg.GetLength());
+	stream << str.GetLength() << ":" << str << ",";
 }

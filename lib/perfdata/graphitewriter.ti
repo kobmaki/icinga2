@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -40,8 +40,11 @@ class GraphiteWriter : ConfigObject
 	};
         [config] bool enable_send_thresholds;
         [config] bool enable_send_metadata;
-        [config] bool enable_legacy_mode;
 
+	[no_user_modify] bool connected;
+	[no_user_modify] bool should_connect {
+		default {{{ return true; }}}
+	};
 };
 
 }

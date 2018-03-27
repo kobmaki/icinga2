@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,11 +21,11 @@
 
 using namespace icinga;
 
-NetworkStream::NetworkStream(const Socket::Ptr& socket)
-	: m_Socket(socket), m_Eof(false)
+NetworkStream::NetworkStream(Socket::Ptr socket)
+	: m_Socket(std::move(socket)), m_Eof(false)
 { }
 
-void NetworkStream::Close(void)
+void NetworkStream::Close()
 {
 	Stream::Close();
 
@@ -35,7 +35,7 @@ void NetworkStream::Close(void)
 /**
  * Reads data from the stream.
  *
- * @param buffer The buffer where data should be stored. May be NULL if you're
+ * @param buffer The buffer where data should be stored. May be nullptr if you're
  *		 not actually interested in the data.
  * @param count The number of bytes to read from the queue.
  * @returns The number of bytes actually read.
@@ -92,7 +92,7 @@ void NetworkStream::Write(const void *buffer, size_t count)
 	}
 }
 
-bool NetworkStream::IsEof(void) const
+bool NetworkStream::IsEof() const
 {
 	return m_Eof;
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,7 @@
 #ifndef CHECKCOMMAND_H
 #define CHECKCOMMAND_H
 
-#include "icinga/checkcommand.thpp"
+#include "icinga/checkcommand-ti.hpp"
 #include "icinga/checkable.hpp"
 
 namespace icinga
@@ -31,15 +31,15 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API CheckCommand : public ObjectImpl<CheckCommand>
+class CheckCommand final : public ObjectImpl<CheckCommand>
 {
 public:
 	DECLARE_OBJECT(CheckCommand);
 	DECLARE_OBJECTNAME(CheckCommand);
 
 	virtual void Execute(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr,
-	    const Dictionary::Ptr& resolvedMacros = Dictionary::Ptr(),
-	    bool useResolvedMacros = false);
+		const Dictionary::Ptr& resolvedMacros = nullptr,
+		bool useResolvedMacros = false);
 };
 
 }

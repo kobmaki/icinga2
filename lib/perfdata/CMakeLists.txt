@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,28 +15,32 @@
 # along with this program; if not, write to the Free Software Foundation
 # Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-mkclass_target(gelfwriter.ti gelfwriter.tcpp gelfwriter.thpp)
-mkclass_target(graphitewriter.ti graphitewriter.tcpp graphitewriter.thpp)
-mkclass_target(influxdbwriter.ti influxdbwriter.tcpp influxdbwriter.thpp)
-mkclass_target(opentsdbwriter.ti opentsdbwriter.tcpp opentsdbwriter.thpp)
-mkclass_target(perfdatawriter.ti perfdatawriter.tcpp perfdatawriter.thpp)
+mkclass_target(gelfwriter.ti gelfwriter-ti.cpp gelfwriter-ti.hpp)
+mkclass_target(graphitewriter.ti graphitewriter-ti.cpp graphitewriter-ti.hpp)
+mkclass_target(influxdbwriter.ti influxdbwriter-ti.cpp influxdbwriter-ti.hpp)
+mkclass_target(elasticsearchwriter.ti elasticsearchwriter-ti.cpp elasticsearchwriter-ti.hpp)
+mkclass_target(opentsdbwriter.ti opentsdbwriter-ti.cpp opentsdbwriter-ti.hpp)
+mkclass_target(perfdatawriter.ti perfdatawriter-ti.cpp perfdatawriter-ti.hpp)
 
 set(perfdata_SOURCES
-  gelfwriter.cpp gelfwriter.thpp graphitewriter.cpp graphitewriter.thpp influxdbwriter.cpp influxdbwriter.thpp opentsdbwriter.cpp opentsdbwriter.thpp perfdatawriter.cpp perfdatawriter.thpp
+  elasticsearchwriter.cpp elasticsearchwriter.hpp elasticsearchwriter-ti.hpp
+  gelfwriter.cpp gelfwriter.hpp gelfwriter-ti.hpp
+  graphitewriter.cpp graphitewriter.hpp graphitewriter-ti.hpp
+  influxdbwriter.cpp influxdbwriter.hpp influxdbwriter-ti.hpp
+  opentsdbwriter.cpp opentsdbwriter.hpp opentsdbwriter-ti.hpp
+  perfdatawriter.cpp perfdatawriter.hpp perfdatawriter-ti.hpp
 )
 
 if(ICINGA2_UNITY_BUILD)
-    mkunity_target(perfdata perfdata_SOURCES)
+  mkunity_target(perfdata perfdata perfdata_SOURCES)
 endif()
 
-add_library(perfdata SHARED ${perfdata_SOURCES})
+add_library(perfdata OBJECT ${perfdata_SOURCES})
 
-target_link_libraries(perfdata ${Boost_LIBRARIES} base config icinga)
+add_dependencies(perfdata base config icinga)
 
 set_target_properties (
   perfdata PROPERTIES
-  INSTALL_RPATH ${CMAKE_INSTALL_FULL_LIBDIR}/icinga2
-  DEFINE_SYMBOL I2_PERFDATA_BUILD
   FOLDER Components
 )
 
@@ -56,6 +60,11 @@ install_if_not_exists(
 )
 
 install_if_not_exists(
+  ${PROJECT_SOURCE_DIR}/etc/icinga2/features-available/elasticsearch.conf
+  ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-available
+)
+
+install_if_not_exists(
   ${PROJECT_SOURCE_DIR}/etc/icinga2/features-available/opentsdb.conf
   ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-available
 )
@@ -63,12 +72,6 @@ install_if_not_exists(
 install_if_not_exists(
   ${PROJECT_SOURCE_DIR}/etc/icinga2/features-available/perfdata.conf
   ${CMAKE_INSTALL_SYSCONFDIR}/icinga2/features-available
-)
-
-install(
-  TARGETS perfdata
-  RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/icinga2
 )
 
 install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/spool/icinga2/perfdata\")")

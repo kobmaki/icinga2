@@ -18,12 +18,16 @@ namespace Icinga
 	public partial class SetupWizard : Form
 	{
 		private string _TrustedFile;
+		private string Icinga2User;
 
 		public SetupWizard()
 		{
 			InitializeComponent();
 
 			txtInstanceName.Text = Icinga2InstanceName;
+
+			Icinga2User = Program.Icinga2User;
+			txtUser.Text = Icinga2User;
 		}
 
 		private void Warning(string message)
@@ -50,8 +54,8 @@ namespace Icinga
 		{
 			foreach (ListViewItem lvi in lvwEndpoints.Items) {
 				if (lvi.SubItems.Count > 1) {
-					host = lvi.SubItems[1].Text;
-					port = lvi.SubItems[2].Text;
+					host = lvi.SubItems[1].Text.Trim();
+					port = lvi.SubItems[2].Text.Trim();
 					return true;
 				}
 			}
@@ -121,10 +125,12 @@ namespace Icinga
 			String result = "";
 
 			using (Process proc = Process.Start(psi)) {
-				proc.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs args) {
+				proc.ErrorDataReceived += delegate (object sender, DataReceivedEventArgs args)
+				{
 					result += args.Data + "\r\n";
 				};
-				proc.OutputDataReceived += delegate(object sender, DataReceivedEventArgs args) {
+				proc.OutputDataReceived += delegate (object sender, DataReceivedEventArgs args)
+				{
 					result += args.Data + "\r\n";
 				};
 				proc.BeginOutputReadLine();
@@ -183,25 +189,23 @@ namespace Icinga
 
 			string args = "";
 
-			if (rdoNewMaster.Checked)
-				args += " --master";
-
-			Invoke((MethodInvoker)delegate {
+			Invoke((MethodInvoker)delegate
+			{
 				string master_host, master_port;
 				GetMasterHostPort(out master_host, out master_port);
 
 				args += " --master_host " + master_host + "," + master_port;
 
 				foreach (ListViewItem lvi in lvwEndpoints.Items) {
-					args += " --endpoint " + lvi.SubItems[0].Text;
-					
+					args += " --endpoint " + lvi.SubItems[0].Text.Trim();
+
 					if (lvi.SubItems.Count > 1)
-						args += "," + lvi.SubItems[1].Text + "," + lvi.SubItems[2].Text;
+						args += "," + lvi.SubItems[1].Text.Trim() + "," + lvi.SubItems[2].Text.Trim();
 				}
 			});
 
 			if (rdoListener.Checked)
-				args += " --listen ::," + txtListenerPort.Text;
+				args += " --listen ::," + txtListenerPort.Text.Trim();
 
 			if (chkAcceptConfig.Checked)
 				args += " --accept-config";
@@ -209,10 +213,14 @@ namespace Icinga
 			if (chkAcceptCommands.Checked)
 				args += " --accept-commands";
 
-			args += " --ticket \"" + txtTicket.Text + "\"";
+			string ticket = txtTicket.Text.Trim();
+
+			if (ticket.Length > 0)
+				args += " --ticket \"" + ticket + "\"";
+
 			args += " --trustedcert \"" + _TrustedFile + "\"";
-			args += " --cn \"" + txtInstanceName.Text + "\"";
-			args += " --zone \"" + txtInstanceName.Text + "\"";
+			args += " --cn \"" + txtInstanceName.Text.Trim() + "\"";
+			args += " --zone \"" + txtInstanceName.Text.Trim() + "\"";
 
 			if (!RunProcess(Program.Icinga2InstallDir + "\\sbin\\icinga2.exe",
 				"node setup" + args,
@@ -222,13 +230,21 @@ namespace Icinga
 			}
 
 			SetConfigureStatus(50, "Setting ACLs for the Icinga 2 directory...");
+
+			string serviceUser = txtUser.Text.Trim();
+
 			DirectoryInfo di = new DirectoryInfo(Program.Icinga2InstallDir);
 			DirectorySecurity ds = di.GetAccessControl();
-			FileSystemAccessRule rule = new FileSystemAccessRule("NT AUTHORITY\\NetworkService",
+			FileSystemAccessRule rule = new FileSystemAccessRule(serviceUser,
 				FileSystemRights.Modify,
 				InheritanceFlags.ObjectInherit | InheritanceFlags.ContainerInherit, PropagationFlags.None, AccessControlType.Allow);
-			ds.AddAccessRule(rule);
-			di.SetAccessControl(ds);
+			try {
+				ds.AddAccessRule(rule);
+				di.SetAccessControl(ds);
+			} catch (System.Security.Principal.IdentityNotMappedException) {
+				ShowErrorText("Could not set ACLs for user \"" + serviceUser + "\". Identitiy is not mapped.\n");
+				return;
+			}
 
 			SetConfigureStatus(75, "Installing the Icinga 2 service...");
 
@@ -244,14 +260,14 @@ namespace Icinga
 			}
 
 			if (!RunProcess(Program.Icinga2InstallDir + "\\sbin\\icinga2.exe",
-				"--scm-install daemon",
+				"--scm-install --scm-user \"" + serviceUser + "\" daemon",
 				out output)) {
-				ShowErrorText("Running command 'icinga2.exe daemon --scm-install daemon' produced the following output:\n" + output);
+				ShowErrorText("\nRunning command 'icinga2.exe --scm-install --scm-user \"" +
+					serviceUser + "\" daemon' produced the following output:\n" + output);
 				return;
 			}
 
-			if (chkInstallNSCP.Checked)
-			{
+			if (chkInstallNSCP.Checked) {
 				SetConfigureStatus(85, "Waiting for NSClient++ installation to complete...");
 
 				Process proc = new Process();
@@ -262,6 +278,14 @@ namespace Icinga
 			}
 
 			SetConfigureStatus(100, "Finished.");
+
+			// Override the completed text
+			lblSetupCompleted.Text = "The Icinga 2 Windows client was set up successfully.";
+
+			// Add a note for the user for ticket-less signing
+			if (ticket.Length == 0) {
+				lblSetupCompleted.Text += "\n\nTicket was not specified. Please sign the certificate request on the Icinga 2 master node (requires v2.8+).";
+			}
 
 			FinishConfigure();
 		}
@@ -299,26 +323,24 @@ namespace Icinga
 					return;
 				}
 
-				if (txtTicket.Text.Length == 0) {
-					Warning("Please enter an agent ticket.");
+				if (lvwEndpoints.Items.Count == 0) {
+					Warning("You need to add at least one master/satellite endpoint.");
 					return;
 				}
 
-				if (rdoNoMaster.Checked) {
-					if (lvwEndpoints.Items.Count == 0) {
-						Warning("You need to add at least one master endpoint.");
-						return;
-					}
-
-					string host, port;
-					if (!GetMasterHostPort(out host, out port)) {
-						Warning("Please enter a remote host and port for at least one of your endpoints.");
-						return;
-					}
+				string host, port;
+				if (!GetMasterHostPort(out host, out port)) {
+					Warning("Please enter a remote host and port for at least one of your endpoints.");
+					return;
 				}
 
 				if (rdoListener.Checked && (txtListenerPort.Text == "")) {
 					Warning("You need to specify a listener port.");
+					return;
+				}
+
+				if (txtUser.Text.Length == 0) {
+					Warning("Icinga 2 service user may not be empty.");
 					return;
 				}
 			}
@@ -356,33 +378,10 @@ namespace Icinga
 				thread.Start();
 			}
 
-            /*if (tbcPages.SelectedTab == tabParameters &&
-				!File.Exists(Icinga2DataDir + "\\etc\\icinga2\\pki\\agent\\agent.crt")) {
-				byte[] bytes = Convert.FromBase64String(txtBundle.Text);
-				MemoryStream ms = new MemoryStream(bytes);
-				GZipStream gz = new GZipStream(ms, CompressionMode.Decompress);
-				MemoryStream ms2 = new MemoryStream();
-
-				byte[] buffer = new byte[512];
-				int rc;
-				while ((rc = gz.Read(buffer, 0, buffer.Length)) > 0)
-					ms2.Write(buffer, 0, rc);
-				ms2.Position = 0;
-				TarReader tr = new TarReader(ms2);
-				tr.ReadToEnd(Icinga2DataDir + "\\etc\\icinga2\\pki\\agent");
-			}*/
-
-            if (tbcPages.SelectedTab == tabConfigure) {
+			if (tbcPages.SelectedTab == tabConfigure) {
 				Thread thread = new Thread(ConfigureService);
 				thread.Start();
 			}
-		}
-
-		private void RadioMaster_CheckedChanged(object sender, EventArgs e)
-		{
-			lvwEndpoints.Enabled = !rdoNewMaster.Checked;
-			btnAddEndpoint.Enabled = !rdoNewMaster.Checked;
-			btnRemoveEndpoint.Enabled = !rdoNewMaster.Checked && lvwEndpoints.SelectedItems.Count > 0;
 		}
 
 		private void RadioListener_CheckedChanged(object sender, EventArgs e)
@@ -461,6 +460,7 @@ namespace Icinga
 		private void lvwEndpoints_SelectedIndexChanged(object sender, EventArgs e)
 		{
 			btnRemoveEndpoint.Enabled = lvwEndpoints.SelectedItems.Count > 0;
+			btnEditEndpoint.Enabled = lvwEndpoints.SelectedItems.Count > 0;
 		}
 
 		private void lvwX509Fields_SelectedIndexChanged(object sender, EventArgs e)
@@ -470,7 +470,7 @@ namespace Icinga
 
 			ListViewItem lvi = lvwX509Fields.SelectedItems[0];
 
-			txtX509Field.Text = (string)lvi.Tag;
+			txtX509Field.Text = Convert.ToString(lvi.Tag);
 		}
 
 		private void btnRemoveEndpoint_Click(object sender, EventArgs e)
@@ -478,6 +478,44 @@ namespace Icinga
 			while (lvwEndpoints.SelectedItems.Count > 0) {
 				lvwEndpoints.Items.Remove(lvwEndpoints.SelectedItems[0]);
 			}
-        }
+		}
+
+		private void chkRunServiceAsThisUser_CheckedChanged(object sender, EventArgs e)
+		{
+			txtUser.Enabled = !txtUser.Enabled;
+			if (!txtUser.Enabled)
+				txtUser.Text = Icinga2User;
+		}
+
+		private void btnEditEndpoint_Click(object sender, EventArgs e)
+		{
+			ListViewItem lvi = lvwEndpoints.SelectedItems[0];
+			EndpointInputBox eib = new EndpointInputBox();
+
+			eib.Text = "Edit Endpoint";
+			eib.txtInstanceName.Text = lvi.SubItems[0].Text;
+
+			if (lvi.SubItems.Count >= 2) {
+				eib.txtHost.Text = lvi.SubItems[1].Text;
+				eib.txtPort.Text = lvi.SubItems[2].Text;
+				eib.chkConnect.Checked = true;
+			}
+
+			if (eib.ShowDialog(this) == DialogResult.Cancel)
+				return;
+
+			lvwEndpoints.Items.Remove(lvi);
+
+			ListViewItem lvi2 = new ListViewItem();
+			lvi2.Text = eib.txtInstanceName.Text;
+
+			if (eib.chkConnect.Checked) {
+				lvi2.SubItems.Add(eib.txtHost.Text);
+				lvi2.SubItems.Add(eib.txtPort.Text);
+			}
+
+			lvwEndpoints.Items.Add(lvi2);
+		}
 	}
 }
+

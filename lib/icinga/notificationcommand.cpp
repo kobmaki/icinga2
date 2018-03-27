@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,25 +18,25 @@
  ******************************************************************************/
 
 #include "icinga/notificationcommand.hpp"
-#include "icinga/notificationcommand.tcpp"
+#include "icinga/notificationcommand-ti.cpp"
 
 using namespace icinga;
 
 REGISTER_TYPE(NotificationCommand);
 
 Dictionary::Ptr NotificationCommand::Execute(const Notification::Ptr& notification,
-    const User::Ptr& user, const CheckResult::Ptr& cr, const NotificationType& type,
-    const String& author, const String& comment, const Dictionary::Ptr& resolvedMacros,
-    bool useResolvedMacros)
+	const User::Ptr& user, const CheckResult::Ptr& cr, const NotificationType& type,
+	const String& author, const String& comment, const Dictionary::Ptr& resolvedMacros,
+	bool useResolvedMacros)
 {
-	std::vector<Value> arguments;
-	arguments.push_back(notification);
-	arguments.push_back(user);
-	arguments.push_back(cr);
-	arguments.push_back(type);
-	arguments.push_back(author);
-	arguments.push_back(comment);
-	arguments.push_back(resolvedMacros);
-	arguments.push_back(useResolvedMacros);
-	return GetExecute()->Invoke(arguments);
+	return GetExecute()->Invoke({
+		notification,
+		user,
+		cr,
+		type,
+		author,
+		comment,
+		resolvedMacros,
+		useResolvedMacros,
+	});
 }

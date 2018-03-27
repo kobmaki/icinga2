@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,8 +23,6 @@
 #include "remote/filterutility.hpp"
 #include "base/application.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/join.hpp>
 
 using namespace icinga;
 
@@ -61,30 +59,30 @@ void ConfigStagesHandler::HandleGet(const ApiUser::Ptr& user, HttpRequest& reque
 	String stageName = HttpUtility::GetLastParameter(params, "stage");
 
 	if (!ConfigPackageUtility::ValidateName(packageName))
-		return HttpUtility::SendJsonError(response, 400, "Invalid package name.");
+		return HttpUtility::SendJsonError(response, params, 400, "Invalid package name.");
 
 	if (!ConfigPackageUtility::ValidateName(stageName))
-		return HttpUtility::SendJsonError(response, 400, "Invalid stage name.");
+		return HttpUtility::SendJsonError(response, params, 400, "Invalid stage name.");
 
-	Array::Ptr results = new Array();
+	ArrayData results;
 
 	std::vector<std::pair<String, bool> > paths = ConfigPackageUtility::GetFiles(packageName, stageName);
 
 	String prefixPath = ConfigPackageUtility::GetPackageDir() + "/" + packageName + "/" + stageName + "/";
 
-	typedef std::pair<String, bool> kv_pair;
-	BOOST_FOREACH(const kv_pair& kv, paths) {
-		Dictionary::Ptr stageInfo = new Dictionary();
-		stageInfo->Set("type", (kv.second ? "directory" : "file"));
-		stageInfo->Set("name", kv.first.SubStr(prefixPath.GetLength()));
-		results->Add(stageInfo);
+	for (const auto& kv : paths) {
+		results.push_back(new Dictionary({
+			{ "type", kv.second ? "directory" : "file" },
+			{ "name", kv.first.SubStr(prefixPath.GetLength()) }
+		}));
 	}
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(results)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 }
 
 void ConfigStagesHandler::HandlePost(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
@@ -97,7 +95,11 @@ void ConfigStagesHandler::HandlePost(const ApiUser::Ptr& user, HttpRequest& requ
 	String packageName = HttpUtility::GetLastParameter(params, "package");
 
 	if (!ConfigPackageUtility::ValidateName(packageName))
-		return HttpUtility::SendJsonError(response, 400, "Invalid package name.");
+		return HttpUtility::SendJsonError(response, params, 400, "Invalid package name.");
+
+	bool reload = true;
+	if (params->Contains("reload"))
+		reload = HttpUtility::GetLastParameter(params, "reload");
 
 	Dictionary::Ptr files = params->Get("files");
 
@@ -107,31 +109,34 @@ void ConfigStagesHandler::HandlePost(const ApiUser::Ptr& user, HttpRequest& requ
 		if (!files)
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Parameter 'files' must be specified."));
 
+		boost::mutex::scoped_lock lock(ConfigPackageUtility::GetStaticMutex());
 		stageName = ConfigPackageUtility::CreateStage(packageName, files);
 
 		/* validate the config. on success, activate stage and reload */
-		ConfigPackageUtility::AsyncTryActivateStage(packageName, stageName);
+		ConfigPackageUtility::AsyncTryActivateStage(packageName, stageName, reload);
 	} catch (const std::exception& ex) {
-		return HttpUtility::SendJsonError(response, 500,
+		return HttpUtility::SendJsonError(response, params, 500,
 				"Stage creation failed.",
 				HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 	}
 
-	Dictionary::Ptr result1 = new Dictionary();
 
-	result1->Set("package", packageName);
-	result1->Set("stage", stageName);
-	result1->Set("code", 200);
-	result1->Set("status", "Created stage.");
+	String responseStatus = "Created stage. ";
+	responseStatus += (reload ? " Icinga2 will reload." : " Icinga2 reload skipped.");
 
-	Array::Ptr results = new Array();
-	results->Add(result1);
+	Dictionary::Ptr result1 = new Dictionary({
+		{ "package", packageName },
+		{ "stage", stageName },
+		{ "code", 200 },
+		{ "status", responseStatus }
+	});
 
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array({ result1 }) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 }
 
 void ConfigStagesHandler::HandleDelete(const ApiUser::Ptr& user, HttpRequest& request, HttpResponse& response, const Dictionary::Ptr& params)
@@ -148,31 +153,29 @@ void ConfigStagesHandler::HandleDelete(const ApiUser::Ptr& user, HttpRequest& re
 	String stageName = HttpUtility::GetLastParameter(params, "stage");
 
 	if (!ConfigPackageUtility::ValidateName(packageName))
-		return HttpUtility::SendJsonError(response, 400, "Invalid package name.");
+		return HttpUtility::SendJsonError(response, params, 400, "Invalid package name.");
 
 	if (!ConfigPackageUtility::ValidateName(stageName))
-		return HttpUtility::SendJsonError(response, 400, "Invalid stage name.");
+		return HttpUtility::SendJsonError(response, params, 400, "Invalid stage name.");
 
 	try {
 		ConfigPackageUtility::DeleteStage(packageName, stageName);
 	} catch (const std::exception& ex) {
-		return HttpUtility::SendJsonError(response, 500,
-		    "Failed to delete stage.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		return HttpUtility::SendJsonError(response, params, 500,
+			"Failed to delete stage.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 	}
 
-	Dictionary::Ptr result1 = new Dictionary();
+	Dictionary::Ptr result1 = new Dictionary({
+		{ "code", 200 },
+		{ "status", "Stage deleted." }
+	});
 
-	result1->Set("code", 200);
-	result1->Set("status", "Stage deleted.");
-
-	Array::Ptr results = new Array();
-	results->Add(result1);
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array({ result1 }) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 }
 

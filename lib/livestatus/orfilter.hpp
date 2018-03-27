@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,14 +30,12 @@ namespace icinga
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API OrFilter : public CombinerFilter
+class OrFilter final : public CombinerFilter
 {
 public:
 	DECLARE_PTR_TYPEDEFS(OrFilter);
 
-	OrFilter(void);
-
-	virtual bool Apply(const Table::Ptr& table, const Value& row) override;
+	bool Apply(const Table::Ptr& table, const Value& row) override;
 };
 
 }

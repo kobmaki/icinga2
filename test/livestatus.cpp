@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #include "base/application.hpp"
 #include "base/stdiostream.hpp"
 #include "base/json.hpp"
-#include <boost/test/unit_test.hpp>
+#include <BoostTestTargetConfig.h>
 
 using namespace icinga;
 
@@ -67,10 +67,10 @@ BOOST_AUTO_TEST_CASE(hosts)
 	BOOST_TEST_MESSAGE( "Querying Livestatus...");
 
 	std::vector<String> lines;
-	lines.push_back("GET hosts");
-	lines.push_back("Columns: host_name address check_command");
-	lines.push_back("OutputFormat: json");
-	lines.push_back("\n");
+	lines.emplace_back("GET hosts");
+	lines.emplace_back("Columns: host_name address check_command");
+	lines.emplace_back("OutputFormat: json");
+	lines.emplace_back("\n");
 
 	/* use our query helper */
 	String output = LivestatusQueryHelper(lines);
@@ -97,10 +97,10 @@ BOOST_AUTO_TEST_CASE(services)
 	BOOST_TEST_MESSAGE( "Querying Livestatus...");
 
 	std::vector<String> lines;
-	lines.push_back("GET services");
-	lines.push_back("Columns: host_name service_description check_command notes");
-	lines.push_back("OutputFormat: json");
-	lines.push_back("\n");
+	lines.emplace_back("GET services");
+	lines.emplace_back("Columns: host_name service_description check_command notes");
+	lines.emplace_back("OutputFormat: json");
+	lines.emplace_back("\n");
 
 	/* use our query helper */
 	String output = LivestatusQueryHelper(lines);

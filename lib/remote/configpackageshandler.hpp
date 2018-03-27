@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -25,21 +25,21 @@
 namespace icinga
 {
 
-class I2_REMOTE_API ConfigPackagesHandler : public HttpHandler
+class ConfigPackagesHandler final : public HttpHandler
 {
 public:
 	DECLARE_PTR_TYPEDEFS(ConfigPackagesHandler);
 
-	virtual bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request,
-	    HttpResponse& response, const Dictionary::Ptr& params) override;
+	bool HandleRequest(const ApiUser::Ptr& user, HttpRequest& request,
+		HttpResponse& response, const Dictionary::Ptr& params) override;
 
 private:
 	void HandleGet(const ApiUser::Ptr& user, HttpRequest& request,
-	    HttpResponse& response);
+		HttpResponse& response, const Dictionary::Ptr& params);
 	void HandlePost(const ApiUser::Ptr& user, HttpRequest& request,
-	    HttpResponse& response, const Dictionary::Ptr& params);
+		HttpResponse& response, const Dictionary::Ptr& params);
 	void HandleDelete(const ApiUser::Ptr& user, HttpRequest& request,
-	    HttpResponse& response, const Dictionary::Ptr& params);
+		HttpResponse& response, const Dictionary::Ptr& params);
 
 };
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,11 +20,11 @@
 #ifndef EXTERNALCOMMANDLISTENER_H
 #define EXTERNALCOMMANDLISTENER_H
 
-#include "compat/externalcommandlistener.thpp"
+#include "compat/externalcommandlistener-ti.hpp"
 #include "base/objectlock.hpp"
 #include "base/timer.hpp"
 #include "base/utility.hpp"
-#include <boost/thread/thread.hpp>
+#include <thread>
 #include <iostream>
 
 namespace icinga
@@ -33,7 +33,7 @@ namespace icinga
 /**
  * @ingroup compat
  */
-class ExternalCommandListener : public ObjectImpl<ExternalCommandListener>
+class ExternalCommandListener final : public ObjectImpl<ExternalCommandListener>
 {
 public:
 	DECLARE_OBJECT(ExternalCommandListener);
@@ -42,11 +42,12 @@ public:
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 #ifndef _WIN32
-	boost::thread m_CommandThread;
+	std::thread m_CommandThread;
 
 	void CommandPipeThread(const String& commandPath);
 #endif /* _WIN32 */

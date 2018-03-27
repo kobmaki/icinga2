@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,20 +24,19 @@
 #include "base/exception.hpp"
 #include "base/context.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
 boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const std::set<User::Ptr>&,
-    const NotificationType&, const CheckResult::Ptr&, const String&, const String&,
-    const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToAllUsers;
+	const NotificationType&, const CheckResult::Ptr&, const String&, const String&,
+	const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToAllUsers;
 boost::signals2::signal<void (const Notification::Ptr&, const Checkable::Ptr&, const User::Ptr&,
-    const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
-    const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToUser;
+	const NotificationType&, const CheckResult::Ptr&, const String&, const String&, const String&,
+	const MessageOrigin::Ptr&)> Checkable::OnNotificationSentToUser;
 
-void Checkable::ResetNotificationNumbers(void)
+void Checkable::ResetNotificationNumbers()
 {
-	BOOST_FOREACH(const Notification::Ptr& notification, GetNotifications()) {
+	for (const Notification::Ptr& notification : GetNotifications()) {
 		ObjectLock olock(notification);
 		notification->ResetNotificationNumber();
 	}
@@ -49,41 +48,41 @@ void Checkable::SendNotifications(NotificationType type, const CheckResult::Ptr&
 
 	bool force = GetForceNextNotification();
 
+	SetForceNextNotification(false);
+
 	if (!IcingaApplication::GetInstance()->GetEnableNotifications() || !GetEnableNotifications()) {
 		if (!force) {
 			Log(LogInformation, "Checkable")
-			    << "Notifications are disabled for service '" << GetName() << "'.";
+				<< "Notifications are disabled for service '" << GetName() << "'.";
 			return;
 		}
-
-		SetForceNextNotification(false);
 	}
 
 	Log(LogInformation, "Checkable")
-	    << "Checking for configured notifications for object '" << GetName() << "'";
+		<< "Checking for configured notifications for object '" << GetName() << "'";
 
 	std::set<Notification::Ptr> notifications = GetNotifications();
 
 	if (notifications.empty())
 		Log(LogInformation, "Checkable")
-		    << "Checkable '" << GetName() << "' does not have any notifications.";
+			<< "Checkable '" << GetName() << "' does not have any notifications.";
 
 	Log(LogDebug, "Checkable")
-	    << "Checkable '" << GetName() << "' has " << notifications.size() << " notification(s).";
+		<< "Checkable '" << GetName() << "' has " << notifications.size() << " notification(s).";
 
-	BOOST_FOREACH(const Notification::Ptr& notification, notifications) {
+	for (const Notification::Ptr& notification : notifications) {
 		try {
 			if (!notification->IsPaused())
-				notification->BeginExecuteNotification(type, cr, force, author, text);
+				notification->BeginExecuteNotification(type, cr, force, false, author, text);
 		} catch (const std::exception& ex) {
 			Log(LogWarning, "Checkable")
-			    << "Exception occured during notification for service '"
-			    << GetName() << "': " << DiagnosticInformation(ex);
+				<< "Exception occured during notification for service '"
+				<< GetName() << "': " << DiagnosticInformation(ex);
 		}
 	}
 }
 
-std::set<Notification::Ptr> Checkable::GetNotifications(void) const
+std::set<Notification::Ptr> Checkable::GetNotifications() const
 {
 	boost::mutex::scoped_lock lock(m_NotificationMutex);
 	return m_Notifications;

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,34 +27,34 @@
 namespace icinga
 {
 
-class I2_BASE_API ContextTrace
+class ContextTrace
 {
 public:
-	ContextTrace(void);
+	ContextTrace();
 
 	void Print(std::ostream& fp) const;
 
-	size_t GetLength(void) const;
+	size_t GetLength() const;
 
 private:
 	std::list<String> m_Frames;
 };
 
-I2_BASE_API std::ostream& operator<<(std::ostream& stream, const ContextTrace& trace);
+std::ostream& operator<<(std::ostream& stream, const ContextTrace& trace);
 
 /**
  * A context frame.
  *
  * @ingroup base
  */
-class I2_BASE_API ContextFrame
+class ContextFrame
 {
 public:
 	ContextFrame(const String& message);
-	~ContextFrame(void);
+	~ContextFrame();
 
 private:
-	static std::list<String>& GetFrames(void);
+	static std::list<String>& GetFrames();
 
 	friend class ContextTrace;
 };

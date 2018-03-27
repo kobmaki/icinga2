@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define STACKTRACE_H
 
 #include "base/i2-base.hpp"
-#include <ostream>
+#include <iosfwd>
 
 namespace icinga
 {
@@ -31,24 +31,24 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API StackTrace
+class StackTrace
 {
 public:
-	StackTrace(void);
+	StackTrace();
 #ifdef _WIN32
 	explicit StackTrace(PEXCEPTION_POINTERS exi);
 #endif /* _WIN32 */
 
 	void Print(std::ostream& fp, int ignoreFrames = 0) const;
 
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
 private:
 	void *m_Frames[64];
 	int m_Count;
 };
 
-I2_BASE_API std::ostream& operator<<(std::ostream& stream, const StackTrace& trace);
+std::ostream& operator<<(std::ostream& stream, const StackTrace& trace);
 
 }
 

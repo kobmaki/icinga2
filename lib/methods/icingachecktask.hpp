@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,14 +31,14 @@ namespace icinga
  *
  * @ingroup methods
  */
-class I2_METHODS_API IcingaCheckTask
+class IcingaCheckTask
 {
 public:
-	static void ScriptFunc(const Checkable::Ptr& service, const CheckResult::Ptr& cr,
-	    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros);
+	static void ScriptFunc(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr,
+		const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros);
 
 private:
-	IcingaCheckTask(void);
+	IcingaCheckTask();
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define TIMEPERIOD_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/timeperiod.thpp"
+#include "icinga/timeperiod-ti.hpp"
 
 namespace icinga
 {
@@ -31,24 +31,22 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API TimePeriod : public ObjectImpl<TimePeriod>
+class TimePeriod final : public ObjectImpl<TimePeriod>
 {
 public:
 	DECLARE_OBJECT(TimePeriod);
 	DECLARE_OBJECTNAME(TimePeriod);
 
-	static void StaticInitialize(void);
-
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
 
 	void UpdateRegion(double begin, double end, bool clearExisting);
 
-	virtual bool GetIsInside(void) const override;
+	bool GetIsInside() const override;
 
 	bool IsInside(double ts) const;
 	double FindNextTransition(double begin);
 
-	virtual void ValidateRanges(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateRanges(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 private:
 	void AddSegment(double s, double end);
@@ -59,9 +57,9 @@ private:
 
 	void Merge(const TimePeriod::Ptr& timeperiod, bool include = true);
 
-	void Dump(void);
+	void Dump();
 
-	static void UpdateTimerHandler(void);
+	static void UpdateTimerHandler();
 };
 
 }

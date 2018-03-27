@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define SERVICEGROUP_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/servicegroup.thpp"
+#include "icinga/servicegroup-ti.hpp"
 #include "icinga/service.hpp"
 
 namespace icinga
@@ -34,19 +34,17 @@ class ConfigItem;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API ServiceGroup : public ObjectImpl<ServiceGroup>
+class ServiceGroup final : public ObjectImpl<ServiceGroup>
 {
 public:
 	DECLARE_OBJECT(ServiceGroup);
 	DECLARE_OBJECTNAME(ServiceGroup);
 
-	std::set<Service::Ptr> GetMembers(void) const;
+	std::set<Service::Ptr> GetMembers() const;
 	void AddMember(const Service::Ptr& service);
 	void RemoveMember(const Service::Ptr& service);
 
 	bool ResolveGroupMembership(const Service::Ptr& service, bool add = true, int rstack = 0);
-
-	static void RegisterObjectRuleHandler(void);
 
 	static void EvaluateObjectRules(const Service::Ptr& service);
 

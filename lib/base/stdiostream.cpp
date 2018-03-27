@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,7 +33,7 @@ StdioStream::StdioStream(std::iostream *innerStream, bool ownsStream)
 	: m_InnerStream(innerStream), m_OwnsStream(ownsStream)
 { }
 
-StdioStream::~StdioStream(void)
+StdioStream::~StdioStream()
 {
 	Close();
 }
@@ -53,7 +53,7 @@ void StdioStream::Write(const void *buffer, size_t size)
 	m_InnerStream->write(static_cast<const char *>(buffer), size);
 }
 
-void StdioStream::Close(void)
+void StdioStream::Close()
 {
 	Stream::Close();
 
@@ -63,12 +63,12 @@ void StdioStream::Close(void)
 	}
 }
 
-bool StdioStream::IsDataAvailable(void) const
+bool StdioStream::IsDataAvailable() const
 {
 	return !IsEof();
 }
 
-bool StdioStream::IsEof(void) const
+bool StdioStream::IsEof() const
 {
 	return !m_InnerStream->good();
 }

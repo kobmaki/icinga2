@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,12 @@
 #define SERVICE_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/service.thpp"
+#include "icinga/service-ti.hpp"
 #include "icinga/macroresolver.hpp"
 #include "icinga/host.hpp"
+#include <tuple>
+
+using std::tie;
 
 namespace icinga
 {
@@ -33,7 +36,7 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API Service : public ObjectImpl<Service>, public MacroResolver
+class Service final : public ObjectImpl<Service>, public MacroResolver
 {
 public:
 	DECLARE_OBJECT(Service);
@@ -41,12 +44,13 @@ public:
 
 	static Service::Ptr GetByNamePair(const String& hostName, const String& serviceName);
 
-	virtual Host::Ptr GetHost(void) const override;
+	Host::Ptr GetHost() const override;
+	int GetSeverity() const override;
 
-	virtual bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
+	bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
 
-	virtual bool IsStateOK(ServiceState state) override;
-	virtual void SaveLastState(ServiceState state, double timestamp) override;
+	bool IsStateOK(ServiceState state) override;
+	void SaveLastState(ServiceState state, double timestamp) override;
 
 	static ServiceState StateFromString(const String& state);
 	static String StateToString(ServiceState state);
@@ -54,13 +58,11 @@ public:
 	static StateType StateTypeFromString(const String& state);
 	static String StateTypeToString(StateType state);
 
-	static void RegisterApplyRuleHandler(void);
-
 	static void EvaluateApplyRules(const Host::Ptr& host);
 
 protected:
-	virtual void OnAllConfigLoaded(void) override;
-	virtual void CreateChildObjects(const Type::Ptr& childType) override;
+	void OnAllConfigLoaded() override;
+	void CreateChildObjects(const Type::Ptr& childType) override;
 
 private:
 	Host::Ptr m_Host;
@@ -69,7 +71,7 @@ private:
 	static bool EvaluateApplyRule(const Host::Ptr& host, const ApplyRule& rule);
 };
 
-I2_ICINGA_API boost::tuple<Host::Ptr, Service::Ptr> GetHostService(const Checkable::Ptr& checkable);
+std::pair<Host::Ptr, Service::Ptr> GetHostService(const Checkable::Ptr& checkable);
 
 }
 

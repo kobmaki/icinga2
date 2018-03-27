@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,6 @@
 #include "base/array.hpp"
 #include "base/objectlock.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 #include <boost/exception_ptr.hpp>
 #include <yajl/yajl_version.h>
 #include <yajl/yajl_gen.h>
@@ -45,7 +44,7 @@ static void EncodeDictionary(yajl_gen handle, const Dictionary::Ptr& dict)
 	yajl_gen_map_open(handle);
 
 	ObjectLock olock(dict);
-	BOOST_FOREACH(const Dictionary::Pair& kv, dict) {
+	for (const Dictionary::Pair& kv : dict) {
 		yajl_gen_string(handle, reinterpret_cast<const unsigned char *>(kv.first.CStr()), kv.first.GetLength());
 		Encode(handle, kv.second);
 	}
@@ -58,7 +57,7 @@ static void EncodeArray(yajl_gen handle, const Array::Ptr& arr)
 	yajl_gen_array_open(handle);
 
 	ObjectLock olock(arr);
-	BOOST_FOREACH(const Value& value, arr) {
+	for (const Value& value : arr) {
 		Encode(handle, value);
 	}
 
@@ -67,11 +66,9 @@ static void EncodeArray(yajl_gen handle, const Array::Ptr& arr)
 
 static void Encode(yajl_gen handle, const Value& value)
 {
-	String str;
-
 	switch (value.GetType()) {
 		case ValueNumber:
-			if (yajl_gen_double(handle, static_cast<double>(value)) == yajl_gen_invalid_number)
+			if (yajl_gen_double(handle, value.Get<double>()) == yajl_gen_invalid_number)
 				yajl_gen_double(handle, 0);
 
 			break;
@@ -80,17 +77,28 @@ static void Encode(yajl_gen handle, const Value& value)
 
 			break;
 		case ValueString:
-			str = value;
-			yajl_gen_string(handle, reinterpret_cast<const unsigned char *>(str.CStr()), str.GetLength());
+			yajl_gen_string(handle, reinterpret_cast<const unsigned char *>(value.Get<String>().CStr()), value.Get<String>().GetLength());
 
 			break;
 		case ValueObject:
-			if (value.IsObjectType<Dictionary>())
-				EncodeDictionary(handle, value);
-			else if (value.IsObjectType<Array>())
-				EncodeArray(handle, value);
-			else
-				yajl_gen_null(handle);
+			{
+				const Object::Ptr& obj = value.Get<Object::Ptr>();
+				Dictionary::Ptr dict = dynamic_pointer_cast<Dictionary>(obj);
+
+				if (dict) {
+					EncodeDictionary(handle, dict);
+					break;
+				}
+
+				Array::Ptr arr = dynamic_pointer_cast<Array>(obj);
+
+				if (arr) {
+					EncodeArray(handle, arr);
+					break;
+				}
+			}
+
+			yajl_gen_null(handle);
 
 			break;
 		case ValueEmpty:
@@ -106,9 +114,9 @@ String icinga::JsonEncode(const Value& value, bool pretty_print)
 {
 #if YAJL_MAJOR < 2
 	yajl_gen_config conf = { pretty_print, "" };
-	yajl_gen handle = yajl_gen_alloc(&conf, NULL);
+	yajl_gen handle = yajl_gen_alloc(&conf, nullptr);
 #else /* YAJL_MAJOR */
-	yajl_gen handle = yajl_gen_alloc(NULL);
+	yajl_gen handle = yajl_gen_alloc(nullptr);
 	if (pretty_print)
 		yajl_gen_config(handle, yajl_gen_beautify, 1);
 #endif /* YAJL_MAJOR */
@@ -130,12 +138,8 @@ String icinga::JsonEncode(const Value& value, bool pretty_print)
 struct JsonElement
 {
 	String Key;
-	bool KeySet;
+	bool KeySet{false};
 	Value EValue;
-
-	JsonElement(void)
-		: KeySet(false)
-	{ }
 };
 
 struct JsonContext
@@ -149,7 +153,7 @@ public:
 		m_Stack.push(element);
 	}
 
-	JsonElement Pop(void)
+	JsonElement Pop()
 	{
 		JsonElement value = m_Stack.top();
 		m_Stack.pop();
@@ -184,18 +188,18 @@ public:
 		}
 	}
 
-	Value GetValue(void) const
+	Value GetValue() const
 	{
 		ASSERT(m_Stack.size() == 1);
 		return m_Stack.top().EValue;
 	}
 
-	void SaveException(void)
+	void SaveException()
 	{
 		m_Exception = boost::current_exception();
 	}
 
-	void ThrowException(void) const
+	void ThrowException() const
 	{
 		if (m_Exception)
 			boost::rethrow_exception(m_Exception);
@@ -209,7 +213,7 @@ private:
 
 static int DecodeNull(void *ctx)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		context->AddValue(Empty);
@@ -223,7 +227,7 @@ static int DecodeNull(void *ctx)
 
 static int DecodeBoolean(void *ctx, int value)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		context->AddValue(static_cast<bool>(value));
@@ -237,7 +241,7 @@ static int DecodeBoolean(void *ctx, int value)
 
 static int DecodeNumber(void *ctx, const char *str, yajl_size len)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		String jstr = String(str, str + len);
@@ -252,7 +256,7 @@ static int DecodeNumber(void *ctx, const char *str, yajl_size len)
 
 static int DecodeString(void *ctx, const unsigned char *str, yajl_size len)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		context->AddValue(String(str, str + len));
@@ -266,7 +270,7 @@ static int DecodeString(void *ctx, const unsigned char *str, yajl_size len)
 
 static int DecodeStartMap(void *ctx)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		context->Push(new Dictionary());
@@ -280,7 +284,7 @@ static int DecodeStartMap(void *ctx)
 
 static int DecodeEndMapOrArray(void *ctx)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
+	auto *context = static_cast<JsonContext *>(ctx);
 
 	try {
 		context->AddValue(context->Pop().EValue);
@@ -294,8 +298,8 @@ static int DecodeEndMapOrArray(void *ctx)
 
 static int DecodeStartArray(void *ctx)
 {
-	JsonContext *context = static_cast<JsonContext *>(ctx);
-	
+	auto *context = static_cast<JsonContext *>(ctx);
+
 	try {
 		context->Push(new Array());
 	} catch (...) {
@@ -311,8 +315,8 @@ Value icinga::JsonDecode(const String& data)
 	static const yajl_callbacks callbacks = {
 		DecodeNull,
 		DecodeBoolean,
-		NULL,
-		NULL,
+		nullptr,
+		nullptr,
 		DecodeNumber,
 		DecodeString,
 		DecodeStartMap,
@@ -329,9 +333,9 @@ Value icinga::JsonDecode(const String& data)
 	JsonContext context;
 
 #if YAJL_MAJOR < 2
-	handle = yajl_alloc(&callbacks, &cfg, NULL, &context);
+	handle = yajl_alloc(&callbacks, &cfg, nullptr, &context);
 #else /* YAJL_MAJOR */
-	handle = yajl_alloc(&callbacks, NULL, &context);
+	handle = yajl_alloc(&callbacks, nullptr, &context);
 	yajl_config(handle, yajl_dont_validate_strings, 1);
 	yajl_config(handle, yajl_allow_comments, 1);
 #endif /* YAJL_MAJOR */

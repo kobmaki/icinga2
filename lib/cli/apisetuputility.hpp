@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -34,19 +34,20 @@ namespace icinga
 /**
  * @ingroup cli
  */
-class I2_CLI_API ApiSetupUtility
+class ApiSetupUtility
 {
 public:
 	static bool SetupMaster(const String& cn, bool prompt_restart = false);
 
 	static bool SetupMasterCertificates(const String& cn);
-	static bool SetupMasterApiUser(void);
-	static bool SetupMasterEnableApi(void);
+	static bool SetupMasterApiUser();
+	static bool SetupMasterEnableApi();
+	static bool SetupMasterUpdateConstants(const String& cn);
 
-	static String GetConfdPath(void);
+	static String GetConfdPath();
 
 private:
-	ApiSetupUtility(void);
+	ApiSetupUtility();
 };
 
 }

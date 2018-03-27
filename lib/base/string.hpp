@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,11 +22,7 @@
 
 #include "base/i2-base.hpp"
 #include "base/object.hpp"
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/algorithm/string/trim.hpp>
 #include <boost/range/iterator.hpp>
-#include <string.h>
-#include <functional>
 #include <string>
 #include <iosfwd>
 
@@ -40,7 +36,7 @@ class Value;
  * Rationale for having this: The std::string class has an ambiguous assignment
  * operator when used in conjunction with the Value class.
  */
-class I2_BASE_API String
+class String
 {
 public:
 	typedef std::string::iterator Iterator;
@@ -57,219 +53,81 @@ public:
 
 	typedef std::string::size_type SizeType;
 
-	inline String(void)
-		: m_Data()
-	{ }
+	String() = default;
+	String(const char *data);
+	String(std::string data);
+	String(String::SizeType n, char c);
+	String(const String& other);
+	String(String&& other);
 
-	inline String(const char *data)
-		: m_Data(data)
-	{ }
-
-	inline String(const std::string& data)
-		: m_Data(data)
-	{ }
-
-	inline String(String::SizeType n, char c)
-		: m_Data(n, c)
-	{ }
-
-	inline String(const String& other)
-		: m_Data(other.m_Data)
-	{ }
-
-	inline ~String(void)
-	{ }
+#ifndef _MSC_VER
+	String(Value&& other);
+#endif /* _MSC_VER */
 
 	template<typename InputIterator>
 	String(InputIterator begin, InputIterator end)
 		: m_Data(begin, end)
 	{ }
 
-	inline String& operator=(const String& rhs)
-	{
-		m_Data = rhs.m_Data;
-		return *this;
-	}
+	String& operator=(const String& rhs);
+	String& operator=(String&& rhs);
+	String& operator=(Value&& rhs);
+	String& operator=(const std::string& rhs);
+	String& operator=(const char *rhs);
 
-	inline String& operator=(const std::string& rhs)
-	{
-		m_Data = rhs;
-		return *this;
-	}
+	const char& operator[](SizeType pos) const;
+	char& operator[](SizeType pos);
 
-	inline String& operator=(const char *rhs)
-	{
-		m_Data = rhs;
-		return *this;
-	}
-
-	inline const char& operator[](SizeType pos) const
-	{
-		return m_Data[pos];
-	}
-
-	inline char& operator[](SizeType pos)
-	{
-		return m_Data[pos];
-	}
-
-	inline String& operator+=(const String& rhs)
-	{
-		m_Data += rhs.m_Data;
-		return *this;
-	}
-
-	inline String& operator+=(const char *rhs)
-	{
-		m_Data += rhs;
-		return *this;
-	}
-
+	String& operator+=(const String& rhs);
+	String& operator+=(const char *rhs);
 	String& operator+=(const Value& rhs);
+	String& operator+=(char rhs);
 
-	inline String& operator+=(char rhs)
-	{
-		m_Data += rhs;
-		return *this;
-	}
+	bool IsEmpty() const;
 
-	inline bool IsEmpty(void) const
-	{
-		return m_Data.empty();
-	}
+	bool operator<(const String& rhs) const;
 
-	inline bool operator<(const String& rhs) const
-	{
-		return m_Data < rhs.m_Data;
-	}
+	operator const std::string&() const;
 
-	inline operator const std::string&(void) const
-	{
-		return m_Data;
-	}
+	const char *CStr() const;
 
-	inline const char *CStr(void) const
-	{
-		return m_Data.c_str();
-	}
+	void Clear();
 
-	inline void Clear(void)
-	{
-		m_Data.clear();
-	}
+	SizeType GetLength() const;
 
-	inline SizeType GetLength(void) const
-	{
-		return m_Data.size();
-	}
+	std::string& GetData();
+	const std::string& GetData() const;
 
-	inline std::string& GetData(void)
-	{
-		return m_Data;
-	}
+	SizeType Find(const String& str, SizeType pos = 0) const;
+	SizeType RFind(const String& str, SizeType pos = NPos) const;
+	SizeType FindFirstOf(const char *s, SizeType pos = 0) const;
+	SizeType FindFirstOf(char ch, SizeType pos = 0) const;
+	SizeType FindFirstNotOf(const char *s, SizeType pos = 0) const;
+	SizeType FindFirstNotOf(char ch, SizeType pos = 0) const;
+	SizeType FindLastOf(const char *s, SizeType pos = NPos) const;
+	SizeType FindLastOf(char ch, SizeType pos = NPos) const;
 
-	inline const std::string& GetData(void) const
-	{
-		return m_Data;
-	}
+	String SubStr(SizeType first, SizeType len = NPos) const;
 
-	inline SizeType Find(const String& str, SizeType pos = 0) const
-	{
-		return m_Data.find(str, pos);
-	}
+	std::vector<String> Split(const char *separators) const;
 
-	inline SizeType RFind(const String& str, SizeType pos = NPos) const
-	{
-		return m_Data.rfind(str, pos);
-	}
+	void Replace(SizeType first, SizeType second, const String& str);
 
-	inline SizeType FindFirstOf(const char *s, SizeType pos = 0) const
-	{
-		return m_Data.find_first_of(s, pos);
-	}
+	String Trim() const;
 
-	inline SizeType FindFirstOf(char ch, SizeType pos = 0) const
-	{
-		return m_Data.find_first_of(ch, pos);
-	}
+	String ToLower() const;
 
-	inline SizeType FindFirstNotOf(const char *s, SizeType pos = 0) const
-	{
-		return m_Data.find_first_not_of(s, pos);
-	}
+	String ToUpper() const;
 
-	inline SizeType FindFirstNotOf(char ch, SizeType pos = 0) const
-	{
-		return m_Data.find_first_not_of(ch, pos);
-	}
+	String Reverse() const;
 
-	inline SizeType FindLastOf(const char *s, SizeType pos = NPos) const
-	{
-		return m_Data.find_last_of(s, pos);
-	}
+	void Append(int count, char ch);
 
-	inline SizeType FindLastOf(char ch, SizeType pos = NPos) const
-	{
-		return m_Data.find_last_of(ch, pos);
-	}
+	bool Contains(const String& str) const;
 
-	inline String SubStr(SizeType first, SizeType len = NPos) const
-	{
-		return m_Data.substr(first, len);
-	}
+	void swap(String& str);
 
-	inline void Replace(SizeType first, SizeType second, const String& str)
-	{
-		m_Data.replace(first, second, str);
-	}
-
-	inline String Trim(void) const
-	{
-		String t = m_Data;
-		boost::algorithm::trim(t);
-		return t;
-	}
-
-	inline String ToLower(void) const
-	{
-		String t = m_Data;
-		boost::algorithm::to_lower(t);
-		return t;
-	}
-
-	inline String ToUpper(void) const
-	{
-		String t = m_Data;
-		boost::algorithm::to_upper(t);
-		return t;
-	}
-
-	inline String Reverse(void) const
-	{
-		String t = m_Data;
-		std::reverse(t.m_Data.begin(), t.m_Data.end());
-		return t;
-	}
-
-	inline void Append(int count, char ch)
-	{
-		m_Data.append(count, ch);
-	}
-
-	inline bool Contains(const String& str) const
-	{
-		return (m_Data.find(str) != std::string::npos);
-	}
-
-	inline void swap(String& str)
-	{
-		m_Data.swap(str.m_Data);
-	}
-
-	inline Iterator erase(Iterator first, Iterator last)
-	{
-		return m_Data.erase(first, last);
-	}
+	Iterator erase(Iterator first, Iterator last);
 
 	template<typename InputIterator>
 	void insert(Iterator p, InputIterator first, InputIterator last)
@@ -277,206 +135,65 @@ public:
 		m_Data.insert(p, first, last);
 	}
 
-	inline Iterator Begin(void)
-	{
-		return m_Data.begin();
-	}
-
-	inline ConstIterator Begin(void) const
-	{
-		return m_Data.begin();
-	}
-
-	inline Iterator End(void)
-	{
-		return m_Data.end();
-	}
-
-	inline ConstIterator End(void) const
-	{
-		return m_Data.end();
-	}
-
-	inline ReverseIterator RBegin(void)
-	{
-		return m_Data.rbegin();
-	}
-
-	inline ConstReverseIterator RBegin(void) const
-	{
-		return m_Data.rbegin();
-	}
-
-	inline ReverseIterator REnd(void)
-	{
-		return m_Data.rend();
-	}
-
-	inline ConstReverseIterator REnd(void) const
-	{
-		return m_Data.rend();
-	}
+	Iterator Begin();
+	ConstIterator Begin() const;
+	Iterator End();
+	ConstIterator End() const;
+	ReverseIterator RBegin();
+	ConstReverseIterator RBegin() const;
+	ReverseIterator REnd();
+	ConstReverseIterator REnd() const;
 
 	static const SizeType NPos;
 
-	static Object::Ptr GetPrototype(void);
+	static Object::Ptr GetPrototype();
 
 private:
 	std::string m_Data;
 };
 
-inline std::ostream& operator<<(std::ostream& stream, const String& str)
-{
-	stream << static_cast<std::string>(str);
-	return stream;
-}
+std::ostream& operator<<(std::ostream& stream, const String& str);
+std::istream& operator>>(std::istream& stream, String& str);
 
-inline std::istream& operator>>(std::istream& stream, String& str)
-{
-	std::string tstr;
-	stream >> tstr;
-	str = tstr;
-	return stream;
-}
+String operator+(const String& lhs, const String& rhs);
+String operator+(const String& lhs, const char *rhs);
+String operator+(const char *lhs, const String& rhs);
 
-inline String operator+(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs)+static_cast<std::string>(rhs);
-}
+bool operator==(const String& lhs, const String& rhs);
+bool operator==(const String& lhs, const char *rhs);
+bool operator==(const char *lhs, const String& rhs);
 
-inline String operator+(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs)+rhs;
-}
+bool operator<(const String& lhs, const char *rhs);
+bool operator<(const char *lhs, const String& rhs);
 
-inline String operator+(const char *lhs, const String& rhs)
-{
-	return lhs + static_cast<std::string>(rhs);
-}
+bool operator>(const String& lhs, const String& rhs);
+bool operator>(const String& lhs, const char *rhs);
+bool operator>(const char *lhs, const String& rhs);
 
-inline bool operator==(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs) == static_cast<std::string>(rhs);
-}
+bool operator<=(const String& lhs, const String& rhs);
+bool operator<=(const String& lhs, const char *rhs);
+bool operator<=(const char *lhs, const String& rhs);
 
-inline bool operator==(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) == rhs;
-}
+bool operator>=(const String& lhs, const String& rhs);
+bool operator>=(const String& lhs, const char *rhs);
+bool operator>=(const char *lhs, const String& rhs);
 
-inline bool operator==(const char *lhs, const String& rhs)
-{
-	return lhs == static_cast<std::string>(rhs);
-}
+bool operator!=(const String& lhs, const String& rhs);
+bool operator!=(const String& lhs, const char *rhs);
+bool operator!=(const char *lhs, const String& rhs);
 
-inline bool operator<(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) < rhs;
-}
-
-inline bool operator<(const char *lhs, const String& rhs)
-{
-	return lhs < static_cast<std::string>(rhs);
-}
-
-inline bool operator>(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs) > static_cast<std::string>(rhs);
-}
-
-inline bool operator>(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) > rhs;
-}
-
-inline bool operator>(const char *lhs, const String& rhs)
-{
-	return lhs > static_cast<std::string>(rhs);
-}
-
-inline bool operator<=(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs) <= static_cast<std::string>(rhs);
-}
-
-inline bool operator<=(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) <= rhs;
-}
-
-inline bool operator<=(const char *lhs, const String& rhs)
-{
-	return lhs <= static_cast<std::string>(rhs);
-}
-
-inline bool operator>=(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs) >= static_cast<std::string>(rhs);
-}
-
-inline bool operator>=(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) >= rhs;
-}
-
-inline bool operator>=(const char *lhs, const String& rhs)
-{
-	return lhs >= static_cast<std::string>(rhs);
-}
-
-inline bool operator!=(const String& lhs, const String& rhs)
-{
-	return static_cast<std::string>(lhs) != static_cast<std::string>(rhs);
-}
-
-inline bool operator!=(const String& lhs, const char *rhs)
-{
-	return static_cast<std::string>(lhs) != rhs;
-}
-
-inline bool operator!=(const char *lhs, const String& rhs)
-{
-	return lhs != static_cast<std::string>(rhs);
-}
-
-inline String::Iterator range_begin(String& x)
-{
-	return x.Begin();
-}
-
-inline String::ConstIterator range_begin(const String& x)
-{
-	return x.Begin();
-}
-
-inline String::Iterator range_end(String& x)
-{
-	return x.End();
-}
-
-inline String::ConstIterator range_end(const String& x)
-{
-	return x.End();
-}
-
-struct string_iless : std::binary_function<String, String, bool>
-{
-	bool operator()(const String& s1, const String& s2) const
-	{
-		 return strcasecmp(s1.CStr(), s2.CStr()) < 0;
-
-		 /* The "right" way would be to do this - however the
-		  * overhead is _massive_ due to the repeated non-inlined
-		  * function calls:
-
-		 return lexicographical_compare(s1.Begin(), s1.End(),
-		     s2.Begin(), s2.End(), boost::algorithm::is_iless());
-
-		  */
-	}
-};
+String::Iterator begin(String& x);
+String::ConstIterator begin(const String& x);
+String::Iterator end(String& x);
+String::ConstIterator end(const String& x);
+String::Iterator range_begin(String& x);
+String::ConstIterator range_begin(const String& x);
+String::Iterator range_end(String& x);
+String::ConstIterator range_end(const String& x);
 
 }
+
+extern template class std::vector<icinga::String>;
 
 namespace boost
 {

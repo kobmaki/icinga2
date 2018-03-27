@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,7 +31,6 @@
 #include "base/convert.hpp"
 #include "base/utility.hpp"
 #include "base/context.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -43,13 +42,14 @@ boost::signals2::signal<void (const Checkable::Ptr&)> Checkable::OnNextCheckUpda
 
 boost::mutex Checkable::m_StatsMutex;
 int Checkable::m_PendingChecks = 0;
+boost::condition_variable Checkable::m_PendingChecksCV;
 
-CheckCommand::Ptr Checkable::GetCheckCommand(void) const
+CheckCommand::Ptr Checkable::GetCheckCommand() const
 {
 	return dynamic_pointer_cast<CheckCommand>(NavigateCheckCommandRaw());
 }
 
-TimePeriod::Ptr Checkable::GetCheckPeriod(void) const
+TimePeriod::Ptr Checkable::GetCheckPeriod() const
 {
 	return TimePeriod::GetByName(GetCheckPeriodRaw());
 }
@@ -59,7 +59,7 @@ void Checkable::SetSchedulingOffset(long offset)
 	m_SchedulingOffset = offset;
 }
 
-long Checkable::GetSchedulingOffset(void)
+long Checkable::GetSchedulingOffset()
 {
 	return m_SchedulingOffset;
 }
@@ -68,7 +68,7 @@ void Checkable::UpdateNextCheck(const MessageOrigin::Ptr& origin)
 {
 	double interval;
 
-	if (GetStateType() == StateTypeSoft && GetLastCheckResult() != NULL)
+	if (GetStateType() == StateTypeSoft && GetLastCheckResult() != nullptr)
 		interval = GetRetryInterval();
 	else
 		interval = GetCheckInterval();
@@ -84,12 +84,12 @@ void Checkable::UpdateNextCheck(const MessageOrigin::Ptr& origin)
 	SetNextCheck(now - adj + interval, false, origin);
 }
 
-bool Checkable::HasBeenChecked(void) const
+bool Checkable::HasBeenChecked() const
 {
-	return GetLastCheckResult() != NULL;
+	return GetLastCheckResult() != nullptr;
 }
 
-double Checkable::GetLastCheck(void) const
+double Checkable::GetLastCheck() const
 {
 	CheckResult::Ptr cr = GetLastCheckResult();
 	double schedule_end = -1;
@@ -106,6 +106,9 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 		ObjectLock olock(this);
 		m_CheckRunning = false;
 	}
+
+	if (!cr)
+		return;
 
 	double now = Utility::GetTime();
 
@@ -177,9 +180,7 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 
 	std::set<Checkable::Ptr> children = GetChildren();
 
-	if (!old_cr) {
-		SetStateType(StateTypeHard);
-	} else if (IsStateOK(cr->GetState())) {
+	if (IsStateOK(cr->GetState())) {
 		SetStateType(StateTypeHard); // NOT-OK -> HARD OK
 
 		if (!IsStateOK(old_state))
@@ -192,16 +193,22 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 		if (!children.empty())
 			OnReachabilityChanged(this, cr, children, origin);
 	} else {
-		if (old_attempt >= GetMaxCheckAttempts()) {
+		/* OK -> NOT-OK change, first SOFT state. Reset attempt counter. */
+		if (IsStateOK(old_state)) {
+			SetStateType(StateTypeSoft);
+			attempt = 1;
+		}
+
+		/* SOFT state change, increase attempt counter. */
+		if (old_stateType == StateTypeSoft && !IsStateOK(old_state)) {
+			SetStateType(StateTypeSoft);
+			attempt = old_attempt + 1;
+		}
+
+		/* HARD state change (e.g. previously 2/3 and this next attempt). Reset attempt counter. */
+		if (attempt >= GetMaxCheckAttempts()) {
 			SetStateType(StateTypeHard);
-		} else if (old_stateType == StateTypeSoft && !IsStateOK(old_state)) {
-			SetStateType(StateTypeSoft);
-			attempt = old_attempt + 1; // NOT-OK -> NOT-OK counter
-		} else if (IsStateOK(old_state)) {
-			SetStateType(StateTypeSoft);
-			attempt = 1; // OK -> NOT-OK transition, reset the counter
-		} else {
-			attempt = old_attempt;
+			attempt = 1;
 		}
 
 		if (!IsStateOK(cr->GetState())) {
@@ -234,12 +241,12 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 
 		/* remove acknowledgements */
 		if (GetAcknowledgement() == AcknowledgementNormal ||
-		    (GetAcknowledgement() == AcknowledgementSticky && IsStateOK(new_state))) {
+			(GetAcknowledgement() == AcknowledgementSticky && IsStateOK(new_state))) {
 			ClearAcknowledgement();
 		}
 
 		/* reschedule direct parents */
-		BOOST_FOREACH(const Checkable::Ptr& parent, GetParents()) {
+		for (const Checkable::Ptr& parent : GetParents()) {
 			if (parent.get() == this)
 				continue;
 
@@ -277,15 +284,12 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 
 	if (notification_reachable && !in_downtime && !IsAcknowledged()) {
 		/* Send notifications whether when a hard state change occured. */
-		if (hardChange)
+		if (hardChange && !(old_stateType == StateTypeSoft && IsStateOK(new_state)))
 			send_notification = true;
 		/* Or if the checkable is volatile and in a HARD state. */
 		else if (is_volatile && GetStateType() == StateTypeHard)
 			send_notification = true;
 	}
-
-	if (!old_cr)
-		send_notification = false; /* Don't send notifications for the initial state change */
 
 	if (IsStateOK(old_state) && old_stateType == StateTypeSoft)
 		send_notification = false; /* Don't send notifications for SOFT-OK -> HARD-OK. */
@@ -293,19 +297,17 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 	if (is_volatile && IsStateOK(old_state) && IsStateOK(new_state))
 		send_notification = false; /* Don't send notifications for volatile OK -> OK changes. */
 
-	bool send_downtime_notification = (GetLastInDowntime() != in_downtime);
-	SetLastInDowntime(in_downtime);
-
 	olock.Unlock();
 
 	if (remove_acknowledgement_comments)
 		RemoveCommentsByType(CommentAcknowledgement);
 
-	Dictionary::Ptr vars_after = new Dictionary();
-	vars_after->Set("state", new_state);
-	vars_after->Set("state_type", GetStateType());
-	vars_after->Set("attempt", GetCheckAttempt());
-	vars_after->Set("reachable", reachable);
+	Dictionary::Ptr vars_after = new Dictionary({
+		{ "state", new_state },
+		{ "state_type", GetStateType() },
+		{ "attempt", GetCheckAttempt() },
+		{ "reachable", reachable }
+	});
 
 	if (old_cr)
 		cr->SetVarsBefore(old_cr->GetVarsAfter());
@@ -315,32 +317,40 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 	olock.Lock();
 	SetLastCheckResult(cr);
 
-	bool was_flapping, is_flapping;
+	bool was_flapping = IsFlapping();
 
-	was_flapping = IsFlapping();
+	UpdateFlappingStatus(old_state != cr->GetState());
 
-	if (GetStateType() == StateTypeHard)
-		UpdateFlappingStatus(stateChange);
-
-	is_flapping = IsFlapping();
+	bool is_flapping = IsFlapping();
 
 	if (cr->GetActive()) {
 		UpdateNextCheck(origin);
 	} else {
-		/* Reschedule the next check for passive check results. The side effect of
-		 * this is that for as long as we receive passive results for a service we
+		/* Reschedule the next check for external passive check results. The side effect of
+		 * this is that for as long as we receive results for a service we
 		 * won't execute any active checks. */
-		SetNextCheck(Utility::GetTime() + GetCheckInterval(), false, origin);
+		double offset;
+		double ttl = cr->GetTtl();
+
+		if (ttl > 0)
+			offset = ttl;
+		else
+			offset = GetCheckInterval();
+
+		SetNextCheck(Utility::GetTime() + offset, false, origin);
 	}
 
 	olock.Unlock();
 
-//	Log(LogDebug, "Checkable")
-//	    << "Flapping: Checkable " << GetName()
-//	    << " was: " << (was_flapping)
-//	    << " is: " << is_flapping)
-//	    << " threshold: " << GetFlappingThreshold()
-//	    << "% current: " + GetFlappingCurrent()) << "%.";
+#ifdef I2_DEBUG /* I2_DEBUG */
+	Log(LogDebug, "Checkable")
+		<< "Flapping: Checkable " << GetName()
+		<< " was: " << was_flapping
+		<< " is: " << is_flapping
+		<< " threshold low: " << GetFlappingThresholdLow()
+		<< " threshold high: " << GetFlappingThresholdHigh()
+		<< "% current: " << GetFlappingCurrent() << "%.";
+#endif /* I2_DEBUG */
 
 	OnNewCheckResult(this, cr, origin);
 
@@ -354,45 +364,45 @@ void Checkable::ProcessCheckResult(const CheckResult::Ptr& cr, const MessageOrig
 	if (hardChange || (is_volatile && !(IsStateOK(old_state) && IsStateOK(new_state)))) {
 		OnStateChange(this, cr, StateTypeHard, origin);
 		Log(LogNotice, "Checkable")
-		    << "State Change: Checkable " << GetName() << " hard state change from " << old_state_str << " to " << new_state_str << " detected." << (is_volatile ? " Checkable is volatile." : "");
+			<< "State Change: Checkable '" << GetName() << "' hard state change from " << old_state_str << " to " << new_state_str << " detected." << (is_volatile ? " Checkable is volatile." : "");
 	}
 	/* Whether a state change happened or the state type is SOFT (must be logged too). */
 	else if (stateChange || GetStateType() == StateTypeSoft) {
 		OnStateChange(this, cr, StateTypeSoft, origin);
 		Log(LogNotice, "Checkable")
-		    << "State Change: Checkable " << GetName() << " soft state change from " << old_state_str << " to " << new_state_str << " detected.";
+			<< "State Change: Checkable '" << GetName() << "' soft state change from " << old_state_str << " to " << new_state_str << " detected.";
 	}
 
 	if (GetStateType() == StateTypeSoft || hardChange || recovery ||
-	    (is_volatile && !(IsStateOK(old_state) && IsStateOK(new_state))))
+		(is_volatile && !(IsStateOK(old_state) && IsStateOK(new_state))))
 		ExecuteEventHandler();
 
-	if (send_downtime_notification && IsActive())
-		OnNotificationsRequested(this, in_downtime ? NotificationDowntimeStart : NotificationDowntimeEnd, cr, "", "", MessageOrigin::Ptr());
-
 	/* Flapping start/end notifications */
-	if (!was_flapping && is_flapping) {
+	if (!in_downtime && !was_flapping && is_flapping) {
+		/* FlappingStart notifications happen on state changes, not in downtimes */
 		if (!IsPaused())
-			OnNotificationsRequested(this, NotificationFlappingStart, cr, "", "", MessageOrigin::Ptr());
+			OnNotificationsRequested(this, NotificationFlappingStart, cr, "", "", nullptr);
 
 		Log(LogNotice, "Checkable")
-			<< "Flapping: Checkable " << GetName() << " started flapping (" << GetFlappingThreshold() << "% < " << GetFlappingCurrent() << "%).";
+			<< "Flapping Start: Checkable '" << GetName() << "' started flapping (Current flapping value "
+			<< GetFlappingCurrent() << "% > high threshold " << GetFlappingThresholdHigh() << "%).";
 
 		NotifyFlapping(origin);
-	} else if (was_flapping && !is_flapping) {
+	} else if (!in_downtime && was_flapping && !is_flapping) {
+		/* FlappingEnd notifications are independent from state changes, must not happen in downtine */
 		if (!IsPaused())
-			OnNotificationsRequested(this, NotificationFlappingEnd, cr, "", "", MessageOrigin::Ptr());
+			OnNotificationsRequested(this, NotificationFlappingEnd, cr, "", "", nullptr);
 
 		Log(LogNotice, "Checkable")
-			<< "Flapping: Checkable " << GetName() << " stopped flapping (" << GetFlappingThreshold() << "% >= " << GetFlappingCurrent() << "%).";
+			<< "Flapping Stop: Checkable '" << GetName() << "' stopped flapping (Current flapping value "
+			<< GetFlappingCurrent() << "% < low threshold " << GetFlappingThresholdLow() << "%).";
 
 		NotifyFlapping(origin);
 	}
 
-	/* Problem notifications */
 	if (send_notification && !is_flapping) {
 		if (!IsPaused())
-			OnNotificationsRequested(this, recovery ? NotificationRecovery : NotificationProblem, cr, "", "", MessageOrigin::Ptr());
+			OnNotificationsRequested(this, recovery ? NotificationRecovery : NotificationProblem, cr, "", "", nullptr);
 	}
 }
 
@@ -410,7 +420,7 @@ void Checkable::ExecuteRemoteCheck(const Dictionary::Ptr& resolvedMacros)
 	GetCheckCommand()->Execute(this, cr, resolvedMacros, true);
 }
 
-void Checkable::ExecuteCheck(void)
+void Checkable::ExecuteCheck()
 {
 	CONTEXT("Executing check for object '" + GetName() + "'");
 
@@ -445,7 +455,7 @@ void Checkable::ExecuteCheck(void)
 	bool local = !endpoint || endpoint == Endpoint::GetLocalEndpoint();
 
 	if (local) {
-		GetCheckCommand()->Execute(this, cr, NULL, false);
+		GetCheckCommand()->Execute(this, cr, nullptr, false);
 	} else {
 		Dictionary::Ptr macros = new Dictionary();
 		GetCheckCommand()->Execute(this, cr, macros, false);
@@ -477,10 +487,11 @@ void Checkable::ExecuteCheck(void)
 				listener->SyncSendMessage(endpoint, message);
 
 			/* Re-schedule the check so we don't run it again until after we've received
-			   a check result from the remote instance. The check will be re-scheduled
-			   using the proper check interval once we've received a check result. */
+			 * a check result from the remote instance. The check will be re-scheduled
+			 * using the proper check interval once we've received a check result.
+			 */
 			SetNextCheck(Utility::GetTime() + GetCheckCommand()->GetTimeout() + 30);
-		} else if (Application::GetInstance()->GetStartTime() < Utility::GetTime() - 300) {
+		} else if (!endpoint->GetSyncing() && Application::GetInstance()->GetStartTime() < Utility::GetTime() - 300) {
 			/* fail to perform check on unconnected endpoint */
 			cr->SetState(ServiceUnknown);
 
@@ -524,20 +535,30 @@ void Checkable::UpdateStatistics(const CheckResult::Ptr& cr, CheckableType type)
 	}
 }
 
-void Checkable::IncreasePendingChecks(void)
+void Checkable::IncreasePendingChecks()
 {
 	boost::mutex::scoped_lock lock(m_StatsMutex);
 	m_PendingChecks++;
 }
 
-void Checkable::DecreasePendingChecks(void)
+void Checkable::DecreasePendingChecks()
 {
 	boost::mutex::scoped_lock lock(m_StatsMutex);
 	m_PendingChecks--;
+	m_PendingChecksCV.notify_one();
 }
 
-int Checkable::GetPendingChecks(void)
+int Checkable::GetPendingChecks()
 {
 	boost::mutex::scoped_lock lock(m_StatsMutex);
 	return m_PendingChecks;
+}
+
+void Checkable::AquirePendingCheckSlot(int maxPendingChecks)
+{
+	boost::mutex::scoped_lock lock(m_StatsMutex);
+	while (m_PendingChecks >= maxPendingChecks)
+		m_PendingChecksCV.wait(lock);
+
+	m_PendingChecks++;
 }

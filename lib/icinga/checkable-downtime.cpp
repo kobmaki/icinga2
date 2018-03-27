@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,27 +23,26 @@
 #include "base/logger.hpp"
 #include "base/utility.hpp"
 #include "base/convert.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-void Checkable::RemoveAllDowntimes(void)
+void Checkable::RemoveAllDowntimes()
 {
-	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
+	for (const Downtime::Ptr& downtime : GetDowntimes()) {
 		Downtime::RemoveDowntime(downtime->GetName(), true, true);
 	}
 }
 
-void Checkable::TriggerDowntimes(void)
+void Checkable::TriggerDowntimes()
 {
-	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
+	for (const Downtime::Ptr& downtime : GetDowntimes()) {
 		downtime->TriggerDowntime();
 	}
 }
 
-bool Checkable::IsInDowntime(void) const
+bool Checkable::IsInDowntime() const
 {
-	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
+	for (const Downtime::Ptr& downtime : GetDowntimes()) {
 		if (downtime->IsInEffect())
 			return true;
 	}
@@ -51,11 +50,11 @@ bool Checkable::IsInDowntime(void) const
 	return false;
 }
 
-int Checkable::GetDowntimeDepth(void) const
+int Checkable::GetDowntimeDepth() const
 {
 	int downtime_depth = 0;
 
-	BOOST_FOREACH(const Downtime::Ptr& downtime, GetDowntimes()) {
+	for (const Downtime::Ptr& downtime : GetDowntimes()) {
 		if (downtime->IsInEffect())
 			downtime_depth++;
 	}
@@ -63,7 +62,7 @@ int Checkable::GetDowntimeDepth(void) const
 	return downtime_depth;
 }
 
-std::set<Downtime::Ptr> Checkable::GetDowntimes(void) const
+std::set<Downtime::Ptr> Checkable::GetDowntimes() const
 {
 	boost::mutex::scoped_lock lock(m_DowntimeMutex);
 	return m_Downtimes;

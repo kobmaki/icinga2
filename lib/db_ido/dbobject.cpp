@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,16 +23,20 @@
 #include "icinga/customvarobject.hpp"
 #include "icinga/service.hpp"
 #include "icinga/compatutility.hpp"
+#include "icinga/checkcommand.hpp"
+#include "icinga/eventcommand.hpp"
+#include "icinga/notificationcommand.hpp"
 #include "remote/endpoint.hpp"
 #include "base/configobject.hpp"
 #include "base/configtype.hpp"
+#include "base/json.hpp"
+#include "base/serializer.hpp"
 #include "base/json.hpp"
 #include "base/convert.hpp"
 #include "base/objectlock.hpp"
 #include "base/utility.hpp"
 #include "base/initialize.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -41,18 +45,18 @@ boost::signals2::signal<void (const std::vector<DbQuery>&)> DbObject::OnMultiple
 
 INITIALIZE_ONCE(&DbObject::StaticInitialize);
 
-DbObject::DbObject(const intrusive_ptr<DbType>& type, const String& name1, const String& name2)
-	: m_Name1(name1), m_Name2(name2), m_Type(type), m_LastConfigUpdate(0), m_LastStatusUpdate(0)
+DbObject::DbObject(intrusive_ptr<DbType> type, String name1, String name2)
+	: m_Name1(std::move(name1)), m_Name2(std::move(name2)), m_Type(std::move(type)), m_LastConfigUpdate(0), m_LastStatusUpdate(0)
 { }
 
-void DbObject::StaticInitialize(void)
+void DbObject::StaticInitialize()
 {
 	/* triggered in ProcessCheckResult(), requires UpdateNextCheck() to be called before */
-	ConfigObject::OnStateChanged.connect(boost::bind(&DbObject::StateChangedHandler, _1));
-	CustomVarObject::OnVarsChanged.connect(boost::bind(&DbObject::VarsChangedHandler, _1));
+	ConfigObject::OnStateChanged.connect(std::bind(&DbObject::StateChangedHandler, _1));
+	CustomVarObject::OnVarsChanged.connect(std::bind(&DbObject::VarsChangedHandler, _1));
 
 	/* triggered on create, update and delete objects */
-	ConfigObject::OnVersionChanged.connect(boost::bind(&DbObject::VersionChangedHandler, _1));
+	ConfigObject::OnVersionChanged.connect(std::bind(&DbObject::VersionChangedHandler, _1));
 }
 
 void DbObject::SetObject(const ConfigObject::Ptr& object)
@@ -60,58 +64,106 @@ void DbObject::SetObject(const ConfigObject::Ptr& object)
 	m_Object = object;
 }
 
-ConfigObject::Ptr DbObject::GetObject(void) const
+ConfigObject::Ptr DbObject::GetObject() const
 {
 	return m_Object;
 }
 
-String DbObject::GetName1(void) const
+String DbObject::GetName1() const
 {
 	return m_Name1;
 }
 
-String DbObject::GetName2(void) const
+String DbObject::GetName2() const
 {
 	return m_Name2;
 }
 
-DbType::Ptr DbObject::GetType(void) const
+DbType::Ptr DbObject::GetType() const
 {
 	return m_Type;
 }
 
-void DbObject::SendConfigUpdate(void)
+String DbObject::CalculateConfigHash(const Dictionary::Ptr& configFields) const
+{
+	Dictionary::Ptr configFieldsDup = configFields->ShallowClone();
+
+	{
+		ObjectLock olock(configFieldsDup);
+
+		for (const Dictionary::Pair& kv : configFieldsDup) {
+			if (kv.second.IsObjectType<ConfigObject>()) {
+				ConfigObject::Ptr obj = kv.second;
+				configFieldsDup->Set(kv.first, obj->GetName());
+			}
+		}
+	}
+
+	Array::Ptr data = new Array();
+	data->Add(configFieldsDup);
+
+	CustomVarObject::Ptr custom_var_object = dynamic_pointer_cast<CustomVarObject>(GetObject());
+
+	if (custom_var_object)
+		data->Add(custom_var_object->GetVars());
+
+	return HashValue(data);
+}
+
+String DbObject::HashValue(const Value& value)
+{
+	Value temp;
+
+	Type::Ptr type = value.GetReflectionType();
+
+	if (ConfigObject::TypeInstance->IsAssignableFrom(type))
+		temp = Serialize(value, FAConfig);
+	else
+		temp = value;
+
+	return SHA256(JsonEncode(temp));
+}
+
+void DbObject::SendConfigUpdateHeavy(const Dictionary::Ptr& configFields)
 {
 	/* update custom var config and status */
-	SendVarsConfigUpdate();
+	SendVarsConfigUpdateHeavy();
 	SendVarsStatusUpdate();
 
 	/* config attributes */
-	Dictionary::Ptr fields = GetConfigFields();
-
-	if (!fields)
+	if (!configFields)
 		return;
+
+	ASSERT(configFields->Contains("config_hash"));
+
+	ConfigObject::Ptr object = GetObject();
 
 	DbQuery query;
 	query.Table = GetType()->GetTable() + "s";
 	query.Type = DbQueryInsert | DbQueryUpdate;
 	query.Category = DbCatConfig;
-	query.Fields = fields;
-	query.Fields->Set(GetType()->GetIDColumn(), GetObject());
+	query.Fields = configFields;
+	query.Fields->Set(GetType()->GetIDColumn(), object);
 	query.Fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
 	query.Fields->Set("config_type", 1);
-	query.WhereCriteria = new Dictionary();
-	query.WhereCriteria->Set(GetType()->GetIDColumn(), GetObject());
+	query.WhereCriteria = new Dictionary({
+		{ GetType()->GetIDColumn(), object }
+	});
 	query.Object = this;
 	query.ConfigUpdate = true;
 	OnQuery(query);
 
 	m_LastConfigUpdate = Utility::GetTime();
 
-	OnConfigUpdate();
+	OnConfigUpdateHeavy();
 }
 
-void DbObject::SendStatusUpdate(void)
+void DbObject::SendConfigUpdateLight()
+{
+	OnConfigUpdateLight();
+}
+
+void DbObject::SendStatusUpdate()
 {
 	/* status attributes */
 	Dictionary::Ptr fields = GetStatusFields();
@@ -138,8 +190,9 @@ void DbObject::SendStatusUpdate(void)
 	query.Fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
 
 	query.Fields->Set("status_update_time", DbValue::FromTimestamp(Utility::GetTime()));
-	query.WhereCriteria = new Dictionary();
-	query.WhereCriteria->Set(GetType()->GetIDColumn(), GetObject());
+	query.WhereCriteria = new Dictionary({
+		{ GetType()->GetIDColumn(), GetObject() }
+	});
 	query.Object = this;
 	query.StatusUpdate = true;
 	OnQuery(query);
@@ -149,7 +202,7 @@ void DbObject::SendStatusUpdate(void)
 	OnStatusUpdate();
 }
 
-void DbObject::SendVarsConfigUpdate(void)
+void DbObject::SendVarsConfigUpdateHeavy()
 {
 	ConfigObject::Ptr obj = GetObject();
 
@@ -158,13 +211,32 @@ void DbObject::SendVarsConfigUpdate(void)
 	if (!custom_var_object)
 		return;
 
-	Dictionary::Ptr vars = CompatUtility::GetCustomAttributeConfig(custom_var_object);
+	std::vector<DbQuery> queries;
+
+	DbQuery query1;
+	query1.Table = "customvariables";
+	query1.Type = DbQueryDelete;
+	query1.Category = DbCatConfig;
+	query1.WhereCriteria = new Dictionary({
+		{ "object_id", obj }
+	});
+	queries.emplace_back(std::move(query1));
+
+	DbQuery query2;
+	query2.Table = "customvariablestatus";
+	query2.Type = DbQueryDelete;
+	query2.Category = DbCatConfig;
+	query2.WhereCriteria = new Dictionary({
+		{ "object_id", obj }
+	});
+	queries.emplace_back(std::move(query2));
+
+	Dictionary::Ptr vars = custom_var_object->GetVars();
 
 	if (vars) {
-		std::vector<DbQuery> queries;
 		ObjectLock olock (vars);
 
-		BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
+		for (const Dictionary::Pair& kv : vars) {
 			if (kv.first.IsEmpty())
 				continue;
 
@@ -177,34 +249,26 @@ void DbObject::SendVarsConfigUpdate(void)
 			} else
 				value = kv.second;
 
-			Dictionary::Ptr fields = new Dictionary();
-			fields->Set("varname", kv.first);
-			fields->Set("varvalue", value);
-			fields->Set("is_json", is_json);
-			fields->Set("config_type", 1);
-			fields->Set("session_token", 0); /* DbConnection class fills in real ID */
-			fields->Set("object_id", obj);
-			fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
-
-			DbQuery query;
-			query.Table = "customvariables";
-			query.Type = DbQueryInsert | DbQueryUpdate;
-			query.Category = DbCatConfig;
-			query.Fields = fields;
-
-			query.WhereCriteria = new Dictionary();
-			query.WhereCriteria->Set("object_id", obj);
-			query.WhereCriteria->Set("varname", kv.first);
-			query.Object = this;
-
-			queries.push_back(query);
+			DbQuery query3;
+			query3.Table = "customvariables";
+			query3.Type = DbQueryInsert;
+			query3.Category = DbCatConfig;
+			query3.Fields = new Dictionary({
+				{ "varname", kv.first },
+				{ "varvalue", value },
+				{ "is_json", is_json },
+				{ "config_type", 1 },
+				{ "object_id", obj },
+				{ "instance_id", 0 } /* DbConnection class fills in real ID */
+			});
+			queries.emplace_back(std::move(query3));
 		}
-
-		OnMultipleQueries(queries);
 	}
+
+	OnMultipleQueries(queries);
 }
 
-void DbObject::SendVarsStatusUpdate(void)
+void DbObject::SendVarsStatusUpdate()
 {
 	ConfigObject::Ptr obj = GetObject();
 
@@ -213,13 +277,13 @@ void DbObject::SendVarsStatusUpdate(void)
 	if (!custom_var_object)
 		return;
 
-	Dictionary::Ptr vars = CompatUtility::GetCustomAttributeConfig(custom_var_object);
+	Dictionary::Ptr vars = custom_var_object->GetVars();
 
 	if (vars) {
 		std::vector<DbQuery> queries;
 		ObjectLock olock (vars);
 
-		BOOST_FOREACH(const Dictionary::Pair& kv, vars) {
+		for (const Dictionary::Pair& kv : vars) {
 			if (kv.first.IsEmpty())
 				continue;
 
@@ -231,55 +295,54 @@ void DbObject::SendVarsStatusUpdate(void)
 				is_json = 1;
 			} else
 				value = kv.second;
-
-			Dictionary::Ptr fields = new Dictionary();
-			fields->Set("varname", kv.first);
-			fields->Set("varvalue", value);
-			fields->Set("is_json", is_json);
-			fields->Set("status_update_time", DbValue::FromTimestamp(Utility::GetTime()));
-			fields->Set("session_token", 0); /* DbConnection class fills in real ID */
-			fields->Set("object_id", obj);
-			fields->Set("instance_id", 0); /* DbConnection class fills in real ID */
 
 			DbQuery query;
 			query.Table = "customvariablestatus";
 			query.Type = DbQueryInsert | DbQueryUpdate;
 			query.Category = DbCatState;
-			query.Fields = fields;
 
-			query.WhereCriteria = new Dictionary();
-			query.WhereCriteria->Set("object_id", obj);
-			query.WhereCriteria->Set("varname", kv.first);
-			query.Object = this;
+			query.Fields = new Dictionary({
+				{ "varname", kv.first },
+				{ "varvalue", value },
+				{ "is_json", is_json },
+				{ "status_update_time", DbValue::FromTimestamp(Utility::GetTime()) },
+				{ "object_id", obj },
+				{ "instance_id", 0 } /* DbConnection class fills in real ID */
+			});
 
-			queries.push_back(query);
+			query.WhereCriteria = new Dictionary({
+				{ "object_id", obj },
+				{ "varname", kv.first }
+			});
+
+			queries.emplace_back(std::move(query));
 		}
 
 		OnMultipleQueries(queries);
 	}
 }
 
-double DbObject::GetLastConfigUpdate(void) const
+double DbObject::GetLastConfigUpdate() const
 {
 	return m_LastConfigUpdate;
 }
 
-double DbObject::GetLastStatusUpdate(void) const
+double DbObject::GetLastStatusUpdate() const
 {
 	return m_LastStatusUpdate;
 }
 
-bool DbObject::IsStatusAttribute(const String&) const
-{
-	return false;
-}
-
-void DbObject::OnConfigUpdate(void)
+void DbObject::OnConfigUpdateHeavy()
 {
 	/* Default handler does nothing. */
 }
 
-void DbObject::OnStatusUpdate(void)
+void DbObject::OnConfigUpdateLight()
+{
+	/* Default handler does nothing. */
+}
+
+void DbObject::OnStatusUpdate()
 {
 	/* Default handler does nothing. */
 }
@@ -293,10 +356,10 @@ DbObject::Ptr DbObject::GetOrCreateByObject(const ConfigObject::Ptr& object)
 	if (dbobj)
 		return dbobj;
 
-	DbType::Ptr dbtype = DbType::GetByName(object->GetType()->GetName());
+	DbType::Ptr dbtype = DbType::GetByName(object->GetReflectionType()->GetName());
 
 	if (!dbtype)
-		return DbObject::Ptr();
+		return nullptr;
 
 	Service::Ptr service;
 	String name1, name2;
@@ -309,9 +372,9 @@ DbObject::Ptr DbObject::GetOrCreateByObject(const ConfigObject::Ptr& object)
 		name1 = service->GetHost()->GetName();
 		name2 = service->GetShortName();
 	} else {
-		if (object->GetType() == ConfigType::GetByName("CheckCommand") ||
-		    object->GetType() == ConfigType::GetByName("EventCommand") ||
-		    object->GetType() == ConfigType::GetByName("NotificationCommand")) {
+		if (object->GetReflectionType() == CheckCommand::TypeInstance ||
+			object->GetReflectionType() == EventCommand::TypeInstance ||
+			object->GetReflectionType() == NotificationCommand::TypeInstance) {
 			Command::Ptr command = dynamic_pointer_cast<Command>(object);
 			name1 = CompatUtility::GetCommandName(command);
 		}
@@ -352,12 +415,16 @@ void DbObject::VersionChangedHandler(const ConfigObject::Ptr& object)
 	DbObject::Ptr dbobj = DbObject::GetOrCreateByObject(object);
 
 	if (dbobj) {
-		dbobj->SendConfigUpdate();
+		Dictionary::Ptr configFields = dbobj->GetConfigFields();
+		String configHash = dbobj->CalculateConfigHash(configFields);
+		configFields->Set("config_hash", configHash);
+
+		dbobj->SendConfigUpdateHeavy(configFields);
 		dbobj->SendStatusUpdate();
 	}
 }
 
-boost::mutex& DbObject::GetStaticMutex(void)
+boost::mutex& DbObject::GetStaticMutex()
 {
 	static boost::mutex mutex;
 	return mutex;

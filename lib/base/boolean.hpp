@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,13 +30,13 @@ class Value;
 /**
  * Boolean class.
  */
-class I2_BASE_API Boolean
+class Boolean
 {
 public:
-	static Object::Ptr GetPrototype(void);
+	static Object::Ptr GetPrototype();
 
 private:
-	Boolean(void);
+	Boolean();
 };
 
 }

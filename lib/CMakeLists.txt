@@ -1,5 +1,5 @@
 # Icinga 2
-# Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)
+# Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -22,10 +22,6 @@ add_subdirectory(remote)
 add_subdirectory(icinga)
 add_subdirectory(methods)
 
-if(ICINGA2_WITH_HELLO)
-  add_subdirectory(hello)
-endif()
-
 if(ICINGA2_WITH_CHECKER)
   add_subdirectory(checker)
 endif()
@@ -39,15 +35,25 @@ if(ICINGA2_WITH_MYSQL OR ICINGA2_WITH_PGSQL)
 endif()
 
 if(ICINGA2_WITH_MYSQL)
-  add_subdirectory(db_ido_mysql)
+  find_package(MySQL)
+
+  if(MYSQL_FOUND)
+    add_subdirectory(db_ido_mysql)
+    add_subdirectory(mysql_shim)
+  else()
+    message(FATAL_ERROR "You have selected MySQL support, but MySQL could not be found. You can disable the MySQL IDO module using -DICINGA2_WITH_MYSQL=OFF.")
+  endif()
 endif()
 
 if(ICINGA2_WITH_PGSQL)
-  add_subdirectory(db_ido_pgsql)
-endif()
+  find_package(PostgreSQL)
 
-if(ICINGA2_WITH_DEMO)
-  add_subdirectory(demo)
+  if(PostgreSQL_FOUND)
+    add_subdirectory(db_ido_pgsql)
+    add_subdirectory(pgsql_shim)
+  else()
+    message(FATAL_ERROR "You have selected PostgreSQL support, but PostgreSQL could not be found. You can disable the PostgreSQL IDO module using -DICINGA2_WITH_PGSQL=OFF.")
+  endif()
 endif()
 
 if(ICINGA2_WITH_LIVESTATUS)

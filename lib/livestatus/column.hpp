@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,7 +22,6 @@
 
 #include "livestatus/i2-livestatus.hpp"
 #include "base/value.hpp"
-#include <boost/function.hpp>
 
 using namespace icinga;
 
@@ -35,13 +34,13 @@ enum LivestatusGroupByType {
 	LivestatusGroupByServiceGroup
 };
 
-class I2_LIVESTATUS_API Column
+class Column
 {
 public:
-	typedef boost::function<Value (const Value&)> ValueAccessor;
-	typedef boost::function<Value (const Value&, LivestatusGroupByType, const Object::Ptr&)> ObjectAccessor;
+	typedef std::function<Value (const Value&)> ValueAccessor;
+	typedef std::function<Value (const Value&, LivestatusGroupByType, const Object::Ptr&)> ObjectAccessor;
 
-	Column(const ValueAccessor& valueAccessor, const ObjectAccessor& objectAccessor);
+	Column(ValueAccessor valueAccessor, ObjectAccessor objectAccessor);
 
 	Value ExtractValue(const Value& urow, LivestatusGroupByType groupByType = LivestatusGroupByNone, const Object::Ptr& groupByObject = Empty) const;
 

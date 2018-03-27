@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,9 @@
 #define STREAMLOGGER_H
 
 #include "base/i2-base.hpp"
-#include "base/streamlogger.thpp"
+#include "base/streamlogger-ti.hpp"
 #include "base/timer.hpp"
-#include <ostream>
+#include <iosfwd>
 
 namespace icinga
 {
@@ -33,32 +33,30 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API StreamLogger : public ObjectImpl<StreamLogger>
+class StreamLogger : public ObjectImpl<StreamLogger>
 {
 public:
 	DECLARE_OBJECT(StreamLogger);
 
-	StreamLogger(void);
-
-	virtual void Stop(bool runtimeRemoved) override;
-	~StreamLogger(void);
+	void Stop(bool runtimeRemoved) override;
+	~StreamLogger() override;
 
 	void BindStream(std::ostream *stream, bool ownsStream);
 
 	static void ProcessLogEntry(std::ostream& stream, const LogEntry& entry);
 
 protected:
-	virtual void ProcessLogEntry(const LogEntry& entry) override;
-	virtual void Flush(void) override;
+	void ProcessLogEntry(const LogEntry& entry) final;
+	void Flush() final;
 
 private:
 	static boost::mutex m_Mutex;
-	std::ostream *m_Stream;
-	bool m_OwnsStream;
+	std::ostream *m_Stream{nullptr};
+	bool m_OwnsStream{false};
 
 	Timer::Ptr m_FlushLogTimer;
 
-	void FlushLogTimerHandler(void);
+	void FlushLogTimerHandler();
 };
 
 }

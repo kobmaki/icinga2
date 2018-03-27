@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define ICINGAAPPLICATION_H
 
 #include "icinga/i2-icinga.hpp"
-#include "icinga/icingaapplication.thpp"
+#include "icinga/icingaapplication-ti.hpp"
 #include "icinga/macroresolver.hpp"
 
 namespace icinga
@@ -32,33 +32,33 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API IcingaApplication : public ObjectImpl<IcingaApplication>, public MacroResolver
+class IcingaApplication final : public ObjectImpl<IcingaApplication>, public MacroResolver
 {
 public:
 	DECLARE_OBJECT(IcingaApplication);
 	DECLARE_OBJECTNAME(IcingaApplication);
 
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
-	virtual int Main(void) override;
+	int Main() override;
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	static IcingaApplication::Ptr GetInstance(void);
+	static IcingaApplication::Ptr GetInstance();
 
-	String GetPidPath(void) const;
+	String GetPidPath() const;
 
-	virtual bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
+	bool ResolveMacro(const String& macro, const CheckResult::Ptr& cr, Value *result) const override;
 
-	String GetNodeName(void) const;
+	String GetNodeName() const;
 
-	virtual void ValidateVars(const Dictionary::Ptr& value, const ValidationUtils& utils) override;
+	void ValidateVars(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils) override;
 
 private:
-	void DumpProgramState(void);
-	void DumpModifiedAttributes(void);
+	void DumpProgramState();
+	void DumpModifiedAttributes();
 
-	virtual void OnShutdown(void) override;
+	void OnShutdown() override;
 };
 
 }

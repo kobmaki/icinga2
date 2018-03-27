@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,7 +27,7 @@ namespace icinga
 {
 
 code {{{
-class I2_ICINGA_API NotificationNameComposer : public NameComposer
+class NotificationNameComposer : public NameComposer
 {
 public:
 	virtual String MakeName(const String& shortName, const Object::Ptr& context) const;
@@ -79,15 +79,19 @@ class Notification : CustomVarObject < NotificationNameComposer
 		}}}
 		navigate {{{
 			if (GetServiceName().IsEmpty())
-				return Service::Ptr();
+				return nullptr;
 
 			Host::Ptr host = Host::GetByName(GetHostName());
 			return host->GetServiceByShortName(GetServiceName());
 		}}}
 	};
 
-	[state, no_user_modify] Array::Ptr notified_users {
+	[state, no_user_modify] Array::Ptr notified_problem_users {
 		default {{{ return new Array(); }}}
+	};
+
+	[state, no_user_modify] bool no_more_notifications {
+		default {{{ return false; }}}
 	};
 
 	[state] Timestamp last_notification;

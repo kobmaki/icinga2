@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -43,7 +43,7 @@ enum LivestatusError
 /**
  * @ingroup livestatus
  */
-class I2_LIVESTATUS_API LivestatusQuery : public Object
+class LivestatusQuery final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(LivestatusQuery);
@@ -52,7 +52,7 @@ public:
 
 	bool Execute(const Stream::Ptr& stream);
 
-	static int GetExternalCommands(void);
+	static int GetExternalCommands();
 
 private:
 	String m_Verb;

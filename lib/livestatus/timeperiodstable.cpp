@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,37 +24,36 @@
 #include "base/objectlock.hpp"
 #include "base/convert.hpp"
 #include "base/utility.hpp"
-#include <boost/foreach.hpp>
 #include <boost/algorithm/string/replace.hpp>
 
 using namespace icinga;
 
-TimePeriodsTable::TimePeriodsTable(void)
+TimePeriodsTable::TimePeriodsTable()
 {
 	AddColumns(this);
 }
 
 void TimePeriodsTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "name", Column(&TimePeriodsTable::NameAccessor, objectAccessor));
 	table->AddColumn(prefix + "alias", Column(&TimePeriodsTable::AliasAccessor, objectAccessor));
 	table->AddColumn(prefix + "in", Column(&TimePeriodsTable::InAccessor, objectAccessor));
 }
 
-String TimePeriodsTable::GetName(void) const
+String TimePeriodsTable::GetName() const
 {
 	return "timeperiod";
 }
 
-String TimePeriodsTable::GetPrefix(void) const
+String TimePeriodsTable::GetPrefix() const
 {
 	return "timeperiod";
 }
 
 void TimePeriodsTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const TimePeriod::Ptr& tp, ConfigType::GetObjectsByType<TimePeriod>()) {
+	for (const TimePeriod::Ptr& tp : ConfigType::GetObjectsByType<TimePeriod>()) {
 		if (!addRowFn(tp, LivestatusGroupByNone, Empty))
 			return;
 	}

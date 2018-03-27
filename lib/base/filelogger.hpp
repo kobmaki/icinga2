@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define FILELOGGER_H
 
 #include "base/i2-base.hpp"
-#include "base/filelogger.thpp"
+#include "base/filelogger-ti.hpp"
 
 namespace icinga
 {
@@ -31,7 +31,7 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API FileLogger : public ObjectImpl<FileLogger>
+class FileLogger final : public ObjectImpl<FileLogger>
 {
 public:
 	DECLARE_OBJECT(FileLogger);
@@ -39,10 +39,10 @@ public:
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
 
 private:
-	void ReopenLogFile(void);
+	void ReopenLogFile();
 };
 
 }

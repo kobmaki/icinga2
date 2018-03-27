@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,7 @@
 #ifndef EVENTCOMMAND_H
 #define EVENTCOMMAND_H
 
-#include "icinga/eventcommand.thpp"
+#include "icinga/eventcommand-ti.hpp"
 #include "icinga/checkable.hpp"
 
 namespace icinga
@@ -31,15 +31,15 @@ namespace icinga
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API EventCommand : public ObjectImpl<EventCommand>
+class EventCommand final : public ObjectImpl<EventCommand>
 {
 public:
 	DECLARE_OBJECT(EventCommand);
 	DECLARE_OBJECTNAME(EventCommand);
 
 	virtual void Execute(const Checkable::Ptr& checkable,
-	    const Dictionary::Ptr& resolvedMacros = Dictionary::Ptr(),
-	    bool useResolvedMacros = false);
+		const Dictionary::Ptr& resolvedMacros = nullptr,
+		bool useResolvedMacros = false);
 };
 
 }

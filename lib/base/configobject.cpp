@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "base/configobject.hpp"
-#include "base/configobject.tcpp"
+#include "base/configobject-ti.cpp"
 #include "base/configtype.hpp"
 #include "base/serializer.hpp"
 #include "base/netstring.hpp"
@@ -33,11 +33,7 @@
 #include "base/workqueue.hpp"
 #include "base/context.hpp"
 #include "base/application.hpp"
-#include "config/configitem.hpp"
 #include <fstream>
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 #include <boost/exception/errinfo_api_function.hpp>
 #include <boost/exception/errinfo_errno.hpp>
 #include <boost/exception/errinfo_file_name.hpp>
@@ -48,20 +44,12 @@ REGISTER_TYPE_WITH_PROTOTYPE(ConfigObject, ConfigObject::GetPrototype());
 
 boost::signals2::signal<void (const ConfigObject::Ptr&)> ConfigObject::OnStateChanged;
 
-ConfigObject::ConfigObject(void)
-{ }
-
-ConfigType::Ptr ConfigObject::GetType(void) const
-{
-	return ConfigType::GetByName(GetReflectionType()->GetName());
-}
-
-bool ConfigObject::IsActive(void) const
+bool ConfigObject::IsActive() const
 {
 	return GetActive();
 }
 
-bool ConfigObject::IsPaused(void) const
+bool ConfigObject::IsPaused() const
 {
 	return GetPaused();
 }
@@ -98,12 +86,13 @@ void ConfigObject::ClearExtension(const String& key)
 	extensions->Remove(key);
 }
 
-class ModAttrValidationUtils : public ValidationUtils
+class ModAttrValidationUtils final : public ValidationUtils
 {
 public:
-	virtual bool ValidateName(const String& type, const String& name) const override
+	bool ValidateName(const String& type, const String& name) const override
 	{
-		ConfigType::Ptr dtype = ConfigType::GetByName(type);
+		Type::Ptr ptype = Type::GetByName(type);
+		auto *dtype = dynamic_cast<ConfigType *>(ptype.get());
 
 		if (!dtype)
 			return false;
@@ -122,8 +111,7 @@ void ConfigObject::ModifyAttribute(const String& attr, const Value& value, bool 
 
 	Type::Ptr type = GetReflectionType();
 
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, attr, boost::is_any_of("."));
+	std::vector<String> tokens = attr.Split(".");
 
 	String fieldName = tokens[0];
 
@@ -163,11 +151,9 @@ void ConfigObject::ModifyAttribute(const String& attr, const Value& value, bool 
 			const String& key = tokens[i];
 			prefix += "." + key;
 
-			if (!dict->Contains(key)) {
+			if (!dict->Get(key, &current)) {
 				current = new Dictionary();
 				dict->Set(key, current);
-			} else {
-				current = dict->Get(key);
 			}
 		}
 
@@ -188,7 +174,7 @@ void ConfigObject::ModifyAttribute(const String& attr, const Value& value, bool 
 			if (oldValue.IsObjectType<Dictionary>()) {
 				Dictionary::Ptr oldDict = oldValue;
 				ObjectLock olock(oldDict);
-				BOOST_FOREACH(const Dictionary::Pair& kv, oldDict) {
+				for (const auto& kv : oldDict) {
 					String key = prefix + "." + kv.first;
 					if (!original_attributes->Contains(key))
 						original_attributes->Set(key, kv.second);
@@ -198,7 +184,7 @@ void ConfigObject::ModifyAttribute(const String& attr, const Value& value, bool 
 				if (value.IsObjectType<Dictionary>()) {
 					Dictionary::Ptr valueDict = value;
 					ObjectLock olock(valueDict);
-					BOOST_FOREACH(const Dictionary::Pair& kv, valueDict) {
+					for (const auto& kv : valueDict) {
 						String key = attr + "." + kv.first;
 						if (!original_attributes->Contains(key))
 							original_attributes->Set(key, Empty);
@@ -221,7 +207,7 @@ void ConfigObject::ModifyAttribute(const String& attr, const Value& value, bool 
 	}
 
 	ModAttrValidationUtils utils;
-	ValidateField(fid, newValue, utils);
+	ValidateField(fid, Lazy<Value>{newValue}, utils);
 
 	SetField(fid, newValue);
 
@@ -236,8 +222,7 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 {
 	Type::Ptr type = GetReflectionType();
 
-	std::vector<String> tokens;
-	boost::algorithm::split(tokens, attr, boost::is_any_of("."));
+	std::vector<String> tokens = attr.Split(".");
 
 	String fieldName = tokens[0];
 
@@ -289,9 +274,8 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 
 		{
 			ObjectLock olock(original_attributes);
-			BOOST_FOREACH(const Dictionary::Pair& kv, original_attributes) {
-				std::vector<String> originalTokens;
-				boost::algorithm::split(originalTokens, kv.first, boost::is_any_of("."));
+			for (const auto& kv : original_attributes) {
+				std::vector<String> originalTokens = String(kv.first).Split(".");
 
 				if (tokens.size() > originalTokens.size())
 					continue;
@@ -332,7 +316,7 @@ void ConfigObject::RestoreAttribute(const String& attr, bool updateVersion)
 			}
 		}
 
-		BOOST_FOREACH(const String& attr, restoredAttrs)
+		for (const String& attr : restoredAttrs)
 			original_attributes->Remove(attr);
 
 
@@ -357,20 +341,20 @@ bool ConfigObject::IsAttributeModified(const String& attr) const
 	return original_attributes->Contains(attr);
 }
 
-void ConfigObject::Register(void)
+void ConfigObject::Register()
 {
 	ASSERT(!OwnsLock());
 
-	ConfigType::Ptr dtype = GetType();
-	dtype->RegisterObject(this);
+	TypeImpl<ConfigObject>::Ptr type = static_pointer_cast<TypeImpl<ConfigObject> >(GetReflectionType());
+	type->RegisterObject(this);
 }
 
-void ConfigObject::Unregister(void)
+void ConfigObject::Unregister()
 {
 	ASSERT(!OwnsLock());
 
-	ConfigType::Ptr dtype = GetType();
-	dtype->UnregisterObject(this);
+	TypeImpl<ConfigObject>::Ptr type = static_pointer_cast<TypeImpl<ConfigObject> >(GetReflectionType());
+	type->UnregisterObject(this);
 }
 
 void ConfigObject::Start(bool runtimeCreated)
@@ -382,9 +366,17 @@ void ConfigObject::Start(bool runtimeCreated)
 	SetStartCalled(true);
 }
 
+void ConfigObject::PreActivate()
+{
+	CONTEXT("Setting 'active' to true for object '" + GetName() + "' of type '" + GetReflectionType()->GetName() + "'");
+
+	ASSERT(!IsActive());
+	SetActive(true, true);
+}
+
 void ConfigObject::Activate(bool runtimeCreated)
 {
-	CONTEXT("Activating object '" + GetName() + "' of type '" + GetType()->GetName() + "'");
+	CONTEXT("Activating object '" + GetName() + "' of type '" + GetReflectionType()->GetName() + "'");
 
 	{
 		ObjectLock olock(this);
@@ -392,8 +384,6 @@ void ConfigObject::Activate(bool runtimeCreated)
 		Start(runtimeCreated);
 
 		ASSERT(GetStartCalled());
-		ASSERT(!IsActive());
-		SetActive(true, true);
 
 		if (GetHAMode() == HARunEverywhere)
 			SetAuthority(true);
@@ -413,7 +403,7 @@ void ConfigObject::Stop(bool runtimeRemoved)
 
 void ConfigObject::Deactivate(bool runtimeRemoved)
 {
-	CONTEXT("Deactivating object '" + GetName() + "' of type '" + GetType()->GetName() + "'");
+	CONTEXT("Deactivating object '" + GetName() + "' of type '" + GetReflectionType()->GetName() + "'");
 
 	{
 		ObjectLock olock(this);
@@ -433,14 +423,24 @@ void ConfigObject::Deactivate(bool runtimeRemoved)
 	NotifyActive();
 }
 
-void ConfigObject::OnConfigLoaded(void)
+void ConfigObject::OnConfigLoaded()
 {
 	/* Nothing to do here. */
 }
 
-void ConfigObject::OnAllConfigLoaded(void)
+void ConfigObject::OnAllConfigLoaded()
 {
-	m_Zone = GetObject("Zone", GetZoneName());
+	static ConfigType *ctype;
+
+	if (!ctype) {
+		Type::Ptr type = Type::GetByName("Zone");
+		ctype = dynamic_cast<ConfigType *>(type.get());
+	}
+
+	String zoneName = GetZoneName();
+
+	if (!zoneName.IsEmpty())
+		m_Zone = ctype->GetObject(zoneName);
 }
 
 void ConfigObject::CreateChildObjects(const Type::Ptr& childType)
@@ -448,17 +448,17 @@ void ConfigObject::CreateChildObjects(const Type::Ptr& childType)
 	/* Nothing to do here. */
 }
 
-void ConfigObject::OnStateLoaded(void)
+void ConfigObject::OnStateLoaded()
 {
 	/* Nothing to do here. */
 }
 
-void ConfigObject::Pause(void)
+void ConfigObject::Pause()
 {
 	SetPauseCalled(true);
 }
 
-void ConfigObject::Resume(void)
+void ConfigObject::Resume()
 {
 	SetResumeCalled(true);
 }
@@ -483,29 +483,34 @@ void ConfigObject::SetAuthority(bool authority)
 void ConfigObject::DumpObjects(const String& filename, int attributeTypes)
 {
 	Log(LogInformation, "ConfigObject")
-	    << "Dumping program state to file '" << filename << "'";
+		<< "Dumping program state to file '" << filename << "'";
 
 	std::fstream fp;
 	String tempFilename = Utility::CreateTempFile(filename + ".XXXXXX", 0600, fp);
+	fp.exceptions(std::ofstream::failbit | std::ofstream::badbit);
 
 	if (!fp)
 		BOOST_THROW_EXCEPTION(std::runtime_error("Could not open '" + tempFilename + "' file"));
 
 	StdioStream::Ptr sfp = new StdioStream(&fp, false);
 
-	BOOST_FOREACH(const ConfigType::Ptr& type, ConfigType::GetTypes()) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, type->GetObjects()) {
-			Dictionary::Ptr persistentObject = new Dictionary();
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		auto *dtype = dynamic_cast<ConfigType *>(type.get());
 
-			persistentObject->Set("type", type->GetName());
-			persistentObject->Set("name", object->GetName());
+		if (!dtype)
+			continue;
 
+		for (const ConfigObject::Ptr& object : dtype->GetObjects()) {
 			Dictionary::Ptr update = Serialize(object, attributeTypes);
 
 			if (!update)
 				continue;
 
-			persistentObject->Set("update", update);
+			Dictionary::Ptr persistentObject = new Dictionary({
+				{ "type", type->GetName() },
+				{ "name", object->GetName() },
+				{ "update", update }
+			});
 
 			String json = JsonEncode(persistentObject);
 
@@ -523,9 +528,9 @@ void ConfigObject::DumpObjects(const String& filename, int attributeTypes)
 
 	if (rename(tempFilename.CStr(), filename.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rename")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(tempFilename));
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(tempFilename));
 	}
 }
 
@@ -534,23 +539,16 @@ void ConfigObject::RestoreObject(const String& message, int attributeTypes)
 	Dictionary::Ptr persistentObject = JsonDecode(message);
 
 	String type = persistentObject->Get("type");
-
-	ConfigType::Ptr dt = ConfigType::GetByName(type);
-
-	if (!dt)
-		return;
-
 	String name = persistentObject->Get("name");
 
-	ConfigObject::Ptr object = dt->GetObject(name);
+	ConfigObject::Ptr object = GetObject(type, name);
 
 	if (!object)
 		return;
 
-	ASSERT(!object->IsActive());
 #ifdef I2_DEBUG
 	Log(LogDebug, "ConfigObject")
-	    << "Restoring object '" << name << "' of type '" << type << "'.";
+		<< "Restoring object '" << name << "' of type '" << type << "'.";
 #endif /* I2_DEBUG */
 	Dictionary::Ptr update = persistentObject->Get("update");
 	Deserialize(object, update, false, attributeTypes);
@@ -564,7 +562,7 @@ void ConfigObject::RestoreObjects(const String& filename, int attributeTypes)
 		return;
 
 	Log(LogInformation, "ConfigObject")
-	    << "Restoring program state from file '" << filename << "'";
+		<< "Restoring program state from file '" << filename << "'";
 
 	std::fstream fp;
 	fp.open(filename.CStr(), std::ios_base::in);
@@ -587,7 +585,7 @@ void ConfigObject::RestoreObjects(const String& filename, int attributeTypes)
 		if (srs != StatusNewItem)
 			continue;
 
-		upq.Enqueue(boost::bind(&ConfigObject::RestoreObject, message, attributeTypes));
+		upq.Enqueue(std::bind(&ConfigObject::RestoreObject, message, attributeTypes));
 		restored++;
 	}
 
@@ -597,8 +595,13 @@ void ConfigObject::RestoreObjects(const String& filename, int attributeTypes)
 
 	unsigned long no_state = 0;
 
-	BOOST_FOREACH(const ConfigType::Ptr& type, ConfigType::GetTypes()) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, type->GetObjects()) {
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		auto *dtype = dynamic_cast<ConfigType *>(type.get());
+
+		if (!dtype)
+			continue;
+
+		for (const ConfigObject::Ptr& object : dtype->GetObjects()) {
 			if (!object->GetStateLoaded()) {
 				object->OnStateLoaded();
 				object->SetStateLoaded(true);
@@ -609,35 +612,44 @@ void ConfigObject::RestoreObjects(const String& filename, int attributeTypes)
 	}
 
 	Log(LogInformation, "ConfigObject")
-	    << "Restored " << restored << " objects. Loaded " << no_state << " new objects without state.";
+		<< "Restored " << restored << " objects. Loaded " << no_state << " new objects without state.";
 }
 
-void ConfigObject::StopObjects(void)
+void ConfigObject::StopObjects()
 {
-	BOOST_FOREACH(const ConfigType::Ptr& dt, ConfigType::GetTypes()) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, dt->GetObjects()) {
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		auto *dtype = dynamic_cast<ConfigType *>(type.get());
+
+		if (!dtype)
+			continue;
+
+		for (const ConfigObject::Ptr& object : dtype->GetObjects()) {
 			object->Deactivate();
 		}
 	}
 }
 
-void ConfigObject::DumpModifiedAttributes(const boost::function<void(const ConfigObject::Ptr&, const String&, const Value&)>& callback)
+void ConfigObject::DumpModifiedAttributes(const std::function<void(const ConfigObject::Ptr&, const String&, const Value&)>& callback)
 {
-	BOOST_FOREACH(const ConfigType::Ptr& dt, ConfigType::GetTypes()) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, dt->GetObjects()) {
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		auto *dtype = dynamic_cast<ConfigType *>(type.get());
+
+		if (!dtype)
+			continue;
+
+		for (const ConfigObject::Ptr& object : dtype->GetObjects()) {
 			Dictionary::Ptr originalAttributes = object->GetOriginalAttributes();
 
 			if (!originalAttributes)
 				continue;
 
 			ObjectLock olock(originalAttributes);
-			BOOST_FOREACH(const Dictionary::Pair& kv, originalAttributes) {
+			for (const Dictionary::Pair& kv : originalAttributes) {
 				String key = kv.first;
 
 				Type::Ptr type = object->GetReflectionType();
 
-				std::vector<String> tokens;
-				boost::algorithm::split(tokens, key, boost::is_any_of("."));
+				std::vector<String> tokens = key.Split(".");
 
 				String fieldName = tokens[0];
 				int fid = type->GetFieldId(fieldName);
@@ -680,13 +692,32 @@ void ConfigObject::DumpModifiedAttributes(const boost::function<void(const Confi
 
 ConfigObject::Ptr ConfigObject::GetObject(const String& type, const String& name)
 {
-	ConfigType::Ptr dtype = ConfigType::GetByName(type);
-	if (!dtype)
-		return ConfigObject::Ptr();
-	return dtype->GetObject(name);
+	Type::Ptr ptype = Type::GetByName(type);
+	auto *ctype = dynamic_cast<ConfigType *>(ptype.get());
+
+	if (!ctype)
+		return nullptr;
+
+	return ctype->GetObject(name);
 }
 
-ConfigObject::Ptr ConfigObject::GetZone(void) const
+ConfigObject::Ptr ConfigObject::GetZone() const
 {
 	return m_Zone;
 }
+
+Dictionary::Ptr ConfigObject::GetSourceLocation() const
+{
+	DebugInfo di = GetDebugInfo();
+
+	return new Dictionary({
+		{ "path", di.Path },
+		{ "first_line", di.FirstLine },
+		{ "first_column", di.FirstColumn },
+		{ "last_line", di.LastLine },
+		{ "last_column", di.LastColumn }
+	});
+}
+
+NameComposer::~NameComposer()
+{ }

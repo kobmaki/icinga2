@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -36,13 +36,13 @@ struct ProcessResult;
  *
  * @ingroup icinga
  */
-class I2_ICINGA_API PluginUtility
+class PluginUtility
 {
 public:
 	static void ExecuteCommand(const Command::Ptr& commandObj, const Checkable::Ptr& checkable,
-	    const CheckResult::Ptr& cr, const MacroProcessor::ResolverList& macroResolvers,
-	    const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros,
-	    const boost::function<void(const Value& commandLine, const ProcessResult&)>& callback = boost::function<void(const Value& commandLine, const ProcessResult&)>());
+		const CheckResult::Ptr& cr, const MacroProcessor::ResolverList& macroResolvers,
+		const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros,
+		const std::function<void(const Value& commandLine, const ProcessResult&)>& callback = std::function<void(const Value& commandLine, const ProcessResult&)>());
 
 	static ServiceState ExitStatusToState(int exitStatus);
 	static std::pair<String, String> ParseCheckOutput(const String& output);
@@ -51,7 +51,7 @@ public:
 	static String FormatPerfdata(const Array::Ptr& perfdata);
 
 private:
-	PluginUtility(void);
+	PluginUtility();
 };
 
 }

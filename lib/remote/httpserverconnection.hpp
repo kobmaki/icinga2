@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,9 +21,9 @@
 #define HTTPSERVERCONNECTION_H
 
 #include "remote/httprequest.hpp"
+#include "remote/httpresponse.hpp"
 #include "remote/apiuser.hpp"
 #include "base/tlsstream.hpp"
-#include "base/timer.hpp"
 #include "base/workqueue.hpp"
 
 namespace icinga
@@ -34,23 +34,24 @@ namespace icinga
  *
  * @ingroup remote
  */
-class I2_REMOTE_API HttpServerConnection : public Object
+class HttpServerConnection final : public Object
 {
 public:
 	DECLARE_PTR_TYPEDEFS(HttpServerConnection);
 
 	HttpServerConnection(const String& identity, bool authenticated, const TlsStream::Ptr& stream);
 
-	void Start(void);
+	void Start();
 
-	ApiUser::Ptr GetApiUser(void) const;
-	bool IsAuthenticated(void) const;
-	TlsStream::Ptr GetStream(void) const;
+	ApiUser::Ptr GetApiUser() const;
+	bool IsAuthenticated() const;
+	TlsStream::Ptr GetStream() const;
 
-	void Disconnect(void);
+	void Disconnect();
 
 private:
 	ApiUser::Ptr m_ApiUser;
+	ApiUser::Ptr m_AuthenticatedUser;
 	TlsStream::Ptr m_Stream;
 	double m_Seen;
 	HttpRequest m_CurrentRequest;
@@ -60,14 +61,16 @@ private:
 
 	StreamReadContext m_Context;
 
-	bool ProcessMessage(void);
-	void DataAvailableHandler(void);
+	bool ProcessMessage();
+	void DataAvailableHandler();
 
-	static void StaticInitialize(void);
-	static void TimeoutTimerHandler(void);
-	void CheckLiveness(void);
+	static void StaticInitialize();
+	static void TimeoutTimerHandler();
+	void CheckLiveness();
 
-	void ProcessMessageAsync(HttpRequest& request);
+	bool ManageHeaders(HttpResponse& response);
+
+	void ProcessMessageAsync(HttpRequest& request, HttpResponse& response, const ApiUser::Ptr&);
 };
 
 }

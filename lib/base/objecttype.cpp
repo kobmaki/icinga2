@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,33 +19,28 @@
 
 #include "base/objecttype.hpp"
 #include "base/initialize.hpp"
+#include <boost/throw_exception.hpp>
 
 using namespace icinga;
 
-static void RegisterObjectType(void)
-{
+INITIALIZE_ONCE_WITH_PRIORITY([]() {
 	Type::Ptr type = new ObjectType();
 	type->SetPrototype(Object::GetPrototype());
 	Type::Register(type);
 	Object::TypeInstance = type;
-}
+}, 20);
 
-INITIALIZE_ONCE(&RegisterObjectType);
-
-ObjectType::ObjectType(void)
-{ }
-
-String ObjectType::GetName(void) const
+String ObjectType::GetName() const
 {
 	return "Object";
 }
 
-Type::Ptr ObjectType::GetBaseType(void) const
+Type::Ptr ObjectType::GetBaseType() const
 {
-	return Type::Ptr();
+	return nullptr;
 }
 
-int ObjectType::GetAttributes(void) const
+int ObjectType::GetAttributes() const
 {
 	return 0;
 }
@@ -61,17 +56,17 @@ int ObjectType::GetFieldId(const String& name) const
 Field ObjectType::GetFieldInfo(int id) const
 {
 	if (id == 0)
-		return Field(1, "String", "type", NULL, NULL, 0, 0);
+		return {1, "String", "type", nullptr, nullptr, 0, 0};
 	else
 		BOOST_THROW_EXCEPTION(std::runtime_error("Invalid field ID."));
 }
 
-int ObjectType::GetFieldCount(void) const
+int ObjectType::GetFieldCount() const
 {
 	return 1;
 }
 
-ObjectFactory ObjectType::GetFactory(void) const
+ObjectFactory ObjectType::GetFactory() const
 {
 	return DefaultObjectFactory<Object>;
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -49,10 +49,12 @@ enum HttpRequestState
  *
  * @ingroup remote
  */
-struct I2_REMOTE_API HttpRequest
+struct HttpRequest
 {
 public:
-	bool Complete;
+	bool CompleteHeaders;
+	bool CompleteHeaderCheck;
+	bool CompleteBody;
 
 	String RequestMethod;
 	Url::Ptr RequestUrl;
@@ -60,22 +62,23 @@ public:
 
 	Dictionary::Ptr Headers;
 
-	HttpRequest(const Stream::Ptr& stream);
+	HttpRequest(Stream::Ptr stream);
 
-	bool Parse(StreamReadContext& src, bool may_wait);
+	bool ParseHeaders(StreamReadContext& src, bool may_wait);
+	bool ParseBody(StreamReadContext& src, bool may_wait);
 	size_t ReadBody(char *data, size_t count);
 
 	void AddHeader(const String& key, const String& value);
 	void WriteBody(const char *data, size_t count);
-	void Finish(void);
+	void Finish();
 
 private:
 	Stream::Ptr m_Stream;
-	boost::shared_ptr<ChunkReadContext> m_ChunkContext;
+	std::shared_ptr<ChunkReadContext> m_ChunkContext;
 	HttpRequestState m_State;
 	FIFO::Ptr m_Body;
 
-	void FinishHeaders(void);
+	void FinishHeaders();
 };
 
 }

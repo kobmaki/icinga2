@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -26,6 +26,8 @@ namespace icinga
 
 class Endpoint : ConfigObject
 {
+	load_after Zone;
+
 	[config] String host;
 	[config, required] String port {
 		default {{{ return "5665"; }}}
@@ -41,6 +43,25 @@ class Endpoint : ConfigObject
 	[no_user_modify] bool syncing;
 
 	[no_user_modify, no_storage] bool connected {
+		get;
+	};
+
+	Timestamp last_message_sent;
+	Timestamp last_message_received;
+
+	[no_user_modify, no_storage] double messages_sent_per_second {
+		get;
+	};
+
+	[no_user_modify, no_storage] double messages_received_per_second {
+		get;
+	};
+
+	[no_user_modify, no_storage] double bytes_sent_per_second {
+		get;
+	};
+
+	[no_user_modify, no_storage] double bytes_received_per_second {
 		get;
 	};
 };

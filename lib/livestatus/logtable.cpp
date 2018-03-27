@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -36,11 +36,8 @@
 #include "base/logger.hpp"
 #include "base/application.hpp"
 #include "base/objectlock.hpp"
-#include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <fstream>
@@ -58,7 +55,7 @@ LogTable::LogTable(const String& compat_log_path, time_t from, time_t until)
 }
 
 void LogTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "time", Column(&LogTable::TimeAccessor, objectAccessor));
 	table->AddColumn(prefix + "lineno", Column(&LogTable::LinenoAccessor, objectAccessor));
@@ -76,18 +73,18 @@ void LogTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "contact_name", Column(&LogTable::ContactNameAccessor, objectAccessor));
 	table->AddColumn(prefix + "command_name", Column(&LogTable::CommandNameAccessor, objectAccessor));
 
-	HostsTable::AddColumns(table, "current_host_", boost::bind(&LogTable::HostAccessor, _1, objectAccessor));
-	ServicesTable::AddColumns(table, "current_service_", boost::bind(&LogTable::ServiceAccessor, _1, objectAccessor));
-	ContactsTable::AddColumns(table, "current_contact_", boost::bind(&LogTable::ContactAccessor, _1, objectAccessor));
-	CommandsTable::AddColumns(table, "current_command_", boost::bind(&LogTable::CommandAccessor, _1, objectAccessor));
+	HostsTable::AddColumns(table, "current_host_", std::bind(&LogTable::HostAccessor, _1, objectAccessor));
+	ServicesTable::AddColumns(table, "current_service_", std::bind(&LogTable::ServiceAccessor, _1, objectAccessor));
+	ContactsTable::AddColumns(table, "current_contact_", std::bind(&LogTable::ContactAccessor, _1, objectAccessor));
+	CommandsTable::AddColumns(table, "current_command_", std::bind(&LogTable::CommandAccessor, _1, objectAccessor));
 }
 
-String LogTable::GetName(void) const
+String LogTable::GetName() const
 {
 	return "log";
 }
 
-String LogTable::GetPrefix(void) const
+String LogTable::GetPrefix() const
 {
 	return "log";
 }
@@ -95,7 +92,7 @@ String LogTable::GetPrefix(void) const
 void LogTable::FetchRows(const AddRowFunction& addRowFn)
 {
 	Log(LogDebug, "LogTable")
-	    << "Pre-selecting log file from " << m_TimeFrom << " until " << m_TimeUntil;
+		<< "Pre-selecting log file from " << m_TimeFrom << " until " << m_TimeUntil;
 
 	/* create log file index */
 	LivestatusLogUtility::CreateLogIndex(m_CompatLogPath, m_LogFileIndex);
@@ -118,7 +115,7 @@ Object::Ptr LogTable::HostAccessor(const Value& row, const Column::ObjectAccesso
 	String host_name = static_cast<Dictionary::Ptr>(row)->Get("host_name");
 
 	if (host_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	return Host::GetByName(host_name);
 }
@@ -129,7 +126,7 @@ Object::Ptr LogTable::ServiceAccessor(const Value& row, const Column::ObjectAcce
 	String service_description = static_cast<Dictionary::Ptr>(row)->Get("service_description");
 
 	if (service_description.IsEmpty() || host_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	return Service::GetByNamePair(host_name, service_description);
 }
@@ -139,7 +136,7 @@ Object::Ptr LogTable::ContactAccessor(const Value& row, const Column::ObjectAcce
 	String contact_name = static_cast<Dictionary::Ptr>(row)->Get("contact_name");
 
 	if (contact_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	return User::GetByName(contact_name);
 }
@@ -149,7 +146,7 @@ Object::Ptr LogTable::CommandAccessor(const Value& row, const Column::ObjectAcce
 	String command_name = static_cast<Dictionary::Ptr>(row)->Get("command_name");
 
 	if (command_name.IsEmpty())
-		return Object::Ptr();
+		return nullptr;
 
 	CheckCommand::Ptr check_command = CheckCommand::GetByName(command_name);
 	if (!check_command) {
@@ -157,7 +154,7 @@ Object::Ptr LogTable::CommandAccessor(const Value& row, const Column::ObjectAcce
 		if (!event_command) {
 			NotificationCommand::Ptr notification_command = NotificationCommand::GetByName(command_name);
 			if (!notification_command)
-				return Object::Ptr();
+				return nullptr;
 			else
 				return notification_command;
 		} else

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,52 +20,55 @@
 #ifndef IDOPGSQLCONNECTION_H
 #define IDOPGSQLCONNECTION_H
 
-#include "db_ido_pgsql/idopgsqlconnection.thpp"
+#include "db_ido_pgsql/idopgsqlconnection-ti.hpp"
+#include "pgsql_shim/pgsqlinterface.hpp"
 #include "base/array.hpp"
 #include "base/timer.hpp"
 #include "base/workqueue.hpp"
-#include <libpq-fe.h>
+#include "base/library.hpp"
 
 namespace icinga
 {
 
-typedef boost::shared_ptr<PGresult> IdoPgsqlResult;
+typedef std::shared_ptr<PGresult> IdoPgsqlResult;
 
 /**
  * An IDO pgSQL database connection.
  *
  * @ingroup ido
  */
-class IdoPgsqlConnection : public ObjectImpl<IdoPgsqlConnection>
+class IdoPgsqlConnection final : public ObjectImpl<IdoPgsqlConnection>
 {
 public:
 	DECLARE_OBJECT(IdoPgsqlConnection);
 	DECLARE_OBJECTNAME(IdoPgsqlConnection);
 
-	IdoPgsqlConnection(void);
+	IdoPgsqlConnection();
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
-	virtual int GetPendingQueryCount(void) const override;
+	int GetPendingQueryCount() const override;
 
 protected:
-	virtual void OnConfigLoaded(void) override;
-	virtual void Resume(void) override;
-	virtual void Pause(void) override;
+	void OnConfigLoaded() override;
+	void Resume() override;
+	void Pause() override;
 
-	virtual void ActivateObject(const DbObject::Ptr& dbobj) override;
-	virtual void DeactivateObject(const DbObject::Ptr& dbobj) override;
-	virtual void ExecuteQuery(const DbQuery& query) override;
-	virtual void ExecuteMultipleQueries(const std::vector<DbQuery>& queries);
-	virtual void CleanUpExecuteQuery(const String& table, const String& time_key, double time_value) override;
-	virtual void FillIDCache(const DbType::Ptr& type) override;
-	virtual void NewTransaction(void) override;
+	void ActivateObject(const DbObject::Ptr& dbobj) override;
+	void DeactivateObject(const DbObject::Ptr& dbobj) override;
+	void ExecuteQuery(const DbQuery& query) override;
+	void ExecuteMultipleQueries(const std::vector<DbQuery>& queries) override;
+	void CleanUpExecuteQuery(const String& table, const String& time_key, double time_value) override;
+	void FillIDCache(const DbType::Ptr& type) override;
+	void NewTransaction() override;
 
 private:
 	DbReference m_InstanceID;
-	int m_SessionToken;
 
-	WorkQueue m_QueryQueue;
+	WorkQueue m_QueryQueue{1000000};
+
+	Library m_Library;
+	std::unique_ptr<PgsqlInterface, PgsqlInterfaceDeleter> m_Pgsql;
 
 	PGconn *m_Connection;
 	int m_AffectedRows;
@@ -75,7 +78,7 @@ private:
 
 	IdoPgsqlResult Query(const String& query);
 	DbReference GetSequenceValue(const String& table, const String& column);
-	int GetAffectedRows(void);
+	int GetAffectedRows();
 	String Escape(const String& s);
 	Dictionary::Ptr FetchRow(const IdoPgsqlResult& result, int row);
 
@@ -83,25 +86,25 @@ private:
 	void InternalActivateObject(const DbObject::Ptr& dbobj);
 	void InternalDeactivateObject(const DbObject::Ptr& dbobj);
 
-	void Disconnect(void);
-	void InternalNewTransaction(void);
-	void Reconnect(void);
+	void Disconnect();
+	void InternalNewTransaction();
+	void Reconnect();
 
-	void AssertOnWorkQueue(void);
+	void AssertOnWorkQueue();
 
-	void TxTimerHandler(void);
-	void ReconnectTimerHandler(void);
+	void TxTimerHandler();
+	void ReconnectTimerHandler();
 
-	void StatsLoggerTimerHandler(void);
+	void StatsLoggerTimerHandler();
 
 	bool CanExecuteQuery(const DbQuery& query);
 
-	void InternalExecuteQuery(const DbQuery& query, DbQueryType *typeOverride = NULL);
+	void InternalExecuteQuery(const DbQuery& query, int typeOverride = -1);
 	void InternalExecuteMultipleQueries(const std::vector<DbQuery>& queries);
 	void InternalCleanUpExecuteQuery(const String& table, const String& time_key, double time_value);
 
-	virtual void ClearConfigTable(const String& table) override;
-	void ClearCustomVarTable(const String& table);
+	void ClearTableBySession(const String& table);
+	void ClearTablesBySession();
 
 	void ExceptionHandler(boost::exception_ptr exp);
 

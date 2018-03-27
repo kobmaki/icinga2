@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,19 +18,19 @@
  ******************************************************************************/
 
 #include "cli/pkinewcacommand.hpp"
-#include "cli/pkiutility.hpp"
+#include "remote/pkiutility.hpp"
 #include "base/logger.hpp"
 
 using namespace icinga;
 
 REGISTER_CLICOMMAND("pki/new-ca", PKINewCACommand);
 
-String PKINewCACommand::GetDescription(void) const
+String PKINewCACommand::GetDescription() const
 {
 	return "Sets up a new Certificate Authority.";
 }
 
-String PKINewCACommand::GetShortDescription(void) const
+String PKINewCACommand::GetShortDescription() const
 {
 	return "sets up a new CA";
 }

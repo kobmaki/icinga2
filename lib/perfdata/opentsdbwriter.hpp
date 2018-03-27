@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,7 @@
 #ifndef OPENTSDBWRITER_H
 #define OPENTSDBWRITER_H
 
-#include "perfdata/opentsdbwriter.thpp"
+#include "perfdata/opentsdbwriter-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/tcpsocket.hpp"
@@ -35,7 +35,7 @@ namespace icinga
  *
  * @ingroup perfdata
  */
-class OpenTsdbWriter : public ObjectImpl<OpenTsdbWriter>
+class OpenTsdbWriter final : public ObjectImpl<OpenTsdbWriter>
 {
 public:
 	DECLARE_OBJECT(OpenTsdbWriter);
@@ -44,7 +44,8 @@ public:
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
 
 protected:
-	virtual void Start(bool runtimeCreated) override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 private:
 	Stream::Ptr m_Stream;
@@ -57,7 +58,7 @@ private:
 	static String EscapeTag(const String& str);
 	static String EscapeMetric(const String& str);
 
-	void ReconnectTimerHandler(void);
+	void ReconnectTimerHandler();
 };
 
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,14 +22,13 @@
 #include "base/array.hpp"
 #include "base/objectlock.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 using namespace icinga;
 
-AttributeFilter::AttributeFilter(const String& column, const String& op, const String& operand)
-	: m_Column(column), m_Operator(op), m_Operand(operand)
+AttributeFilter::AttributeFilter(String column, String op, String operand)
+	: m_Column(std::move(column)), m_Operator(std::move(op)), m_Operand(std::move(operand))
 { }
 
 bool AttributeFilter::Apply(const Table::Ptr& table, const Value& row)
@@ -45,7 +44,7 @@ bool AttributeFilter::Apply(const Table::Ptr& table, const Value& row)
 			bool negate = (m_Operator == "<");
 
 			ObjectLock olock(array);
-			BOOST_FOREACH(const String& item, array) {
+			for (const String& item : array) {
 				if (item == m_Operand)
 					return !negate; /* Item found in list. */
 			}
@@ -71,7 +70,7 @@ bool AttributeFilter::Apply(const Table::Ptr& table, const Value& row)
 				ret = boost::regex_search(operand.GetData(), what, expr);
 			} catch (boost::exception&) {
 				Log(LogWarning, "AttributeFilter")
-				    << "Regex '" << m_Operand << " " << m_Operator << " " << value << "' error.";
+					<< "Regex '" << m_Operand << " " << m_Operator << " " << value << "' error.";
 				ret = false;
 			}
 
@@ -87,7 +86,7 @@ bool AttributeFilter::Apply(const Table::Ptr& table, const Value& row)
 				ret = boost::iequals(operand, m_Operand.GetData());
 			} catch (boost::exception&) {
 				Log(LogWarning, "AttributeFilter")
-				    << "Case-insensitive equality '" << m_Operand << " " << m_Operator << " " << value << "' error.";
+					<< "Case-insensitive equality '" << m_Operand << " " << m_Operator << " " << value << "' error.";
 				ret = false;
 			}
 
@@ -101,7 +100,7 @@ bool AttributeFilter::Apply(const Table::Ptr& table, const Value& row)
 				ret = boost::regex_search(operand.GetData(), what, expr);
 			} catch (boost::exception&) {
 				Log(LogWarning, "AttributeFilter")
-				    << "Regex '" << m_Operand << " " << m_Operator << " " << value << "' error.";
+					<< "Regex '" << m_Operand << " " << m_Operator << " " << value << "' error.";
 				ret = false;
 			}
 

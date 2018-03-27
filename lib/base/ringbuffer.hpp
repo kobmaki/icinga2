@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,6 +22,7 @@
 
 #include "base/i2-base.hpp"
 #include "base/object.hpp"
+#include <boost/thread/mutex.hpp>
 #include <vector>
 
 namespace icinga
@@ -32,7 +33,7 @@ namespace icinga
  *
  * @ingroup base
  */
-class I2_BASE_API RingBuffer : public Object
+class RingBuffer final
 {
 public:
 	DECLARE_PTR_TYPEDEFS(RingBuffer);
@@ -41,13 +42,19 @@ public:
 
 	RingBuffer(SizeType slots);
 
-	SizeType GetLength(void) const;
+	SizeType GetLength() const;
 	void InsertValue(SizeType tv, int num);
-	int GetValues(SizeType span) const;
+	int UpdateAndGetValues(SizeType tv, SizeType span);
+	double CalculateRate(SizeType tv, SizeType span);
 
 private:
+	mutable boost::mutex m_Mutex;
 	std::vector<int> m_Slots;
 	SizeType m_TimeValue;
+	SizeType m_InsertedValues;
+
+	void InsertValueUnlocked(SizeType tv, int num);
+	int UpdateAndGetValuesUnlocked(SizeType tv, SizeType span);
 };
 
 }

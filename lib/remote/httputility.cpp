@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,7 +20,6 @@
 #include "remote/httputility.hpp"
 #include "base/json.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
@@ -38,7 +37,7 @@ Dictionary::Ptr HttpUtility::FetchRequestParameters(HttpRequest& request)
 	if (!body.IsEmpty()) {
 #ifdef I2_DEBUG
 		Log(LogDebug, "HttpUtility")
-		    << "Request body: '" << body << "'";
+			<< "Request body: '" << body << "'";
 #endif /* I2_DEBUG */
 		result = JsonDecode(body);
 	}
@@ -47,18 +46,24 @@ Dictionary::Ptr HttpUtility::FetchRequestParameters(HttpRequest& request)
 		result = new Dictionary();
 
 	typedef std::pair<String, std::vector<String> > kv_pair;
-	BOOST_FOREACH(const kv_pair& kv, request.RequestUrl->GetQuery()) {
+	for (const kv_pair& kv : request.RequestUrl->GetQuery()) {
 		result->Set(kv.first, Array::FromVector(kv.second));
 	}
 
 	return result;
 }
 
-void HttpUtility::SendJsonBody(HttpResponse& response, const Value& val)
+void HttpUtility::SendJsonBody(HttpResponse& response, const Dictionary::Ptr& params, const Value& val)
 {
 	response.AddHeader("Content-Type", "application/json");
 
-	String body = JsonEncode(val);
+	bool prettyPrint = false;
+
+	if (params)
+		prettyPrint = GetLastParameter(params, "pretty");
+
+	String body = JsonEncode(val, prettyPrint);
+
 	response.WriteBody(body.CStr(), body.GetLength());
 }
 
@@ -77,17 +82,20 @@ Value HttpUtility::GetLastParameter(const Dictionary::Ptr& params, const String&
 		return arr->Get(arr->GetLength() - 1);
 }
 
-void HttpUtility::SendJsonError(HttpResponse& response, const int code,
-    const String& info, const String& diagnosticInformation)
+void HttpUtility::SendJsonError(HttpResponse& response, const Dictionary::Ptr& params,
+	int code, const String& info, const String& diagnosticInformation)
 {
 	Dictionary::Ptr result = new Dictionary();
 	response.SetStatus(code, HttpUtility::GetErrorNameByCode(code));
 	result->Set("error", code);
+
 	if (!info.IsEmpty())
 		result->Set("status", info);
+
 	if (!diagnosticInformation.IsEmpty())
 		result->Set("diagnostic information", diagnosticInformation);
-	HttpUtility::SendJsonBody(response, result);
+
+	HttpUtility::SendJsonBody(response, params, result);
 }
 
 String HttpUtility::GetErrorNameByCode(const int code)

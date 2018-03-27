@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,24 +29,24 @@ namespace icinga
 /**
  * @ingroup icinga
  */
-class I2_ICINGA_API ApiEvents
+class ApiEvents
 {
 public:
-	static void StaticInitialize(void);
+	static void StaticInitialize();
 
 	static void CheckResultHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, const MessageOrigin::Ptr& origin);
 	static void StateChangeHandler(const Checkable::Ptr& checkable, const CheckResult::Ptr& cr, StateType type, const MessageOrigin::Ptr& origin);
 
 
 	static void NotificationSentToAllUsersHandler(const Notification::Ptr& notification, const Checkable::Ptr& checkable,
-	    const std::set<User::Ptr>& users, NotificationType type, const CheckResult::Ptr& cr, const String& author,
-	    const String& text, const MessageOrigin::Ptr& origin);
+		const std::set<User::Ptr>& users, NotificationType type, const CheckResult::Ptr& cr, const String& author,
+		const String& text, const MessageOrigin::Ptr& origin);
 
 	static void FlappingChangedHandler(const Checkable::Ptr& checkable, const MessageOrigin::Ptr& origin);
 
 	static void AcknowledgementSetHandler(const Checkable::Ptr& checkable,
-	    const String& author, const String& comment, AcknowledgementType type,
-	    bool notify, double expiry, const MessageOrigin::Ptr& origin);
+		const String& author, const String& comment, AcknowledgementType type,
+		bool notify, bool persistent, double expiry, const MessageOrigin::Ptr& origin);
 	static void AcknowledgementClearedHandler(const Checkable::Ptr& checkable, const MessageOrigin::Ptr& origin);
 
 	static void CommentAddedHandler(const Comment::Ptr& comment);
@@ -54,6 +54,7 @@ public:
 
 	static void DowntimeAddedHandler(const Downtime::Ptr& downtime);
 	static void DowntimeRemovedHandler(const Downtime::Ptr& downtime);
+	static void DowntimeStartedHandler(const Downtime::Ptr& downtime);
 	static void DowntimeTriggeredHandler(const Downtime::Ptr& downtime);
 };
 

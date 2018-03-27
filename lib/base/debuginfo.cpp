@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,10 +23,6 @@
 
 using namespace icinga;
 
-DebugInfo::DebugInfo(void)
-	: FirstLine(0), FirstColumn(0), LastLine(0), LastColumn(0)
-{ }
-
 /**
  * Outputs a DebugInfo struct to a stream.
  *
@@ -37,9 +33,9 @@ DebugInfo::DebugInfo(void)
 std::ostream& icinga::operator<<(std::ostream& out, const DebugInfo& val)
 {
 	out << "in " << val.Path << ": "
-	    << val.FirstLine << ":" << val.FirstColumn
-	    << "-"
-	    << val.LastLine << ":" << val.LastColumn;
+		<< val.FirstLine << ":" << val.FirstColumn
+		<< "-"
+		<< val.LastLine << ":" << val.LastColumn;
 
 	return out;
 }
@@ -62,7 +58,7 @@ void icinga::ShowCodeLocation(std::ostream& out, const DebugInfo& di, bool verbo
 	if (di.Path.IsEmpty())
 		return;
 
-	out << "Location: " << di << "\n";
+	out << "Location: " << di;
 
 	std::ifstream ifs;
 	ifs.open(di.Path.CStr(), std::ifstream::in);
@@ -71,6 +67,9 @@ void icinga::ShowCodeLocation(std::ostream& out, const DebugInfo& di, bool verbo
 	char line[1024];
 
 	while (ifs.good() && lineno <= di.LastLine + EXTRA_LINES) {
+		if (lineno == 0)
+			out << "\n";
+
 		lineno++;
 
 		ifs.getline(line, sizeof(line));

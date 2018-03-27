@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,62 +20,77 @@
 #include "icinga/checkable.hpp"
 #include "icinga/icingaapplication.hpp"
 #include "base/utility.hpp"
-#include <boost/foreach.hpp>
 
 using namespace icinga;
 
-#define FLAPPING_INTERVAL (30 * 60)
-
-double Checkable::GetFlappingCurrent(void) const
+template<typename T>
+struct Bitset
 {
-	if (GetFlappingPositive() + GetFlappingNegative() <= 0)
-		return 0;
+public:
+	Bitset(T value)
+		: m_Data(value)
+	{ }
 
-	return 100 * GetFlappingPositive() / (GetFlappingPositive() + GetFlappingNegative());
-}
+	void Modify(int index, bool bit)
+	{
+		if (bit)
+			m_Data |= 1 << index;
+		else
+			m_Data &= ~(1 << index);
+	}
+
+	bool Get(int index) const
+	{
+		return m_Data & (1 << index);
+	}
+
+	T GetValue() const
+	{
+		return m_Data;
+	}
+
+private:
+	T m_Data{0};
+};
 
 void Checkable::UpdateFlappingStatus(bool stateChange)
 {
-	double ts, now;
-	long positive, negative;
+	Bitset<unsigned long> stateChangeBuf = GetFlappingBuffer();
+	int oldestIndex = GetFlappingIndex();
 
-	now = Utility::GetTime();
+	stateChangeBuf.Modify(oldestIndex, stateChange);
+	oldestIndex = (oldestIndex + 1) % 20;
 
-	ts = GetFlappingLastChange();
-	positive = GetFlappingPositive();
-	negative = GetFlappingNegative();
+	double stateChanges = 0;
 
-	double diff = now - ts;
-
-	if (positive + negative > FLAPPING_INTERVAL) {
-		double pct = (positive + negative - FLAPPING_INTERVAL) / FLAPPING_INTERVAL;
-		positive -= pct * positive;
-		negative -= pct * negative;
+	/* Iterate over our state array and compute a weighted total */
+	for (int i = 0; i < 20; i++) {
+		if (stateChangeBuf.Get((oldestIndex + i) % 20))
+			stateChanges += 0.8 + (0.02 * i);
 	}
 
-	if (stateChange)
-		positive += diff;
+	double flappingValue = 100.0 * stateChanges / 20.0;
+
+	bool flapping;
+
+	if (GetFlapping())
+		flapping = flappingValue > GetFlappingThresholdLow();
 	else
-		negative += diff;
+		flapping = flappingValue > GetFlappingThresholdHigh();
 
-	if (positive < 0)
-		positive = 0;
+	SetFlappingBuffer(stateChangeBuf.GetValue());
+	SetFlappingIndex(oldestIndex);
+	SetFlappingCurrent(flappingValue);
+	SetFlapping(flapping, true);
 
-	if (negative < 0)
-		negative = 0;
-
-//	Log(LogDebug, "Checkable")
-//	    << "Flapping counter for '" << GetName() << "' is positive=" << positive << ", negative=" << negative;
-
-	SetFlappingLastChange(now);
-	SetFlappingPositive(positive);
-	SetFlappingNegative(negative);
+	if (flapping != GetFlapping())
+		SetFlappingLastChange(Utility::GetTime());
 }
 
-bool Checkable::IsFlapping(void) const
+bool Checkable::IsFlapping() const
 {
 	if (!GetEnableFlapping() || !IcingaApplication::GetInstance()->GetEnableFlapping())
 		return false;
 	else
-		return GetFlappingCurrent() > GetFlappingThreshold();
+		return GetFlapping();
 }

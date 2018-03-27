@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,20 +20,12 @@
 #ifndef EXECVPE_H
 #define EXECVPE_H
 
-#include "base/visibility.hpp"
-
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
-#ifdef I2_EXECVPE_BUILD
-#	define I2_EXECVPE_API I2_EXPORT
-#else
-#	define I2_EXECVPE_API I2_IMPORT
-#endif /* I2_EXECVPE_BUILD */
-
 #ifndef _MSC_VER
-I2_EXECVPE_API int icinga2_execvpe(const char *file, char *const argv[], char *const envp[]);
+int icinga2_execvpe(const char *file, char *const argv[], char *const envp[]);
 #endif /* _MSC_VER */
 
 #ifdef __cplusplus

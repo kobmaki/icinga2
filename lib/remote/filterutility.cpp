@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -24,8 +24,7 @@
 #include "base/json.hpp"
 #include "base/configtype.hpp"
 #include "base/logger.hpp"
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 
 using namespace icinga;
 
@@ -34,32 +33,24 @@ Type::Ptr FilterUtility::TypeFromPluralName(const String& pluralName)
 	String uname = pluralName;
 	boost::algorithm::to_lower(uname);
 
-	{
-		Dictionary::Ptr globals = ScriptGlobal::GetGlobals();
-		ObjectLock olock(globals);
-		BOOST_FOREACH(const Dictionary::Pair& kv, globals) {
-			if (!kv.second.IsObjectType<Type>())
-				continue;
+	for (const Type::Ptr& type : Type::GetAllTypes()) {
+		String pname = type->GetPluralName();
+		boost::algorithm::to_lower(pname);
 
-			Type::Ptr type = kv.second;
-
-			String pname = type->GetPluralName();
-			boost::algorithm::to_lower(pname);
-
-			if (uname == pname)
-				return type;
-		}
+		if (uname == pname)
+			return type;
 	}
 
-	return Type::Ptr();
+	return nullptr;
 }
 
-void ConfigObjectTargetProvider::FindTargets(const String& type, const boost::function<void (const Value&)>& addTarget) const
+void ConfigObjectTargetProvider::FindTargets(const String& type, const std::function<void (const Value&)>& addTarget) const
 {
-	ConfigType::Ptr dtype = ConfigType::GetByName(type);
+	Type::Ptr ptype = Type::GetByName(type);
+	auto *ctype = dynamic_cast<ConfigType *>(ptype.get());
 
-	if (dtype) {
-		BOOST_FOREACH(const ConfigObject::Ptr& object, dtype->GetObjects()) {
+	if (ctype) {
+		for (const ConfigObject::Ptr& object : ctype->GetObjects()) {
 			addTarget(object);
 		}
 	}
@@ -91,7 +82,7 @@ String ConfigObjectTargetProvider::GetPluralName(const String& type) const
 }
 
 bool FilterUtility::EvaluateFilter(ScriptFrame& frame, Expression *filter,
-    const Object::Ptr& target, const String& variableName)
+	const Object::Ptr& target, const String& variableName)
 {
 	if (!filter)
 		return true;
@@ -133,16 +124,16 @@ bool FilterUtility::EvaluateFilter(ScriptFrame& frame, Expression *filter,
 }
 
 static void FilteredAddTarget(ScriptFrame& permissionFrame, Expression *permissionFilter,
-    ScriptFrame& frame, Expression *ufilter, std::vector<Value>& result, const String& variableName, const Object::Ptr& target)
+	ScriptFrame& frame, Expression *ufilter, std::vector<Value>& result, const String& variableName, const Object::Ptr& target)
 {
 	if (FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName) && FilterUtility::EvaluateFilter(frame, ufilter, target, variableName))
-		result.push_back(target);
+		result.emplace_back(target);
 }
 
 void FilterUtility::CheckPermission(const ApiUser::Ptr& user, const String& permission, Expression **permissionFilter)
 {
 	if (permissionFilter)
-		*permissionFilter = NULL;
+		*permissionFilter = nullptr;
 
 	if (permission.IsEmpty())
 		return;
@@ -153,7 +144,7 @@ void FilterUtility::CheckPermission(const ApiUser::Ptr& user, const String& perm
 	Array::Ptr permissions = user->GetPermissions();
 	if (permissions) {
 		ObjectLock olock(permissions);
-		BOOST_FOREACH(const Value& item, permissions) {
+		for (const Value& item : permissions) {
 			String permission;
 			Function::Ptr filter;
 			if (item.IsObjectType<Dictionary>()) {
@@ -171,20 +162,25 @@ void FilterUtility::CheckPermission(const ApiUser::Ptr& user, const String& perm
 			foundPermission = true;
 
 			if (filter && permissionFilter) {
-				std::vector<Expression *> args;
-				args.push_back(new GetScopeExpression(ScopeLocal));
-				FunctionCallExpression *fexpr = new FunctionCallExpression(new IndexerExpression(MakeLiteral(filter), MakeLiteral("call")), args);
+				std::vector<std::unique_ptr<Expression> > args;
+				args.emplace_back(new GetScopeExpression(ScopeLocal));
+				std::unique_ptr<Expression> indexer{new IndexerExpression(std::unique_ptr<Expression>(MakeLiteral(filter)), std::unique_ptr<Expression>(MakeLiteral("call")))};
+				FunctionCallExpression *fexpr = new FunctionCallExpression(std::move(indexer), std::move(args));
 
 				if (!*permissionFilter)
 					*permissionFilter = fexpr;
 				else
-					*permissionFilter = new LogicalOrExpression(*permissionFilter, fexpr);
+					*permissionFilter = new LogicalOrExpression(std::unique_ptr<Expression>(*permissionFilter), std::unique_ptr<Expression>(fexpr));
 			}
 		}
 	}
 
-	if (!foundPermission)
+	if (!foundPermission) {
+		Log(LogWarning, "FilterUtility")
+			<< "Missing permission: " << requiredPermission;
+
 		BOOST_THROW_EXCEPTION(ScriptError("Missing permission: " + requiredPermission));
+	}
 }
 
 std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, const Dictionary::Ptr& query, const ApiUser::Ptr& user, const String& variableName)
@@ -201,9 +197,9 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 	Expression *permissionFilter;
 	CheckPermission(user, qd.Permission, &permissionFilter);
 
-	ScriptFrame permissionFrame;
+	ScriptFrame permissionFrame(true);
 
-	BOOST_FOREACH(const String& type, qd.Types) {
+	for (const String& type : qd.Types) {
 		String attr = type;
 		boost::algorithm::to_lower(attr);
 
@@ -217,7 +213,7 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 			if (!FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName))
 				BOOST_THROW_EXCEPTION(ScriptError("Access denied to object '" + name + "' of type '" + type + "'"));
 
-			result.push_back(target);
+			result.emplace_back(std::move(target));
 		}
 
 		attr = provider->GetPluralName(type);
@@ -227,13 +223,13 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 			Array::Ptr names = query->Get(attr);
 			if (names) {
 				ObjectLock olock(names);
-				BOOST_FOREACH(const String& name, names) {
+				for (const String& name : names) {
 					Object::Ptr target = provider->GetTargetByName(type, name);
 
 					if (!FilterUtility::EvaluateFilter(permissionFrame, permissionFilter, target, variableName))
 						BOOST_THROW_EXCEPTION(ScriptError("Access denied to object '" + name + "' of type '" + type + "'"));
 
-					result.push_back(target);
+					result.emplace_back(std::move(target));
 				}
 			}
 		}
@@ -251,11 +247,11 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 		if (qd.Types.find(type) == qd.Types.end())
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid type specified for this query."));
 
-		ScriptFrame frame;
+		ScriptFrame frame(true);
 		frame.Sandboxed = true;
 		Dictionary::Ptr uvars = new Dictionary();
 
-		Expression *ufilter = NULL;
+		std::unique_ptr<Expression> ufilter;
 
 		if (query->Contains("filter")) {
 			String filter = HttpUtility::GetLastParameter(query, "filter");
@@ -265,23 +261,16 @@ std::vector<Value> FilterUtility::GetFilterTargets(const QueryDescription& qd, c
 		Dictionary::Ptr filter_vars = query->Get("filter_vars");
 		if (filter_vars) {
 			ObjectLock olock(filter_vars);
-			BOOST_FOREACH(const Dictionary::Pair& kv, filter_vars) {
+			for (const Dictionary::Pair& kv : filter_vars) {
 				uvars->Set(kv.first, kv.second);
 			}
 		}
 
 		frame.Self = uvars;
 
-		try {
-			provider->FindTargets(type, boost::bind(&FilteredAddTarget,
-			    boost::ref(permissionFrame), permissionFilter,
-			    boost::ref(frame), ufilter, boost::ref(result), variableName, _1));
-		} catch (const std::exception& ex) {
-			delete ufilter;
-			throw;
-		}
-
-		delete ufilter;
+		provider->FindTargets(type, std::bind(&FilteredAddTarget,
+			std::ref(permissionFrame), permissionFilter,
+			std::ref(frame), &*ufilter, std::ref(result), variableName, _1));
 	}
 
 	return result;

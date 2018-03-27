@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,8 +23,6 @@
 #include "base/scriptframe.hpp"
 #include "base/initialize.hpp"
 #include <boost/math/special_functions/round.hpp>
-#include <boost/math/special_functions/fpclassify.hpp>
-#include <boost/foreach.hpp>
 #include <cmath>
 
 using namespace icinga;
@@ -84,7 +82,7 @@ static Value MathMax(const std::vector<Value>& args)
 	bool first = true;
 	Value result = -INFINITY;
 
-	BOOST_FOREACH(const Value& arg, args) {
+	for (const Value& arg : args) {
 		if (first || arg > result) {
 			first = false;
 			result = arg;
@@ -99,7 +97,7 @@ static Value MathMin(const std::vector<Value>& args)
 	bool first = true;
 	Value result = INFINITY;
 
-	BOOST_FOREACH(const Value& arg, args) {
+	for (const Value& arg : args) {
 		if (first || arg < result) {
 			first = false;
 			result = arg;
@@ -114,7 +112,7 @@ static double MathPow(double x, double y)
 	return std::pow(x, y);
 }
 
-static double MathRandom(void)
+static double MathRandom()
 {
 	return (double)std::rand() / RAND_MAX;
 }
@@ -159,45 +157,41 @@ static double MathSign(double x)
 		return 0;
 }
 
-static void InitializeMathObj(void)
-{
-	Dictionary::Ptr mathObj = new Dictionary();
+INITIALIZE_ONCE([]() {
+	Dictionary::Ptr mathObj = new Dictionary({
+		/* Constants */
+		{ "E", 2.71828182845904523536 },
+		{ "LN2", 0.693147180559945309417 },
+		{ "LN10", 2.30258509299404568402 },
+		{ "LOG2E", 1.44269504088896340736 },
+		{ "LOG10E", 0.434294481903251827651 },
+		{ "PI", 3.14159265358979323846 },
+		{ "SQRT1_2", 0.707106781186547524401 },
+		{ "SQRT2", 1.41421356237309504880 },
 
-	/* Constants */
-	mathObj->Set("E", 2.71828182845904523536);
-	mathObj->Set("LN2", 0.693147180559945309417);
-	mathObj->Set("LN10", 2.30258509299404568402);
-	mathObj->Set("LOG2E", 1.44269504088896340736);
-	mathObj->Set("LOG10E", 0.434294481903251827651);
-	mathObj->Set("PI", 3.14159265358979323846);
-	mathObj->Set("SQRT1_2", 0.707106781186547524401);
-	mathObj->Set("SQRT2", 1.41421356237309504880);
-
-	/* Methods */
-	mathObj->Set("abs", new Function(WrapFunction(MathAbs), true));
-	mathObj->Set("acos", new Function(WrapFunction(MathAcos), true));
-	mathObj->Set("asin", new Function(WrapFunction(MathAsin), true));
-	mathObj->Set("atan", new Function(WrapFunction(MathAtan), true));
-	mathObj->Set("atan2", new Function(WrapFunction(MathAtan2), true));
-	mathObj->Set("ceil", new Function(WrapFunction(MathCeil), true));
-	mathObj->Set("cos", new Function(WrapFunction(MathCos), true));
-	mathObj->Set("exp", new Function(WrapFunction(MathExp), true));
-	mathObj->Set("floor", new Function(WrapFunction(MathFloor), true));
-	mathObj->Set("log", new Function(WrapFunction(MathLog), true));
-	mathObj->Set("max", new Function(WrapFunction(MathMax), true));
-	mathObj->Set("min", new Function(WrapFunction(MathMin), true));
-	mathObj->Set("pow", new Function(WrapFunction(MathPow), true));
-	mathObj->Set("random", new Function(WrapFunction(MathRandom), true));
-	mathObj->Set("round", new Function(WrapFunction(MathRound), true));
-	mathObj->Set("sin", new Function(WrapFunction(MathSin), true));
-	mathObj->Set("sqrt", new Function(WrapFunction(MathSqrt), true));
-	mathObj->Set("tan", new Function(WrapFunction(MathTan), true));
-	mathObj->Set("isnan", new Function(WrapFunction(MathIsnan), true));
-	mathObj->Set("isinf", new Function(WrapFunction(MathIsinf), true));
-	mathObj->Set("sign", new Function(WrapFunction(MathSign), true));
+		/* Methods */
+		{ "abs", new Function("Math#abs", MathAbs, { "x" }, true) },
+		{ "acos", new Function("Math#acos", MathAcos, { "x" }, true) },
+		{ "asin", new Function("Math#asin", MathAsin, { "x" }, true) },
+		{ "atan", new Function("Math#atan", MathAtan, { "x" }, true) },
+		{ "atan2", new Function("Math#atan2", MathAtan2, { "x", "y" }, true) },
+		{ "ceil", new Function("Math#ceil", MathCeil, { "x" }, true) },
+		{ "cos", new Function("Math#cos", MathCos, { "x" }, true) },
+		{ "exp", new Function("Math#exp", MathExp, { "x" }, true) },
+		{ "floor", new Function("Math#floor", MathFloor, { "x" }, true) },
+		{ "log", new Function("Math#log", MathLog, { "x" }, true) },
+		{ "max", new Function("Math#max", MathMax, {}, true) },
+		{ "min", new Function("Math#min", MathMin, {}, true) },
+		{ "pow", new Function("Math#pow", MathPow, { "x", "y" }, true) },
+		{ "random", new Function("Math#random", MathRandom, {}, true) },
+		{ "round", new Function("Math#round", MathRound, { "x" }, true) },
+		{ "sin", new Function("Math#sin", MathSin, { "x" }, true) },
+		{ "sqrt", new Function("Math#sqrt", MathSqrt, { "x" }, true) },
+		{ "tan", new Function("Math#tan", MathTan, { "x" }, true) },
+		{ "isnan", new Function("Math#isnan", MathIsnan, { "x" }, true) },
+		{ "isinf", new Function("Math#isinf", MathIsinf, { "x" }, true) },
+		{ "sign", new Function("Math#sign", MathSign, { "x" }, true) }
+	});
 
 	ScriptGlobal::Set("Math", mathObj);
-}
-
-INITIALIZE_ONCE(InitializeMathObj);
-
+});

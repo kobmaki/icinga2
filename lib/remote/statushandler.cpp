@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,46 +27,53 @@ using namespace icinga;
 
 REGISTER_URLHANDLER("/v1/status", StatusHandler);
 
-class StatusTargetProvider : public TargetProvider
+class StatusTargetProvider final : public TargetProvider
 {
 public:
 	DECLARE_PTR_TYPEDEFS(StatusTargetProvider);
 
-	virtual void FindTargets(const String& type,
-	    const boost::function<void (const Value&)>& addTarget) const override
+	void FindTargets(const String& type,
+		const std::function<void (const Value&)>& addTarget) const override
 	{
-		typedef std::pair<String, StatsFunction::Ptr> kv_pair;
-		BOOST_FOREACH(const kv_pair& kv, StatsFunctionRegistry::GetInstance()->GetItems()) {
-			addTarget(GetTargetByName("Status", kv.first));
+		Dictionary::Ptr statsFunctions = ScriptGlobal::Get("StatsFunctions", &Empty);
+
+		if (statsFunctions) {
+			ObjectLock olock(statsFunctions);
+
+			for (const Dictionary::Pair& kv : statsFunctions)
+				addTarget(GetTargetByName("Status", kv.first));
 		}
 	}
 
-	virtual Value GetTargetByName(const String& type, const String& name) const override
+	Value GetTargetByName(const String& type, const String& name) const override
 	{
-		StatsFunction::Ptr func = StatsFunctionRegistry::GetInstance()->GetItem(name);
+		Dictionary::Ptr statsFunctions = ScriptGlobal::Get("StatsFunctions", &Empty);
+
+		if (!statsFunctions)
+			BOOST_THROW_EXCEPTION(std::invalid_argument("No status functions are available."));
+
+		Function::Ptr func = statsFunctions->Get(name);
 
 		if (!func)
 			BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid status function name."));
 
-		Dictionary::Ptr result = new Dictionary();
-
 		Dictionary::Ptr status = new Dictionary();
 		Array::Ptr perfdata = new Array();
-		func->Invoke(status, perfdata);
+		func->Invoke({ status, perfdata });
 
-		result->Set("name", name);
-		result->Set("status", status);
-		result->Set("perfdata", Serialize(perfdata, FAState));
-
-		return result;
+		return new Dictionary({
+			{ "name", name },
+			{ "status", status },
+			{ "perfdata", Serialize(perfdata, FAState) }
+		});
 	}
 
-	virtual bool IsValidType(const String& type) const override
+	bool IsValidType(const String& type) const override
 	{
 		return type == "Status";
 	}
 
-	virtual String GetPluralName(const String& type) const override
+	String GetPluralName(const String& type) const override
 	{
 		return "statuses";
 	}
@@ -95,19 +102,18 @@ bool StatusHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& request
 	try {
 		objs = FilterUtility::GetFilterTargets(qd, params, user);
 	} catch (const std::exception& ex) {
-		HttpUtility::SendJsonError(response, 404,
-		    "No objects found.",
-		    HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+		HttpUtility::SendJsonError(response, params, 404,
+			"No objects found.",
+			HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
 		return true;
 	}
 
-	Array::Ptr results = Array::FromVector(objs);
-
-	Dictionary::Ptr result = new Dictionary();
-	result->Set("results", results);
+	Dictionary::Ptr result = new Dictionary({
+		{ "results", new Array(std::move(objs)) }
+	});
 
 	response.SetStatus(200, "OK");
-	HttpUtility::SendJsonBody(response, result);
+	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;
 }

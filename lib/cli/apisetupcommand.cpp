@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -29,22 +29,22 @@ namespace po = boost::program_options;
 
 REGISTER_CLICOMMAND("api/setup", ApiSetupCommand);
 
-String ApiSetupCommand::GetDescription(void) const
+String ApiSetupCommand::GetDescription() const
 {
 	return "Setup for Icinga 2 API.";
 }
 
-String ApiSetupCommand::GetShortDescription(void) const
+String ApiSetupCommand::GetShortDescription() const
 {
-	return "setup for api";
+	return "setup for API";
 }
 
-ImpersonationLevel ApiSetupCommand::GetImpersonationLevel(void) const
+ImpersonationLevel ApiSetupCommand::GetImpersonationLevel() const
 {
 	return ImpersonateRoot;
 }
 
-int ApiSetupCommand::GetMaxArguments(void) const
+int ApiSetupCommand::GetMaxArguments() const
 {
 	return -1;
 }

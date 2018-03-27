@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -30,7 +30,6 @@
 #include "base/debug.hpp"
 #include "base/objectlock.hpp"
 #include "base/console.hpp"
-#include <boost/foreach.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <fstream>
@@ -42,18 +41,18 @@ namespace po = boost::program_options;
 
 REGISTER_CLICOMMAND("object/list", ObjectListCommand);
 
-String ObjectListCommand::GetDescription(void) const
+String ObjectListCommand::GetDescription() const
 {
 	return "Lists all Icinga 2 objects.";
 }
 
-String ObjectListCommand::GetShortDescription(void) const
+String ObjectListCommand::GetShortDescription() const
 {
 	return "lists all objects";
 }
 
 void ObjectListCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
 		("count,c", "display object counts by types")
@@ -72,7 +71,7 @@ int ObjectListCommand::Run(const boost::program_options::variables_map& vm, cons
 
 	if (!Utility::PathExists(objectfile)) {
 		Log(LogCritical, "cli")
-		    << "Cannot open objects file '" << Application::GetObjectsPath() << "'.";
+			<< "Cannot open objects file '" << Application::GetObjectsPath() << "'.";
 		Log(LogCritical, "cli", "Run 'icinga2 daemon -C' to validate config and generate the cache file.");
 		return 1;
 	}
@@ -120,7 +119,7 @@ int ObjectListCommand::Run(const boost::program_options::variables_map& vm, cons
 	}
 
 	Log(LogNotice, "cli")
-	    << "Parsed " << objects_count << " objects.";
+		<< "Parsed " << objects_count << " objects.";
 
 	return 0;
 }
@@ -129,7 +128,7 @@ void ObjectListCommand::PrintTypeCounts(std::ostream& fp, const std::map<String,
 {
 	typedef std::map<String, int>::value_type TypeCount;
 
-	BOOST_FOREACH(const TypeCount& kv, type_count) {
+	for (const TypeCount& kv : type_count) {
 		fp << "Found " << kv.second << " " << kv.first << " object";
 
 		if (kv.second != 1)

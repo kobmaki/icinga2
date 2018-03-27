@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -18,7 +18,7 @@
  ******************************************************************************/
 
 #include "icinga/customvarobject.hpp"
-#include "icinga/customvarobject.tcpp"
+#include "icinga/customvarobject-ti.cpp"
 #include "icinga/macroprocessor.hpp"
 #include "base/logger.hpp"
 #include "base/function.hpp"
@@ -29,14 +29,14 @@ using namespace icinga;
 
 REGISTER_TYPE(CustomVarObject);
 
-void CustomVarObject::ValidateVars(const Dictionary::Ptr& value, const ValidationUtils& utils)
+void CustomVarObject::ValidateVars(const Lazy<Dictionary::Ptr>& lvalue, const ValidationUtils& utils)
 {
-	MacroProcessor::ValidateCustomVars(this, value);
+	MacroProcessor::ValidateCustomVars(this, lvalue());
 }
 
 int icinga::FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<String, int>& filterMap, int defaultValue)
 {
-	Value resultTypeFilter;
+	int resultTypeFilter;
 
 	if (!typeFilters)
 		return defaultValue;
@@ -44,7 +44,7 @@ int icinga::FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<Strin
 	resultTypeFilter = 0;
 
 	ObjectLock olock(typeFilters);
-	BOOST_FOREACH(const Value& typeFilter, typeFilters) {
+	for (const Value& typeFilter : typeFilters) {
 		if (typeFilter.IsNumber()) {
 			resultTypeFilter = resultTypeFilter | typeFilter;
 			continue;
@@ -53,7 +53,7 @@ int icinga::FilterArrayToInt(const Array::Ptr& typeFilters, const std::map<Strin
 		if (!typeFilter.IsString())
 			return -1;
 
-		std::map<String, int>::const_iterator it = filterMap.find(typeFilter);
+		auto it = filterMap.find(typeFilter);
 
 		if (it == filterMap.end())
 			return -1;

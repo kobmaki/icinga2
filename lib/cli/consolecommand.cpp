@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -33,6 +33,7 @@
 #include "base/networkstream.hpp"
 #include "base/exception.hpp"
 #include <iostream>
+#include <fstream>
 #ifdef HAVE_EDITLINE
 #include "cli/editline.hpp"
 #endif /* HAVE_EDITLINE */
@@ -47,6 +48,72 @@ static String l_Session;
 REGISTER_CLICOMMAND("console", ConsoleCommand);
 
 INITIALIZE_ONCE(&ConsoleCommand::StaticInitialize);
+
+extern "C" void dbg_spawn_console()
+{
+	ScriptFrame frame(true);
+	ConsoleCommand::RunScriptConsole(frame);
+}
+
+extern "C" void dbg_inspect_value(const Value& value)
+{
+	ConfigWriter::EmitValue(std::cout, 1, Serialize(value, 0));
+	std::cout << std::endl;
+}
+
+extern "C" void dbg_inspect_object(Object *obj)
+{
+	Object::Ptr objr = obj;
+	dbg_inspect_value(objr);
+}
+
+extern "C" void dbg_eval(const char *text)
+{
+	std::unique_ptr<Expression> expr;
+
+	try {
+		ScriptFrame frame(true);
+		expr = ConfigCompiler::CompileText("<dbg>", text);
+		Value result = Serialize(expr->Evaluate(frame), 0);
+		dbg_inspect_value(result);
+	} catch (const std::exception& ex) {
+		std::cout << "Error: " << DiagnosticInformation(ex) << "\n";
+	}
+}
+
+extern "C" void dbg_eval_with_value(const Value& value, const char *text)
+{
+	std::unique_ptr<Expression> expr;
+
+	try {
+		ScriptFrame frame(true);
+		frame.Locals = new Dictionary({
+			{ "arg", value }
+		});
+		expr = ConfigCompiler::CompileText("<dbg>", text);
+		Value result = Serialize(expr->Evaluate(frame), 0);
+		dbg_inspect_value(result);
+	} catch (const std::exception& ex) {
+		std::cout << "Error: " << DiagnosticInformation(ex) << "\n";
+	}
+}
+
+extern "C" void dbg_eval_with_object(Object *object, const char *text)
+{
+	std::unique_ptr<Expression> expr;
+
+	try {
+		ScriptFrame frame(true);
+		frame.Locals = new Dictionary({
+			{ "arg", object }
+		});
+		expr = ConfigCompiler::CompileText("<dbg>", text);
+		Value result = Serialize(expr->Evaluate(frame), 0);
+		dbg_inspect_value(result);
+	} catch (const std::exception& ex) {
+		std::cout << "Error: " << DiagnosticInformation(ex) << "\n";
+	}
+}
 
 void ConsoleCommand::BreakpointHandler(ScriptFrame& frame, ScriptError *ex, const DebugInfo& di)
 {
@@ -68,7 +135,8 @@ void ConsoleCommand::BreakpointHandler(ScriptFrame& frame, ScriptError *ex, cons
 		ShowCodeLocation(std::cout, di);
 
 	std::cout << "You can inspect expressions (such as variables) by entering them at the prompt.\n"
-	          << "To leave the debugger and continue the program use \"$continue\".\n";
+		<< "To leave the debugger and continue the program use \"$continue\".\n"
+		<< "For further commands see \"$help\".\n";
 
 #ifdef HAVE_EDITLINE
 	rl_completion_entry_function = ConsoleCommand::ConsoleCompleteHelper;
@@ -78,32 +146,34 @@ void ConsoleCommand::BreakpointHandler(ScriptFrame& frame, ScriptError *ex, cons
 	ConsoleCommand::RunScriptConsole(frame);
 }
 
-void ConsoleCommand::StaticInitialize(void)
+void ConsoleCommand::StaticInitialize()
 {
 	Expression::OnBreakpoint.connect(&ConsoleCommand::BreakpointHandler);
 }
 
-String ConsoleCommand::GetDescription(void) const
+String ConsoleCommand::GetDescription() const
 {
 	return "Interprets Icinga script expressions.";
 }
 
-String ConsoleCommand::GetShortDescription(void) const
+String ConsoleCommand::GetShortDescription() const
 {
 	return "Icinga console";
 }
 
-ImpersonationLevel ConsoleCommand::GetImpersonationLevel(void) const
+ImpersonationLevel ConsoleCommand::GetImpersonationLevel() const
 {
 	return ImpersonateNone;
 }
 
 void ConsoleCommand::InitParameters(boost::program_options::options_description& visibleDesc,
-    boost::program_options::options_description& hiddenDesc) const
+	boost::program_options::options_description& hiddenDesc) const
 {
 	visibleDesc.add_options()
 		("connect,c", po::value<std::string>(), "connect to an Icinga 2 instance")
 		("eval,e", po::value<std::string>(), "evaluate expression and terminate")
+		("file,r", po::value<std::string>(), "evaluate a file and terminate")
+		("syntax-only", "only validate syntax (requires --eval or --file)")
 		("sandbox", "enable sandbox mode")
 	;
 }
@@ -115,7 +185,7 @@ char *ConsoleCommand::ConsoleCompleteHelper(const char *word, int state)
 
 	if (state == 0) {
 		if (!l_ApiClient)
-			matches = ConsoleHandler::GetAutocompletionSuggestions(word, *l_ScriptFrame); 
+			matches = ConsoleHandler::GetAutocompletionSuggestions(word, *l_ScriptFrame);
 		else {
 			boost::mutex mutex;
 			boost::condition_variable cv;
@@ -123,10 +193,10 @@ char *ConsoleCommand::ConsoleCompleteHelper(const char *word, int state)
 			Array::Ptr suggestions;
 
 			l_ApiClient->AutocompleteScript(l_Session, word, l_ScriptFrame->Sandboxed,
-			    boost::bind(&ConsoleCommand::AutocompleteScriptCompletionHandler,
-			    boost::ref(mutex), boost::ref(cv), boost::ref(ready),
-			    _1, _2,
-			    boost::ref(suggestions)));
+				std::bind(&ConsoleCommand::AutocompleteScriptCompletionHandler,
+				std::ref(mutex), std::ref(cv), std::ref(ready),
+				_1, _2,
+				std::ref(suggestions)));
 
 			{
 				boost::mutex::scoped_lock lock(mutex);
@@ -141,8 +211,8 @@ char *ConsoleCommand::ConsoleCompleteHelper(const char *word, int state)
 		}
 	}
 
-	if (state >= matches.size())
-		return NULL;
+	if (state >= static_cast<int>(matches.size()))
+		return nullptr;
 
 	return strdup(matches[state].CStr());
 }
@@ -161,7 +231,7 @@ int ConsoleCommand::Run(const po::variables_map& vm, const std::vector<std::stri
 #endif /* HAVE_EDITLINE */
 
 	String addr, session;
-	ScriptFrame scriptFrame;
+	ScriptFrame scriptFrame(true);
 
 	session = Utility::NewUniqueID();
 
@@ -170,8 +240,10 @@ int ConsoleCommand::Run(const po::variables_map& vm, const std::vector<std::stri
 
 	scriptFrame.Self = scriptFrame.Locals;
 
-	if (!vm.count("eval"))
-		std::cout << "Icinga 2 (version: " << Application::GetAppVersion() << ")\n";
+	if (!vm.count("eval") && !vm.count("file"))
+		std::cout << "Icinga 2 (version: " << Application::GetAppVersion() << ")\n"
+			<< "Type $help to view available commands.\n";
+
 
 	const char *addrEnv = getenv("ICINGA2_API_URL");
 	if (addrEnv)
@@ -181,17 +253,60 @@ int ConsoleCommand::Run(const po::variables_map& vm, const std::vector<std::stri
 		addr = vm["connect"].as<std::string>();
 
 	String command;
+	bool syntaxOnly = false;
+
+	if (vm.count("syntax-only")) {
+		if (vm.count("eval") || vm.count("file"))
+			syntaxOnly = true;
+		else {
+			std::cerr << "The option --syntax-only can only be used in combination with --eval or --file." << std::endl;
+			return EXIT_FAILURE;
+		}
+	}
+
+	String commandFileName;
 
 	if (vm.count("eval"))
 		command = vm["eval"].as<std::string>();
+	else if (vm.count("file")) {
+		commandFileName = vm["file"].as<std::string>();
 
-	return RunScriptConsole(scriptFrame, addr, session, command);;
+		try {
+			std::ifstream fp(commandFileName.CStr());
+			fp.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+			command = String(std::istreambuf_iterator<char>(fp), std::istreambuf_iterator<char>());
+		} catch (const std::exception&) {
+			std::cerr << "Could not read file '" << commandFileName << "'." << std::endl;
+			return EXIT_FAILURE;
+		}
+	}
+
+	return RunScriptConsole(scriptFrame, addr, session, command, commandFileName, syntaxOnly);
 }
 
-int ConsoleCommand::RunScriptConsole(ScriptFrame& scriptFrame, const String& addr, const String& session, const String& commandOnce)
+int ConsoleCommand::RunScriptConsole(ScriptFrame& scriptFrame, const String& addr, const String& session, const String& commandOnce, const String& commandOnceFileName, bool syntaxOnly)
 {
 	std::map<String, String> lines;
 	int next_line = 1;
+
+#ifdef HAVE_EDITLINE
+	char *homeEnv = getenv("HOME");
+
+	String historyPath;
+	std::fstream historyfp;
+
+	if (homeEnv) {
+		historyPath = String(homeEnv) + "/.icinga2_history";
+
+		historyfp.open(historyPath.CStr(), std::fstream::in);
+
+		String line;
+		while (std::getline(historyfp, line.GetData()))
+			add_history(line.CStr());
+
+		historyfp.close();
+	}
+#endif /* HAVE_EDITLINE */
 
 	l_ScriptFrame = &scriptFrame;
 	l_Session = session;
@@ -221,7 +336,13 @@ int ConsoleCommand::RunScriptConsole(ScriptFrame& scriptFrame, const String& add
 	}
 
 	while (std::cin.good()) {
-		String fileName = "<" + Convert::ToString(next_line) + ">";
+		String fileName;
+
+		if (commandOnceFileName.IsEmpty())
+			fileName = "<" + Convert::ToString(next_line) + ">";
+		else
+			fileName = commandOnceFileName;
+
 		next_line++;
 
 		bool continuation = false;
@@ -254,7 +375,15 @@ incomplete:
 			if (!cline)
 				break;
 
-			add_history(cline);
+			if (commandOnce.IsEmpty() && cline[0] != '\0') {
+				add_history(cline);
+
+				if (!historyPath.IsEmpty()) {
+					historyfp.open(historyPath.CStr(), std::fstream::out | std::fstream::app);
+					historyfp << cline << "\n";
+					historyfp.close();
+				}
+			}
 
 			line = cline;
 
@@ -266,10 +395,18 @@ incomplete:
 			line = commandOnce;
 
 		if (!line.empty() && line[0] == '$') {
-			if (line == "$continue")
+			if (line == "$continue" || line == "$quit" || line == "$exit")
 				break;
+			else if (line == "$help")
+				std::cout << "Welcome to the Icinga 2 debug console.\n"
+					"Usable commands:\n"
+					"  $continue      Continue running Icinga 2 (script debugger).\n"
+					"  $quit, $exit   Stop debugging and quit the console.\n"
+					"  $help          Print this help.\n\n"
+					"For more information on how to use this console, please consult the documentation at https://icinga.com/docs\n";
+			else
+				std::cout << "Unknown debugger command: " << line << "\n";
 
-			std::cout << "Unknown debugger command: " << line << "\n";
 			continue;
 		}
 
@@ -278,7 +415,7 @@ incomplete:
 
 		command += line;
 
-		Expression *expr = NULL;
+		std::unique_ptr<Expression> expr;
 
 		try {
 			lines[fileName] = command;
@@ -287,7 +424,15 @@ incomplete:
 
 			if (!l_ApiClient) {
 				expr = ConfigCompiler::CompileText(fileName, command);
-				result = Serialize(expr->Evaluate(scriptFrame), 0);
+
+				/* This relies on the fact that - for syntax errors - CompileText()
+				 * returns an AST where the top-level expression is a 'throw'. */
+				if (!syntaxOnly || dynamic_cast<ThrowExpression *>(expr.get())) {
+					if (syntaxOnly)
+						std::cerr << "    => " << command << std::endl;
+					result = Serialize(expr->Evaluate(scriptFrame), 0);
+				} else
+					result = true;
 			} else {
 				boost::mutex mutex;
 				boost::condition_variable cv;
@@ -295,10 +440,10 @@ incomplete:
 				boost::exception_ptr eptr;
 
 				l_ApiClient->ExecuteScript(l_Session, command, scriptFrame.Sandboxed,
-				    boost::bind(&ConsoleCommand::ExecuteScriptCompletionHandler,
-				    boost::ref(mutex), boost::ref(cv), boost::ref(ready),
-				    _1, _2,
-				    boost::ref(result), boost::ref(eptr)));
+					std::bind(&ConsoleCommand::ExecuteScriptCompletionHandler,
+					std::ref(mutex), std::ref(cv), std::ref(ready),
+					_1, _2,
+					std::ref(result), std::ref(eptr)));
 
 				{
 					boost::mutex::scoped_lock lock(mutex);
@@ -319,18 +464,17 @@ incomplete:
 				break;
 			}
 		} catch (const ScriptError& ex) {
-			if (ex.IsIncompleteExpression()) {
+			if (ex.IsIncompleteExpression() && commandOnce.IsEmpty()) {
 				continuation = true;
 				goto incomplete;
 			}
 
 			DebugInfo di = ex.GetDebugInfo();
 
-			if (lines.find(di.Path) != lines.end()) {
+			if (commandOnceFileName.IsEmpty() && lines.find(di.Path) != lines.end()) {
 				String text = lines[di.Path];
 
-				std::vector<String> ulines;
-				boost::algorithm::split(ulines, text, boost::is_any_of("\n"));
+				std::vector<String> ulines = text.Split("\n");
 
 				for (int i = 1; i <= ulines.size(); i++) {
 					int start, len;
@@ -372,24 +516,22 @@ incomplete:
 			if (!commandOnce.IsEmpty())
 				return EXIT_FAILURE;
 		}
-
-		delete expr;
 	}
 
 	return EXIT_SUCCESS;
 }
 
 void ConsoleCommand::ExecuteScriptCompletionHandler(boost::mutex& mutex, boost::condition_variable& cv,
-    bool& ready, boost::exception_ptr eptr, const Value& result, Value& resultOut, boost::exception_ptr& eptrOut)
+	bool& ready, const boost::exception_ptr& eptr, const Value& result, Value& resultOut, boost::exception_ptr& eptrOut)
 {
 	if (eptr) {
 		try {
 			boost::rethrow_exception(eptr);
-		} catch (const ScriptError& ex) {
+		} catch (const ScriptError&) {
 			eptrOut = boost::current_exception();
 		} catch (const std::exception& ex) {
 			Log(LogCritical, "ConsoleCommand")
-			    << "HTTP query failed: " << ex.what();
+				<< "HTTP query failed: " << ex.what();
 			Application::Exit(EXIT_FAILURE);
 		}
 	}
@@ -404,14 +546,14 @@ void ConsoleCommand::ExecuteScriptCompletionHandler(boost::mutex& mutex, boost::
 }
 
 void ConsoleCommand::AutocompleteScriptCompletionHandler(boost::mutex& mutex, boost::condition_variable& cv,
-    bool& ready, boost::exception_ptr eptr, const Array::Ptr& result, Array::Ptr& resultOut)
+	bool& ready, const boost::exception_ptr& eptr, const Array::Ptr& result, Array::Ptr& resultOut)
 {
 	if (eptr) {
 		try {
 			boost::rethrow_exception(eptr);
 		} catch (const std::exception& ex) {
 			Log(LogCritical, "ConsoleCommand")
-			    << "HTTP query failed: " << ex.what();
+				<< "HTTP query failed: " << ex.what();
 			Application::Exit(EXIT_FAILURE);
 		}
 	}

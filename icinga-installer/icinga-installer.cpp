@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -31,7 +31,7 @@
 static std::string GetIcingaInstallPath(void)
 {
 	char szFileName[MAX_PATH];
-	if (!GetModuleFileName(NULL, szFileName, sizeof(szFileName)))
+	if (!GetModuleFileName(nullptr, szFileName, sizeof(szFileName)))
 		return "";
 
 	if (!PathRemoveFileSpec(szFileName))
@@ -43,6 +43,7 @@ static std::string GetIcingaInstallPath(void)
 	return szFileName;
 }
 
+
 static bool ExecuteCommand(const std::string& app, const std::string& arguments)
 {
 	SHELLEXECUTEINFO sei = {};
@@ -53,7 +54,7 @@ static bool ExecuteCommand(const std::string& app, const std::string& arguments)
 	sei.nShow = SW_HIDE;
 	if (!ShellExecuteEx(&sei))
 		return false;
-	
+
 	if (!sei.hProcess)
 		return false;
 
@@ -96,18 +97,10 @@ static bool PathExists(const std::string& path)
 	return (_stat(path.c_str(), &statbuf) >= 0);
 }
 
-static void CopyFile(const std::string& source, const std::string& target)
-{
-	std::ifstream ifs(source.c_str(), std::ios::binary);
-	std::ofstream ofs(target.c_str(), std::ios::binary | std::ios::trunc);
-
-	ofs << ifs.rdbuf();
-}
-
 static std::string GetIcingaDataPath(void)
 {
 	char path[MAX_PATH];
-	if (!SUCCEEDED(SHGetFolderPath(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path)))
+	if (!SUCCEEDED(SHGetFolderPath(nullptr, CSIDL_COMMON_APPDATA, nullptr, 0, path)))
 		throw std::runtime_error("SHGetFolderPath failed");
 	return std::string(path) + "\\icinga2";
 }
@@ -132,18 +125,6 @@ static void MkDirP(const std::string& path)
 	}
 }
 
-static void CopyConfigFile(const std::string& installDir, const std::string& sourceConfigPath, size_t skelPrefixLength)
-{
-	std::string relativeConfigPath = sourceConfigPath.substr(skelPrefixLength);
-
-	std::string targetConfigPath = installDir + relativeConfigPath;
-
-	if (!PathExists(targetConfigPath)) {
-		MkDirP(DirName(targetConfigPath));
-		CopyFile(sourceConfigPath, targetConfigPath);
-	}
-}
-
 static std::string GetNSISInstallPath(void)
 {
 	HKEY hKey;
@@ -152,7 +133,7 @@ static std::string GetNSISInstallPath(void)
 		BYTE pvData[MAX_PATH];
 		DWORD cbData = sizeof(pvData) - 1;
 		DWORD lType;
-		if (RegQueryValueEx(hKey, NULL, NULL, &lType, pvData, &cbData) == ERROR_SUCCESS && lType == REG_SZ) {
+		if (RegQueryValueEx(hKey, nullptr, nullptr, &lType, pvData, &cbData) == ERROR_SUCCESS && lType == REG_SZ) {
 			pvData[cbData] = '\0';
 
 			return (char *)pvData;
@@ -162,11 +143,6 @@ static std::string GetNSISInstallPath(void)
 	}
 
 	return "";
-}
-
-static void CollectPaths(std::vector<std::string>& paths, const std::string& path)
-{
-	paths.push_back(path);
 }
 
 static bool CopyDirectory(const std::string& source, const std::string& destination)
@@ -245,7 +221,7 @@ static int UpgradeNSIS(void)
 			return 1;
 
 		_rmdir(installPath.c_str());
-	}	
+	}
 
 	return 0;
 }
@@ -270,11 +246,11 @@ static int InstallIcinga(void)
 
 		MkDirP(dataDir + "/etc/icinga2/pki");
 		MkDirP(dataDir + "/var/cache/icinga2");
-		MkDirP(dataDir + "/var/lib/icinga2/pki");
+		MkDirP(dataDir + "/var/lib/icinga2/certs");
+		MkDirP(dataDir + "/var/lib/icinga2/certificate-requests");
 		MkDirP(dataDir + "/var/lib/icinga2/agent/inventory");
 		MkDirP(dataDir + "/var/lib/icinga2/api/config");
 		MkDirP(dataDir + "/var/lib/icinga2/api/log");
-		MkDirP(dataDir + "/var/lib/icinga2/api/repository");
 		MkDirP(dataDir + "/var/lib/icinga2/api/zones");
 		MkDirP(dataDir + "/var/log/icinga2/compat/archive");
 		MkDirP(dataDir + "/var/log/icinga2/crash");
@@ -303,10 +279,9 @@ static int UninstallIcinga(void)
 */
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 {
-	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
 	//AllocConsole();
-
 	int rc;
 
 	if (strcmp(lpCmdLine, "install") == 0) {
@@ -316,7 +291,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	} else if (strcmp(lpCmdLine, "upgrade-nsis") == 0) {
 		rc = UpgradeNSIS();
 	} else {
-		MessageBox(NULL, "This application should only be run by the MSI installer package.", "Icinga 2 Installer", MB_ICONWARNING);
+		MessageBox(nullptr, "This application should only be run by the MSI installer package.", "Icinga 2 Installer", MB_ICONWARNING);
 		rc = 1;
 	}
 

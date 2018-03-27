@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -22,12 +22,11 @@
 #include "base/json.hpp"
 #include "base/netstring.hpp"
 #include "base/exception.hpp"
-#include <boost/foreach.hpp>
-#include <fstream>
+#include "base/application.hpp"
 
 using namespace icinga;
 
-ConfigCompilerContext *ConfigCompilerContext::GetInstance(void)
+ConfigCompilerContext *ConfigCompilerContext::GetInstance()
 {
 	return Singleton<ConfigCompilerContext>::GetInstance();
 }
@@ -36,13 +35,18 @@ void ConfigCompilerContext::OpenObjectsFile(const String& filename)
 {
 	m_ObjectsPath = filename;
 
-	std::fstream *fp = new std::fstream();
-	m_ObjectsTempFile = Utility::CreateTempFile(filename + ".XXXXXX", 0600, *fp);
+	auto *fp = new std::fstream();
+	try {
+		m_ObjectsTempFile = Utility::CreateTempFile(filename + ".XXXXXX", 0600, *fp);
+	} catch (const std::exception& ex) {
+		Log(LogCritical, "cli", "Could not create temporary objects file: " + DiagnosticInformation(ex, false));
+		Application::Exit(1);
+	}
 
 	if (!*fp)
 		BOOST_THROW_EXCEPTION(std::runtime_error("Could not open '" + m_ObjectsTempFile + "' file"));
 
-	m_ObjectsFP = new StdioStream(fp, true);
+	m_ObjectsFP = fp;
 }
 
 void ConfigCompilerContext::WriteObject(const Dictionary::Ptr& object)
@@ -54,14 +58,26 @@ void ConfigCompilerContext::WriteObject(const Dictionary::Ptr& object)
 
 	{
 		boost::mutex::scoped_lock lock(m_Mutex);
-		NetString::WriteStringToStream(m_ObjectsFP, json);
+		NetString::WriteStringToStream(*m_ObjectsFP, json);
 	}
 }
 
-void ConfigCompilerContext::FinishObjectsFile(void)
+void ConfigCompilerContext::CancelObjectsFile()
 {
-	m_ObjectsFP->Close();
-	m_ObjectsFP.reset();
+	delete m_ObjectsFP;
+	m_ObjectsFP = nullptr;
+
+#ifdef _WIN32
+	_unlink(m_ObjectsTempFile.CStr());
+#else /* _WIN32 */
+	unlink(m_ObjectsTempFile.CStr());
+#endif /* _WIN32 */
+}
+
+void ConfigCompilerContext::FinishObjectsFile()
+{
+	delete m_ObjectsFP;
+	m_ObjectsFP = nullptr;
 
 #ifdef _WIN32
 	_unlink(m_ObjectsPath.CStr());
@@ -69,9 +85,9 @@ void ConfigCompilerContext::FinishObjectsFile(void)
 
 	if (rename(m_ObjectsTempFile.CStr(), m_ObjectsPath.CStr()) < 0) {
 		BOOST_THROW_EXCEPTION(posix_error()
-		    << boost::errinfo_api_function("rename")
-		    << boost::errinfo_errno(errno)
-		    << boost::errinfo_file_name(m_ObjectsTempFile));
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(m_ObjectsTempFile));
 	}
 }
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,17 +21,18 @@
 #include "base/utility.hpp"
 #include "base/exception.hpp"
 #include "base/logger.hpp"
-#include <boost/bind.hpp>
 #include <iostream>
 
 #ifndef _WIN32
 #	include <poll.h>
 #endif /* _WIN32 */
 
+#define TLS_TIMEOUT_SECONDS 10
+
 using namespace icinga;
 
-int I2_EXPORT TlsStream::m_SSLIndex;
-bool I2_EXPORT TlsStream::m_SSLIndexInitialized = false;
+int TlsStream::m_SSLIndex;
+bool TlsStream::m_SSLIndexInitialized = false;
 
 /**
  * Constructor for the TlsStream class.
@@ -39,15 +40,15 @@ bool I2_EXPORT TlsStream::m_SSLIndexInitialized = false;
  * @param role The role of the client.
  * @param sslContext The SSL context for the client.
  */
-TlsStream::TlsStream(const Socket::Ptr& socket, const String& hostname, ConnectionRole role, const boost::shared_ptr<SSL_CTX>& sslContext)
+TlsStream::TlsStream(const Socket::Ptr& socket, const String& hostname, ConnectionRole role, const std::shared_ptr<SSL_CTX>& sslContext)
 	: SocketEvents(socket, this), m_Eof(false), m_HandshakeOK(false), m_VerifyOK(true), m_ErrorCode(0),
-	  m_ErrorOccurred(false),  m_Socket(socket), m_Role(role), m_SendQ(new FIFO()), m_RecvQ(new FIFO()),
-	  m_CurrentAction(TlsActionNone), m_Retry(false), m_Shutdown(false)
+	m_ErrorOccurred(false),  m_Socket(socket), m_Role(role), m_SendQ(new FIFO()), m_RecvQ(new FIFO()),
+	m_CurrentAction(TlsActionNone), m_Retry(false), m_Shutdown(false)
 {
 	std::ostringstream msgbuf;
 	char errbuf[120];
 
-	m_SSL = boost::shared_ptr<SSL>(SSL_new(sslContext.get()), SSL_free);
+	m_SSL = std::shared_ptr<SSL>(SSL_new(sslContext.get()), SSL_free);
 
 	if (!m_SSL) {
 		msgbuf << "SSL_new() failed with code " << ERR_peek_error() << ", \"" << ERR_error_string(ERR_peek_error(), errbuf) << "\"";
@@ -59,7 +60,7 @@ TlsStream::TlsStream(const Socket::Ptr& socket, const String& hostname, Connecti
 	}
 
 	if (!m_SSLIndexInitialized) {
-		m_SSLIndex = SSL_get_ex_new_index(0, const_cast<char *>("TlsStream"), NULL, NULL, NULL);
+		m_SSLIndex = SSL_get_ex_new_index(0, const_cast<char *>("TlsStream"), nullptr, nullptr, nullptr);
 		m_SSLIndexInitialized = true;
 	}
 
@@ -83,23 +84,36 @@ TlsStream::TlsStream(const Socket::Ptr& socket, const String& hostname, Connecti
 	}
 }
 
-TlsStream::~TlsStream(void)
+TlsStream::~TlsStream()
 {
 	CloseInternal(true);
 }
 
 int TlsStream::ValidateCertificate(int preverify_ok, X509_STORE_CTX *ctx)
 {
-	SSL *ssl = static_cast<SSL *>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
-	TlsStream *stream = static_cast<TlsStream *>(SSL_get_ex_data(ssl, m_SSLIndex));
-	if (!preverify_ok)
+	auto *ssl = static_cast<SSL *>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
+	auto *stream = static_cast<TlsStream *>(SSL_get_ex_data(ssl, m_SSLIndex));
+
+	if (!preverify_ok) {
 		stream->m_VerifyOK = false;
+
+		std::ostringstream msgbuf;
+		int err = X509_STORE_CTX_get_error(ctx);
+		msgbuf << "code " << err << ": " << X509_verify_cert_error_string(err);
+		stream->m_VerifyError = msgbuf.str();
+	}
+
 	return 1;
 }
 
-bool TlsStream::IsVerifyOK(void) const
+bool TlsStream::IsVerifyOK() const
 {
 	return m_VerifyOK;
+}
+
+String TlsStream::GetVerifyError() const
+{
+	return m_VerifyError;
 }
 
 /**
@@ -107,10 +121,10 @@ bool TlsStream::IsVerifyOK(void) const
  *
  * @returns The X509 certificate.
  */
-boost::shared_ptr<X509> TlsStream::GetClientCertificate(void) const
+std::shared_ptr<X509> TlsStream::GetClientCertificate() const
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
-	return boost::shared_ptr<X509>(SSL_get_certificate(m_SSL.get()), &Utility::NullDeleter);
+	return std::shared_ptr<X509>(SSL_get_certificate(m_SSL.get()), &Utility::NullDeleter);
 }
 
 /**
@@ -118,10 +132,10 @@ boost::shared_ptr<X509> TlsStream::GetClientCertificate(void) const
  *
  * @returns The X509 certificate.
  */
-boost::shared_ptr<X509> TlsStream::GetPeerCertificate(void) const
+std::shared_ptr<X509> TlsStream::GetPeerCertificate() const
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
-	return boost::shared_ptr<X509>(SSL_get_peer_certificate(m_SSL.get()), X509_free);
+	return std::shared_ptr<X509>(SSL_get_peer_certificate(m_SSL.get()), X509_free);
 }
 
 void TlsStream::OnEvent(int revents)
@@ -137,12 +151,17 @@ void TlsStream::OnEvent(int revents)
 	char buffer[64 * 1024];
 
 	if (m_CurrentAction == TlsActionNone) {
-		if (revents & (POLLIN | POLLERR | POLLHUP))
+		bool corked = IsCorked();
+		if (!corked && (revents & (POLLIN | POLLERR | POLLHUP)))
 			m_CurrentAction = TlsActionRead;
 		else if (m_SendQ->GetAvailableBytes() > 0 && (revents & POLLOUT))
 			m_CurrentAction = TlsActionWrite;
 		else {
-			ChangeEvents(POLLIN);
+			if (corked)
+				ChangeEvents(0);
+			else
+				ChangeEvents(POLLIN);
+
 			return;
 		}
 	}
@@ -154,6 +173,8 @@ void TlsStream::OnEvent(int revents)
 	 */
 	ERR_clear_error();
 
+	size_t readTotal = 0;
+
 	switch (m_CurrentAction) {
 		case TlsActionRead:
 			do {
@@ -162,8 +183,10 @@ void TlsStream::OnEvent(int revents)
 				if (rc > 0) {
 					m_RecvQ->Write(buffer, rc);
 					success = true;
+
+					readTotal += rc;
 				}
-			} while (rc > 0);
+			} while (rc > 0 && readTotal < 64 * 1024);
 
 			if (success)
 				m_CV.notify_all();
@@ -175,7 +198,7 @@ void TlsStream::OnEvent(int revents)
 			rc = SSL_write(m_SSL.get(), buffer, count);
 
 			if (rc > 0) {
-				m_SendQ->Read(NULL, rc, true);
+				m_SendQ->Read(nullptr, rc, true);
 				success = true;
 			}
 
@@ -220,7 +243,7 @@ void TlsStream::OnEvent(int revents)
 
 				if (m_ErrorCode != 0) {
 					Log(LogWarning, "TlsStream")
-						<< "OpenSSL error: " << ERR_error_string(m_ErrorCode, NULL);
+						<< "OpenSSL error: " << ERR_error_string(m_ErrorCode, nullptr);
 				} else {
 					Log(LogWarning, "TlsStream", "TLS stream was disconnected.");
 				}
@@ -245,7 +268,7 @@ void TlsStream::OnEvent(int revents)
 
 		lock.unlock();
 
-		while (m_RecvQ->IsDataAvailable() && IsHandlingEvents())
+		while (!IsCorked() && m_RecvQ->IsDataAvailable() && IsHandlingEvents())
 			SignalDataAvailable();
 	}
 
@@ -257,24 +280,30 @@ void TlsStream::OnEvent(int revents)
 	}
 }
 
-void TlsStream::HandleError(void) const
+void TlsStream::HandleError() const
 {
 	if (m_ErrorOccurred) {
 		BOOST_THROW_EXCEPTION(openssl_error()
-		    << boost::errinfo_api_function("TlsStream::OnEvent")
-		    << errinfo_openssl_error(m_ErrorCode));
+			<< boost::errinfo_api_function("TlsStream::OnEvent")
+			<< errinfo_openssl_error(m_ErrorCode));
 	}
 }
 
-void TlsStream::Handshake(void)
+void TlsStream::Handshake()
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
 
 	m_CurrentAction = TlsActionHandshake;
 	ChangeEvents(POLLOUT);
 
-	while (!m_HandshakeOK && !m_ErrorOccurred && !m_Eof)
-		m_CV.wait(lock);
+	boost::system_time const timeout = boost::get_system_time() + boost::posix_time::seconds(TLS_TIMEOUT_SECONDS);
+
+	while (!m_HandshakeOK && !m_ErrorOccurred && !m_Eof && timeout > boost::get_system_time())
+		m_CV.timed_wait(lock, timeout);
+
+	// We should _NOT_ (underline, bold, itallic and wordart) throw an exception for a timeout.
+	if (timeout < boost::get_system_time())
+		BOOST_THROW_EXCEPTION(std::runtime_error("Timeout during handshake."));
 
 	if (m_Eof)
 		BOOST_THROW_EXCEPTION(std::runtime_error("Socket was closed during TLS handshake."));
@@ -320,7 +349,7 @@ void TlsStream::Write(const void *buffer, size_t count)
 	ChangeEvents(POLLIN|POLLOUT);
 }
 
-void TlsStream::Shutdown(void)
+void TlsStream::Shutdown()
 {
 	m_Shutdown = true;
 	ChangeEvents(POLLOUT);
@@ -329,7 +358,7 @@ void TlsStream::Shutdown(void)
 /**
  * Closes the stream.
  */
-void TlsStream::Close(void)
+void TlsStream::Close()
 {
 	CloseInternal(false);
 }
@@ -362,19 +391,36 @@ void TlsStream::CloseInternal(bool inDestructor)
 	m_CV.notify_all();
 }
 
-bool TlsStream::IsEof(void) const
+bool TlsStream::IsEof() const
 {
 	return m_Eof;
 }
 
-bool TlsStream::SupportsWaiting(void) const
+bool TlsStream::SupportsWaiting() const
 {
 	return true;
 }
 
-bool TlsStream::IsDataAvailable(void) const
+bool TlsStream::IsDataAvailable() const
 {
 	boost::mutex::scoped_lock lock(m_Mutex);
 
 	return m_RecvQ->GetAvailableBytes() > 0;
+}
+
+void TlsStream::SetCorked(bool corked)
+{
+	Stream::SetCorked(corked);
+
+	boost::mutex::scoped_lock lock(m_Mutex);
+
+	if (corked)
+		m_CurrentAction = TlsActionNone;
+	else
+		ChangeEvents(POLLIN | POLLOUT);
+}
+
+Socket::Ptr TlsStream::GetSocket() const
+{
+	return m_Socket;
 }

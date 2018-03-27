@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,20 +20,29 @@
 #ifndef CHECKERCOMPONENT_H
 #define CHECKERCOMPONENT_H
 
-#include "checker/checkercomponent.thpp"
+#include "checker/checkercomponent-ti.hpp"
 #include "icinga/service.hpp"
 #include "base/configobject.hpp"
 #include "base/timer.hpp"
 #include "base/utility.hpp"
-#include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/key_extractors.hpp>
+#include <thread>
 
 namespace icinga
 {
+
+/**
+ * @ingroup checker
+ */
+struct CheckableScheduleInfo
+{
+	Checkable::Ptr Object;
+	double NextCheck;
+};
 
 /**
  * @ingroup checker
@@ -45,61 +54,61 @@ struct CheckableNextCheckExtractor
 	/**
 	 * @threadsafety Always.
 	 */
-	double operator()(const Checkable::Ptr& checkable)
+	double operator()(const CheckableScheduleInfo& csi)
 	{
-		return checkable->GetNextCheck();
+		return csi.NextCheck;
 	}
 };
 
 /**
  * @ingroup checker
  */
-class CheckerComponent : public ObjectImpl<CheckerComponent>
+class CheckerComponent final : public ObjectImpl<CheckerComponent>
 {
 public:
 	DECLARE_OBJECT(CheckerComponent);
 	DECLARE_OBJECTNAME(CheckerComponent);
 
 	typedef boost::multi_index_container<
-		Checkable::Ptr,
+		CheckableScheduleInfo,
 		boost::multi_index::indexed_by<
-			boost::multi_index::ordered_unique<boost::multi_index::identity<Checkable::Ptr> >,
+			boost::multi_index::ordered_unique<boost::multi_index::member<CheckableScheduleInfo, Checkable::Ptr, &CheckableScheduleInfo::Object> >,
 			boost::multi_index::ordered_non_unique<CheckableNextCheckExtractor>
 		>
 	> CheckableSet;
 
-	CheckerComponent(void);
-
-	virtual void OnConfigLoaded(void) override;
-	virtual void Start(bool runtimeCreated) override;
-	virtual void Stop(bool runtimeRemoved) override;
+	void OnConfigLoaded() override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
 
 	static void StatsFunc(const Dictionary::Ptr& status, const Array::Ptr& perfdata);
-	unsigned long GetIdleCheckables(void);
-	unsigned long GetPendingCheckables(void);
+	unsigned long GetIdleCheckables();
+	unsigned long GetPendingCheckables();
 
 private:
 	boost::mutex m_Mutex;
 	boost::condition_variable m_CV;
-	bool m_Stopped;
-	boost::thread m_Thread;
+	bool m_Stopped{false};
+	std::thread m_Thread;
 
 	CheckableSet m_IdleCheckables;
 	CheckableSet m_PendingCheckables;
 
 	Timer::Ptr m_ResultTimer;
 
-	void CheckThreadProc(void);
-	void ResultTimerHandler(void);
+	void CheckThreadProc();
+	void ResultTimerHandler();
 
 	void ExecuteCheckHelper(const Checkable::Ptr& checkable);
 
-	void AdjustCheckTimer(void);
+	void AdjustCheckTimer();
 
 	void ObjectHandler(const ConfigObject::Ptr& object);
 	void NextCheckChangedHandler(const Checkable::Ptr& checkable);
 
-	void RescheduleCheckTimer(void);
+	void RescheduleCheckTimer();
+
+	static CheckableScheduleInfo GetCheckableScheduleInfo(const Checkable::Ptr& checkable);
 };
 
 }

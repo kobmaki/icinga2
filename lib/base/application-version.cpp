@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -19,11 +19,16 @@
 
 #include "base/application.hpp"
 #include "icinga-version.h"
+#include "icinga-spec-version.h"
 
 using namespace icinga;
 
-String Application::GetAppVersion(void)
+String Application::GetAppVersion()
 {
 	return VERSION;
 }
 
+String Application::GetAppSpecVersion()
+{
+	return SPEC_VERSION;
+}

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,20 +27,18 @@
 namespace icinga
 {
 
-class I2_BASE_API ObjectType : public Type
+class ObjectType final : public Type
 {
 public:
-	ObjectType(void);
-
-	virtual String GetName(void) const override;
-	virtual Type::Ptr GetBaseType(void) const override;
-	virtual int GetAttributes(void) const override;
-	virtual int GetFieldId(const String& name) const override;
-	virtual Field GetFieldInfo(int id) const override;
-	virtual int GetFieldCount(void) const override;
+	String GetName() const override;
+	Type::Ptr GetBaseType() const override;
+	int GetAttributes() const override;
+	int GetFieldId(const String& name) const override;
+	Field GetFieldInfo(int id) const override;
+	int GetFieldCount() const override;
 
 protected:
-	virtual ObjectFactory GetFactory(void) const override;
+	ObjectFactory GetFactory() const override;
 };
 
 }

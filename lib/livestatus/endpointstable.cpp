@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -27,21 +27,18 @@
 #include "base/objectlock.hpp"
 #include "base/convert.hpp"
 #include "base/utility.hpp"
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/foreach.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/split.hpp>
 
 using namespace icinga;
 
-EndpointsTable::EndpointsTable(void)
+EndpointsTable::EndpointsTable()
 {
 	AddColumns(this);
 }
 
 void EndpointsTable::AddColumns(Table *table, const String& prefix,
-    const Column::ObjectAccessor& objectAccessor)
+	const Column::ObjectAccessor& objectAccessor)
 {
 	table->AddColumn(prefix + "name", Column(&EndpointsTable::NameAccessor, objectAccessor));
 	table->AddColumn(prefix + "identity", Column(&EndpointsTable::IdentityAccessor, objectAccessor));
@@ -50,19 +47,19 @@ void EndpointsTable::AddColumns(Table *table, const String& prefix,
 	table->AddColumn(prefix + "zone", Column(&EndpointsTable::ZoneAccessor, objectAccessor));
 }
 
-String EndpointsTable::GetName(void) const
+String EndpointsTable::GetName() const
 {
 	return "endpoints";
 }
 
-String EndpointsTable::GetPrefix(void) const
+String EndpointsTable::GetPrefix() const
 {
 	return "endpoint";
 }
 
 void EndpointsTable::FetchRows(const AddRowFunction& addRowFn)
 {
-	BOOST_FOREACH(const Endpoint::Ptr& endpoint, ConfigType::GetObjectsByType<Endpoint>()) {
+	for (const Endpoint::Ptr& endpoint : ConfigType::GetObjectsByType<Endpoint>()) {
 		if (!addRowFn(endpoint, LivestatusGroupByNone, Empty))
 			return;
 	}

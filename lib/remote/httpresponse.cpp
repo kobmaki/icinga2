@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -20,16 +20,13 @@
 #include "remote/httpresponse.hpp"
 #include "remote/httpchunkedencoding.hpp"
 #include "base/logger.hpp"
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 #include "base/application.hpp"
 #include "base/convert.hpp"
-#include <boost/smart_ptr/make_shared.hpp>
 
 using namespace icinga;
 
-HttpResponse::HttpResponse(const Stream::Ptr& stream, const HttpRequest& request)
-    : Complete(false), m_State(HttpResponseStart), m_Request(request), m_Stream(stream)
+HttpResponse::HttpResponse(Stream::Ptr stream, const HttpRequest& request)
+	: Complete(false), m_State(HttpResponseStart), m_Request(&request), m_Stream(std::move(stream))
 { }
 
 void HttpResponse::SetStatus(int code, const String& message)
@@ -44,7 +41,7 @@ void HttpResponse::SetStatus(int code, const String& message)
 
 	String status = "HTTP/";
 
-	if (m_Request.ProtocolVersion == HttpVersion10)
+	if (m_Request->ProtocolVersion == HttpVersion10)
 		status += "1.0";
 	else
 		status += "1.1";
@@ -58,22 +55,20 @@ void HttpResponse::SetStatus(int code, const String& message)
 
 void HttpResponse::AddHeader(const String& key, const String& value)
 {
-	if (m_State != HttpResponseHeaders) {
-		Log(LogWarning, "HttpResponse", "Tried to add header after headers had already been sent.");
-		return;
-	}
-
-	String header = key + ": " + value + "\r\n";
-	m_Stream->Write(header.CStr(), header.GetLength());
+	m_Headers.emplace_back(key + ": " + value + "\r\n");
 }
 
-void HttpResponse::FinishHeaders(void)
+void HttpResponse::FinishHeaders()
 {
 	if (m_State == HttpResponseHeaders) {
-		if (m_Request.ProtocolVersion == HttpVersion11)
+		if (m_Request->ProtocolVersion == HttpVersion11)
 			AddHeader("Transfer-Encoding", "chunked");
 
 		AddHeader("Server", "Icinga/" + Application::GetAppVersion());
+
+		for (const String& header : m_Headers)
+			m_Stream->Write(header.CStr(), header.GetLength());
+
 		m_Stream->Write("\r\n", 2);
 		m_State = HttpResponseBody;
 	}
@@ -83,7 +78,7 @@ void HttpResponse::WriteBody(const char *data, size_t count)
 {
 	ASSERT(m_State == HttpResponseHeaders || m_State == HttpResponseBody);
 
-	if (m_Request.ProtocolVersion == HttpVersion10) {
+	if (m_Request->ProtocolVersion == HttpVersion10) {
 		if (!m_Body)
 			m_Body = new FIFO();
 
@@ -95,11 +90,11 @@ void HttpResponse::WriteBody(const char *data, size_t count)
 	}
 }
 
-void HttpResponse::Finish(void)
+void HttpResponse::Finish()
 {
 	ASSERT(m_State != HttpResponseEnd);
 
-	if (m_Request.ProtocolVersion == HttpVersion10) {
+	if (m_Request->ProtocolVersion == HttpVersion10) {
 		if (m_Body)
 			AddHeader("Content-Length", Convert::ToString(m_Body->GetAvailableBytes()));
 
@@ -111,13 +106,13 @@ void HttpResponse::Finish(void)
 			m_Stream->Write(buffer, rc);
 		}
 	} else {
-		WriteBody(NULL, 0);
+		WriteBody(nullptr, 0);
 		m_Stream->Write("\r\n", 2);
 	}
 
 	m_State = HttpResponseEnd;
 
-	if (m_Request.ProtocolVersion == HttpVersion10 || m_Request.Headers->Get("connection") == "close")
+	if (m_Request->ProtocolVersion == HttpVersion10 || m_Request->Headers->Get("connection") == "close")
 		m_Stream->Shutdown();
 }
 
@@ -135,12 +130,11 @@ bool HttpResponse::Parse(StreamReadContext& src, bool may_wait)
 			if (line == "")
 				return true;
 
-			std::vector<String> tokens;
-			boost::algorithm::split(tokens, line, boost::is_any_of(" "));
+			std::vector<String> tokens = line.Split(" ");
 			Log(LogDebug, "HttpRequest")
 				<< "line: " << line << ", tokens: " << tokens.size();
-			if (tokens.size() < 3)
-				BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid HTTP request"));
+			if (tokens.size() < 2)
+				BOOST_THROW_EXCEPTION(std::invalid_argument("Invalid HTTP response (Status line)"));
 
 			if (tokens[0] == "HTTP/1.0")
 				ProtocolVersion = HttpVersion10;
@@ -150,7 +144,9 @@ bool HttpResponse::Parse(StreamReadContext& src, bool may_wait)
 				BOOST_THROW_EXCEPTION(std::invalid_argument("Unsupported HTTP version"));
 
 			StatusCode = Convert::ToLong(tokens[1]);
-			StatusMessage = tokens[2]; // TODO: Join tokens[2..end]
+
+			if (tokens.size() >= 3)
+				StatusMessage = tokens[2]; // TODO: Join tokens[2..end]
 
 			m_State = HttpResponseHeaders;
 		} else if (m_State == HttpResponseHeaders) {
@@ -159,12 +155,7 @@ bool HttpResponse::Parse(StreamReadContext& src, bool may_wait)
 
 			if (line == "") {
 				m_State = HttpResponseBody;
-
-				/* we're done if the request doesn't contain a message body */
-				if (!Headers->Contains("content-length") && !Headers->Contains("transfer-encoding"))
-					Complete = true;
-				else
-					m_Body = new FIFO();
+				m_Body = new FIFO();
 
 				return true;
 
@@ -183,7 +174,7 @@ bool HttpResponse::Parse(StreamReadContext& src, bool may_wait)
 	} else if (m_State == HttpResponseBody) {
 		if (Headers->Get("transfer-encoding") == "chunked") {
 			if (!m_ChunkContext)
-				m_ChunkContext = boost::make_shared<ChunkReadContext>(boost::ref(src));
+				m_ChunkContext = std::make_shared<ChunkReadContext>(std::ref(src));
 
 			char *data;
 			size_t size;
@@ -204,27 +195,46 @@ bool HttpResponse::Parse(StreamReadContext& src, bool may_wait)
 				return true;
 			}
 		} else {
-			if (src.Eof)
+			bool hasLengthIndicator = false;
+			size_t lengthIndicator = 0;
+			Value contentLengthHeader;
+
+			if (Headers->Get("content-length", &contentLengthHeader)) {
+				hasLengthIndicator = true;
+				lengthIndicator = Convert::ToLong(contentLengthHeader);
+			}
+
+			if (!hasLengthIndicator && ProtocolVersion != HttpVersion10 && !Headers->Contains("transfer-encoding")) {
+				Complete = true;
+				return true;
+			}
+
+			if (hasLengthIndicator && src.Eof)
 				BOOST_THROW_EXCEPTION(std::invalid_argument("Unexpected EOF in HTTP body"));
 
 			if (src.MustRead) {
-				if (!src.FillFromStream(m_Stream, false)) {
+				if (!src.FillFromStream(m_Stream, may_wait))
 					src.Eof = true;
-					BOOST_THROW_EXCEPTION(std::invalid_argument("Unexpected EOF in HTTP body"));
-				}
 
 				src.MustRead = false;
 			}
 
-			size_t length_indicator = Convert::ToLong(Headers->Get("content-length"));
+			if (!hasLengthIndicator)
+				lengthIndicator = src.Size;
 
-			if (src.Size < length_indicator) {
+			if (src.Size < lengthIndicator) {
 				src.MustRead = true;
-				return false;
+				return may_wait;
 			}
 
-			m_Body->Write(src.Buffer, length_indicator);
-			src.DropData(length_indicator);
+			m_Body->Write(src.Buffer, lengthIndicator);
+			src.DropData(lengthIndicator);
+
+			if (!hasLengthIndicator && !src.Eof) {
+				src.MustRead = true;
+				return may_wait;
+			}
+
 			Complete = true;
 			return true;
 		}
@@ -241,7 +251,20 @@ size_t HttpResponse::ReadBody(char *data, size_t count)
 		return m_Body->Read(data, count, true);
 }
 
-bool HttpResponse::IsPeerConnected(void) const
+size_t HttpResponse::GetBodySize() const
+{
+	if (!m_Body)
+		return 0;
+	else
+		return m_Body->GetAvailableBytes();
+}
+
+bool HttpResponse::IsPeerConnected() const
 {
 	return !m_Stream->IsEof();
+}
+
+void HttpResponse::RebindRequest(const HttpRequest& request)
+{
+	m_Request = &request;
 }

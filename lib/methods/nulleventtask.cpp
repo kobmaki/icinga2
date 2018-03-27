@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -23,7 +23,9 @@
 
 using namespace icinga;
 
-REGISTER_SCRIPTFUNCTION(NullEvent, &NullEventTask::ScriptFunc);
+REGISTER_SCRIPTFUNCTION_NS(Internal, NullEvent, &NullEventTask::ScriptFunc, "checkable:resolvedMacros:useResolvedMacros");
 
-void NullEventTask::ScriptFunc(const Checkable::Ptr&, const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
-{ }
+void NullEventTask::ScriptFunc(const Checkable::Ptr& checkable, const Dictionary::Ptr& resolvedMacros, bool useResolvedMacros)
+{
+	REQUIRE_NOT_NULL(checkable);
+}

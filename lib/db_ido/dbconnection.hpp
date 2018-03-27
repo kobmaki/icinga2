@@ -1,6 +1,6 @@
 /******************************************************************************
  * Icinga 2                                                                   *
- * Copyright (C) 2012-2016 Icinga Development Team (https://www.icinga.org/)  *
+ * Copyright (C) 2012-2018 Icinga Development Team (https://www.icinga.com/)  *
  *                                                                            *
  * This program is free software; you can redistribute it and/or              *
  * modify it under the terms of the GNU General Public License                *
@@ -21,7 +21,7 @@
 #define DBCONNECTION_H
 
 #include "db_ido/i2-db_ido.hpp"
-#include "db_ido/dbconnection.thpp"
+#include "db_ido/dbconnection-ti.hpp"
 #include "db_ido/dbobject.hpp"
 #include "db_ido/dbquery.hpp"
 #include "base/timer.hpp"
@@ -29,8 +29,8 @@
 #include <boost/thread/once.hpp>
 #include <boost/thread/mutex.hpp>
 
-#define IDO_CURRENT_SCHEMA_VERSION "1.14.1"
-#define IDO_COMPAT_SCHEMA_VERSION "1.14.1"
+#define IDO_CURRENT_SCHEMA_VERSION "1.14.3"
+#define IDO_COMPAT_SCHEMA_VERSION "1.14.3"
 
 namespace icinga
 {
@@ -40,14 +40,17 @@ namespace icinga
  *
  * @ingroup db_ido
  */
-class I2_DB_IDO_API DbConnection : public ObjectImpl<DbConnection>
+class DbConnection : public ObjectImpl<DbConnection>
 {
 public:
 	DECLARE_OBJECT(DbConnection);
 
-	DbConnection(void);
+	static void InitializeDbTimer();
 
-	static void InitializeDbTimer(void);
+	void SetConfigHash(const DbObject::Ptr& dbobj, const String& hash);
+	void SetConfigHash(const DbType::Ptr& type, const DbReference& objid, const String& hash);
+	String GetConfigHash(const DbObject::Ptr& dbobj) const;
+	String GetConfigHash(const DbType::Ptr& type, const DbReference& objid) const;
 
 	void SetObjectID(const DbObject::Ptr& dbobj, const DbReference& dbref);
 	DbReference GetObjectID(const DbObject::Ptr& dbobj) const;
@@ -60,7 +63,7 @@ public:
 	void SetObjectActive(const DbObject::Ptr& dbobj, bool active);
 	bool GetObjectActive(const DbObject::Ptr& dbobj) const;
 
-	void ClearIDCache(void);
+	void ClearIDCache();
 
 	void SetConfigUpdate(const DbObject::Ptr& dbobj, bool hasupdate);
 	bool GetConfigUpdate(const DbObject::Ptr& dbobj) const;
@@ -68,16 +71,18 @@ public:
 	void SetStatusUpdate(const DbObject::Ptr& dbobj, bool hasupdate);
 	bool GetStatusUpdate(const DbObject::Ptr& dbobj) const;
 
-	int GetQueryCount(RingBuffer::SizeType span) const;
-	virtual int GetPendingQueryCount(void) const = 0;
+	int GetQueryCount(RingBuffer::SizeType span);
+	virtual int GetPendingQueryCount() const = 0;
 
-	virtual void ValidateFailoverTimeout(double value, const ValidationUtils& utils) override;
+	void ValidateFailoverTimeout(const Lazy<double>& lvalue, const ValidationUtils& utils) final;
+	void ValidateCategories(const Lazy<Array::Ptr>& lvalue, const ValidationUtils& utils) final;
 
 protected:
-	virtual void OnConfigLoaded(void) override;
-	virtual void Start(bool runtimeCreated) override;
-	virtual void Resume(void) override;
-	virtual void Pause(void) override;
+	void OnConfigLoaded() override;
+	void Start(bool runtimeCreated) override;
+	void Stop(bool runtimeRemoved) override;
+	void Resume() override;
+	void Pause() override;
 
 	virtual void ExecuteQuery(const DbQuery& query) = 0;
 	virtual void ExecuteMultipleQueries(const std::vector<DbQuery>&) = 0;
@@ -86,22 +91,27 @@ protected:
 
 	virtual void CleanUpExecuteQuery(const String& table, const String& time_column, double max_age);
 	virtual void FillIDCache(const DbType::Ptr& type) = 0;
-	virtual void NewTransaction(void) = 0;
+	virtual void NewTransaction() = 0;
 
 	void UpdateObject(const ConfigObject::Ptr& object);
-	void UpdateAllObjects(void);
+	void UpdateAllObjects();
 
-	void PrepareDatabase(void);
+	void PrepareDatabase();
 
-	void IncreaseQueryCount(void);
+	void IncreaseQueryCount();
 
-	bool IsIDCacheValid(void) const;
+	bool IsIDCacheValid() const;
 	void SetIDCacheValid(bool valid);
 
-	static void UpdateProgramStatus(void);
+	void EnableActiveChangedHandler();
+
+	static void UpdateProgramStatus();
+
+	static int GetSessionToken();
 
 private:
-	bool m_IDCacheValid;
+	bool m_IDCacheValid{false};
+	std::map<std::pair<DbType::Ptr, DbReference>, String> m_ConfigHashes;
 	std::map<DbObject::Ptr, DbReference> m_ObjectIDs;
 	std::map<std::pair<DbType::Ptr, DbReference>, DbReference> m_InsertIDs;
 	std::set<DbObject::Ptr> m_ActiveObjects;
@@ -109,22 +119,16 @@ private:
 	std::set<DbObject::Ptr> m_StatusUpdates;
 	Timer::Ptr m_CleanUpTimer;
 
-	void CleanUpHandler(void);
-
-	virtual void ClearConfigTable(const String& table) = 0;
+	void CleanUpHandler();
 
 	static Timer::Ptr m_ProgramStatusTimer;
 	static boost::once_flag m_OnceFlag;
 
-	Timer::Ptr m_StatsLoggerTimer;
-	void StatsLoggerTimerHandler(void);
-
 	static void InsertRuntimeVariable(const String& key, const Value& value);
 
 	mutable boost::mutex m_StatsMutex;
-	RingBuffer m_QueryStats;
-	int m_PendingQueries;
-	double m_PendingQueriesTimestamp;
+	RingBuffer m_QueryStats{15 * 60};
+	bool m_ActiveChangedHandler{false};
 };
 
 struct database_error : virtual std::exception, virtual boost::exception { };
