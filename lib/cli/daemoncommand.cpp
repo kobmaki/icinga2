@@ -183,8 +183,7 @@ std::vector<String> DaemonCommand::GetArgumentSuggestions(const String& argument
  */
 int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::string>& ap) const
 {
-	if (!vm.count("validate"))
-		Logger::DisableTimestamp(false);
+	Logger::EnableTimestamp();
 
 	Log(LogInformation, "cli")
 		<< "Icinga application loader (version: " << Application::GetAppVersion()
@@ -262,10 +261,17 @@ int DaemonCommand::Run(const po::variables_map& vm, const std::vector<std::strin
 		Log(LogInformation, "cli", "Requesting to take over.");
 		int rc = kill(vm["reload-internal"].as<int>(), SIGUSR2);
 		if (rc) {
-			Log(LogCritical, "Application")
+			Log(LogCritical, "cli")
 				<< "Failed to send signal to \"" << vm["reload-internal"].as<int>() <<  "\" with " << strerror(errno);
 			return EXIT_FAILURE;
 		}
+
+		double start = Utility::GetTime();
+		while (kill(vm["reload-internal"].as<int>(), SIGCHLD) == 0)
+			Utility::Sleep(0.2);
+
+		Log(LogNotice, "cli")
+			<< "Waited for " << Utility::FormatDuration(Utility::GetTime() - start) << " on old process to exit.";
 	}
 #endif /* _WIN32 */
 

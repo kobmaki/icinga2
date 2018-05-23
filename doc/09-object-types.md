@@ -729,8 +729,8 @@ Configuration Attributes:
   event\_command            | Object name           | **Optional.** The name of an event command that should be executed every time the host's state changes or the host is in a `SOFT` state.
   flapping\_threshold\_high | Number                | **Optional.** Flapping upper bound in percent for a host to be considered flapping. Default `30.0`
   flapping\_threshold\_low  | Number                | **Optional.** Flapping lower bound in percent for a host to be considered  not flapping. Default `25.0`
-  volatile                  | Boolean               | **Optional.** The volatile setting enables always `HARD` state types if `NOT-OK` state changes occur. Defaults to false.
-  zone		            | Object name           | **Optional.** The zone this object is a member of. Please read the [distributed monitoring](06-distributed-monitoring.md#distributed-monitoring) chapter for details.
+  volatile                  | Boolean               | **Optional.** Treat all state changes as HARD changes. See [here](08-advanced-topics.md#volatile-services-hosts) for details. Defaults to `false`.
+  zone                      | Object name           | **Optional.** The zone this object is a member of. Please read the [distributed monitoring](06-distributed-monitoring.md#distributed-monitoring) chapter for details.
   command\_endpoint         | Object name           | **Optional.** The endpoint where commands are executed on.
   notes                     | String                | **Optional.** Notes for the host.
   notes\_url                | String                | **Optional.** URL for notes for the host (for example, in notification commands).
@@ -948,6 +948,10 @@ Configuration Attributes:
   user                      | String                | **Optional.** PostgreSQL database user with read/write permission to the icinga database. Defaults to `icinga`.
   password                  | String                | **Optional.** PostgreSQL database user's password. Defaults to `icinga`.
   database                  | String                | **Optional.** PostgreSQL database name. Defaults to `icinga`.
+  ssl\_mode                 | String                | **Optional.** Enable SSL connection mode. Value must be set according to the [sslmode setting](https://www.postgresql.org/docs/9.3/static/libpq-connect.html#LIBPQ-CONNSTRING): `prefer`, `require`, `verify-ca`, `verify-full`, `allow`, `disable`.
+  ssl\_key                  | String                | **Optional.** PostgreSQL SSL client key file path.
+  ssl\_cert                 | String                | **Optional.** PostgreSQL SSL certificate file path.
+  ssl\_ca                   | String                | **Optional.** PostgreSQL SSL certificate authority certificate file path.
   table\_prefix             | String                | **Optional.** PostgreSQL database table prefix. Defaults to `icinga_`.
   instance\_name            | String                | **Optional.** Unique identifier for the local Icinga 2 instance. Defaults to `default`.
   instance\_description     | String                | **Optional.** Description for the Icinga 2 instance.
@@ -1118,9 +1122,10 @@ object Notification "localhost-ping-notification" {
 
   command = "mail-notification"
 
-  users = [ "user1", "user2" ]
+  users = [ "user1", "user2" ] // reference to User objects
 
   types = [ Problem, Recovery ]
+  states = [ Critical, Warning, OK ]
 }
 ```
 
@@ -1131,8 +1136,8 @@ Configuration Attributes:
   host\_name                | Object name           | **Required.** The name of the host this notification belongs to.
   service\_name             | Object name           | **Optional.** The short name of the service this notification belongs to. If omitted, this notification object is treated as host notification.
   vars                      | Dictionary            | **Optional.** A dictionary containing custom attributes that are specific to this notification object.
-  users                     | Array of object names | **Optional.** A list of user names who should be notified.
-  user\_groups              | Array of object names | **Optional.** A list of user group names who should be notified.
+  users                     | Array of object names | **Required.** A list of user names who should be notified. **Optional.** if the `user_groups` attribute is set.
+  user\_groups              | Array of object names | **Required.** A list of user group names who should be notified. **Optional.** if the `users` attribute is set.
   times                     | Dictionary            | **Optional.** A dictionary containing `begin` and `end` attributes for the notification.
   command                   | Object name           | **Required.** The name of the notification command which should be executed when the notification is triggered.
   interval                  | Duration              | **Optional.** The notification interval (in seconds). This interval is used for active notifications. Defaults to 30 minutes. If set to 0, [re-notifications](03-monitoring-basics.md#disable-renotification) are disabled.
@@ -1454,8 +1459,8 @@ Configuration Attributes:
   flapping\_threshold\_low  | Number                | **Optional.** Flapping lower bound in percent for a service to be considered  not flapping. `25.0`
   enable\_perfdata          | Boolean               | **Optional.** Whether performance data processing is enabled. Defaults to `true`.
   event\_command            | Object name           | **Optional.** The name of an event command that should be executed every time the service's state changes or the service is in a `SOFT` state.
-  volatile                  | Boolean               | **Optional.** The volatile setting enables always `HARD` state types if `NOT-OK` state changes occur. Defaults to `false`.
-  zone		            | Object name           | **Optional.** The zone this object is a member of. Please read the [distributed monitoring](06-distributed-monitoring.md#distributed-monitoring) chapter for details.
+  volatile                  | Boolean               | **Optional.** Treat all state changes as HARD changes. See [here](08-advanced-topics.md#volatile-services-hosts) for details. Defaults to `false`.
+  zone                      | Object name           | **Optional.** The zone this object is a member of. Please read the [distributed monitoring](06-distributed-monitoring.md#distributed-monitoring) chapter for details.
   name                      | String                | **Required.** The service name. Must be unique on a per-host basis. For advanced usage in [apply rules](03-monitoring-basics.md#using-apply) only.
   command\_endpoint         | Object name           | **Optional.** The endpoint where commands are executed on.
   notes                     | String                | **Optional.** Notes for the service.

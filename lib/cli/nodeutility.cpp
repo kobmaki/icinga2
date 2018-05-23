@@ -46,112 +46,114 @@ String NodeUtility::GetConstantsConfPath()
 	return Application::GetSysconfDir() + "/icinga2/constants.conf";
 }
 
+String NodeUtility::GetZonesConfPath()
+{
+	return Application::GetSysconfDir() + "/icinga2/zones.conf";
+}
+
 /*
  * Node Setup helpers
  */
 
-int NodeUtility::GenerateNodeIcingaConfig(const std::vector<std::string>& endpoints, const std::vector<String>& globalZones)
+int NodeUtility::GenerateNodeIcingaConfig(const String& endpointName, const String& zoneName,
+	const String& parentZoneName, const std::vector<std::string>& endpoints,
+	const std::vector<String>& globalZones)
 {
-	Array::Ptr my_config = new Array();
+	Array::Ptr config = new Array();
 
-	Array::Ptr my_master_zone_members = new Array();
-
-	String master_zone_name = "master"; //TODO: Find a better name.
+	Array::Ptr myParentZoneMembers = new Array();
 
 	for (const String& endpoint : endpoints) {
 		/* extract all --endpoint arguments and store host,port info */
 		std::vector<String> tokens = endpoint.Split(",");
 
-		Dictionary::Ptr my_master_endpoint = new Dictionary();
+		Dictionary::Ptr myParentEndpoint = new Dictionary();
 
 		if (tokens.size() > 1) {
 			String host = tokens[1].Trim();
 
 			if (!host.IsEmpty())
-				my_master_endpoint->Set("host", host);
+				myParentEndpoint->Set("host", host);
 		}
 
 		if (tokens.size() > 2) {
 			String port = tokens[2].Trim();
 
 			if (!port.IsEmpty())
-				my_master_endpoint->Set("port", port);
+				myParentEndpoint->Set("port", port);
 		}
 
-		String cn = tokens[0].Trim();
-		my_master_endpoint->Set("__name", cn);
-		my_master_endpoint->Set("__type", "Endpoint");
+		String myEndpointName = tokens[0].Trim();
+		myParentEndpoint->Set("__name", myEndpointName);
+		myParentEndpoint->Set("__type", "Endpoint");
 
 		/* save endpoint in master zone */
-		my_master_zone_members->Add(cn);
+		myParentZoneMembers->Add(myEndpointName);
 
-		my_config->Add(my_master_endpoint);
+		config->Add(myParentEndpoint);
 	}
 
-	/* add the master zone to the config */
-	my_config->Add(new Dictionary({
-		{ "__name", master_zone_name },
+	/* add the parent zone to the config */
+	config->Add(new Dictionary({
+		{ "__name", parentZoneName },
 		{ "__type", "Zone" },
-		{ "endpoints", my_master_zone_members }
+		{ "endpoints", myParentZoneMembers }
 	}));
 
 	/* store the local generated node configuration */
-	my_config->Add(new Dictionary({
-		{ "__name", new ConfigIdentifier("NodeName") },
+	config->Add(new Dictionary({
+		{ "__name", endpointName },
 		{ "__type", "Endpoint" }
 	}));
 
-	my_config->Add(new Dictionary({
-		{ "__name", new ConfigIdentifier("ZoneName") },
+	config->Add(new Dictionary({
+		{ "__name", zoneName },
 		{ "__type", "Zone" },
-		{ "parent", master_zone_name }, //set the master zone as parent
-		{ "endpoints", new Array({ new ConfigIdentifier("ZoneName") }) }
+		{ "parent", parentZoneName },
+		{ "endpoints", new Array({ endpointName }) }
 	}));
 
 	for (const String& globalzone : globalZones) {
-		my_config->Add(new Dictionary({
+		config->Add(new Dictionary({
 			{ "__name", globalzone },
 			{ "__type", "Zone" },
 			{ "global", true }
 		}));
 	}
 
-	/* write the newly generated configuration */
-	String zones_path = Application::GetSysconfDir() + "/icinga2/zones.conf";
-
-	NodeUtility::WriteNodeConfigObjects(zones_path, my_config);
+	/* Write the newly generated configuration. */
+	NodeUtility::WriteNodeConfigObjects(GetZonesConfPath(), config);
 
 	return 0;
 }
 
-int NodeUtility::GenerateNodeMasterIcingaConfig(const std::vector<String>& globalZones)
+int NodeUtility::GenerateNodeMasterIcingaConfig(const String& endpointName, const String& zoneName,
+	const std::vector<String>& globalZones)
 {
-	Array::Ptr my_config = new Array();
+	Array::Ptr config = new Array();
 
 	/* store the local generated node master configuration */
-	my_config->Add(new Dictionary({
-		{ "__name", new ConfigIdentifier("NodeName") },
+	config->Add(new Dictionary({
+		{ "__name", endpointName },
 		{ "__type", "Endpoint" }
 	}));
 
-	my_config->Add(new Dictionary({
-		{ "__name", new ConfigIdentifier("ZoneName") },
+	config->Add(new Dictionary({
+		{ "__name", zoneName },
 		{ "__type", "Zone" },
-		{ "endpoints", new Array({ new ConfigIdentifier("NodeName") }) }
+		{ "endpoints", new Array({ endpointName }) }
 	}));
 
 	for (const String& globalzone : globalZones) {
-		my_config->Add(new Dictionary({
+		config->Add(new Dictionary({
 			{ "__name", globalzone },
 			{ "__type", "Zone" },
 			{ "global", true }
 		}));
 	}
 
-	/* write the newly generated configuration */
-	String zones_path = Application::GetSysconfDir() + "/icinga2/zones.conf";
-
-	NodeUtility::WriteNodeConfigObjects(zones_path, my_config);
+	/* Write the newly generated configuration. */
+	NodeUtility::WriteNodeConfigObjects(GetZonesConfPath(), config);
 
 	return 0;
 }
@@ -214,7 +216,7 @@ bool NodeUtility::WriteNodeConfigObjects(const String& filename, const Array::Pt
 /*
  * We generally don't overwrite files without backup before
  */
-bool NodeUtility::CreateBackupFile(const String& target, bool is_private)
+bool NodeUtility::CreateBackupFile(const String& target, bool isPrivate)
 {
 	if (!Utility::PathExists(target))
 		return false;
@@ -230,7 +232,7 @@ bool NodeUtility::CreateBackupFile(const String& target, bool is_private)
 	Utility::CopyFile(target, backup);
 
 #ifndef _WIN32
-	if (is_private)
+	if (isPrivate)
 		chmod(backup.CStr(), 0600);
 #endif /* _WIN32 */
 
@@ -261,6 +263,89 @@ void NodeUtility::SerializeObject(std::ostream& fp, const Dictionary::Ptr& objec
 	}
 
 	fp << "}\n\n";
+}
+
+/*
+ * include = false, will comment out the include statement
+ * include = true, will add an include statement or uncomment a statement if one is existing
+ * resursive = false, will search for a non-resursive include statement
+ * recursive = true, will search for a resursive include statement
+ * Returns true on success, false if option was not found
+ */
+bool NodeUtility::UpdateConfiguration(const String& value, bool include, bool recursive)
+{
+	String configurationFile = Application::GetSysconfDir() + "/icinga2/icinga2.conf";
+
+	Log(LogInformation, "cli")
+		<< "Updating ' " << value << "' include in '" << configurationFile << "'.";
+
+	NodeUtility::CreateBackupFile(configurationFile);
+
+	std::ifstream ifp(configurationFile.CStr());
+	std::fstream ofp;
+	String tempFile = Utility::CreateTempFile(configurationFile + ".XXXXXX", 0644, ofp);
+
+	String affectedInclude = value;
+
+	if (recursive)
+		affectedInclude = "include_recursive " + affectedInclude;
+	else
+		affectedInclude = "include " + affectedInclude;
+
+	bool found = false;
+
+	std::string line;
+
+	while (std::getline(ifp, line)) {
+		if (include) {
+			if (line.find("//" + affectedInclude) != std::string::npos || line.find("// " + affectedInclude) != std::string::npos) {
+				found = true;
+				ofp << "// Added by the node setup CLI command on "
+					<< Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", Utility::GetTime())
+					<< "\n" + affectedInclude + "\n";
+			} else if (line.find(affectedInclude) != std::string::npos) {
+				found = true;
+
+				Log(LogInformation, "cli")
+					<< "Include statement '" + affectedInclude + "' already set.";
+
+				ofp << line << "\n";
+			} else {
+				ofp << line << "\n";
+			}
+		} else {
+			if (line.find(affectedInclude) != std::string::npos) {
+				found = true;
+				ofp << "// Disabled by the node setup CLI command on "
+					<< Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", Utility::GetTime())
+					<< "\n// " + affectedInclude + "\n";
+			} else {
+				ofp << line << "\n";
+			}
+		}
+	}
+
+	if (include && !found) {
+		ofp << "// Added by the node setup CLI command on "
+			<< Utility::FormatDateTime("%Y-%m-%d %H:%M:%S %z", Utility::GetTime())
+			<< "\n" + affectedInclude + "\n";
+	}
+
+	ifp.close();
+	ofp.close();
+
+#ifdef _WIN32
+	_unlink(configurationFile.CStr());
+#endif /* _WIN32 */
+
+	if (rename(tempFile.CStr(), configurationFile.CStr()) < 0) {
+		BOOST_THROW_EXCEPTION(posix_error()
+			<< boost::errinfo_api_function("rename")
+			<< boost::errinfo_errno(errno)
+			<< boost::errinfo_file_name(configurationFile));
+	}
+
+	return (found || include);
 }
 
 void NodeUtility::UpdateConstant(const String& name, const String& value)

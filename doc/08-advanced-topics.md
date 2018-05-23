@@ -8,21 +8,35 @@ can safely skip over things you're not interested in.
 Downtimes can be scheduled for planned server maintenance or
 any other targeted service outage you are aware of in advance.
 
-Downtimes will suppress any notifications, and may trigger other
+Downtimes suppress notifications and can trigger other
 downtimes too. If the downtime was set by accident, or the duration
-exceeds the maintenance, you can manually cancel the downtime.
-Planned downtimes will also be taken into account for SLA reporting
-tools calculating the SLAs based on the state and downtime history.
+exceeds the maintenance windows, you can manually cancel the downtime.
+
+### Scheduling a downtime <a id="scheduling-downtime"></a>
+
+The most convenient way to schedule planned downtimes is to create
+them in Icinga Web 2 inside the host/service detail view. Select
+multiple hosts/services from the listing with the shift key to
+schedule multiple downtimes.
+
+![Downtime in Icinga Web 2](images/advanced-topics/icingaweb2_downtime_handled.png)
+
+In addition to that you can schedule a downtime by using the Icinga 2 API action
+[schedule-downtime](12-icinga2-api.md#icinga2-api-actions-schedule-downtime).
+This is especially useful to schedule a downtime on-demand inside a (remote) backup
+script, or create maintenance downtimes from a cron job for specific dates and intervals.
 
 Multiple downtimes for a single object may overlap. This is useful
 when you want to extend your maintenance window taking longer than expected.
 If there are multiple downtimes triggered for one object, the overall downtime depth
 will be greater than `1`.
 
-
 If the downtime was scheduled after the problem changed to a critical hard
 state triggering a problem notification, and the service recovers during
 the downtime window, the recovery notification won't be suppressed.
+
+Planned downtimes are also taken into account for SLA reporting
+tools calculating the SLAs based on the state and downtime history.
 
 ### Fixed and Flexible Downtimes <a id="fixed-flexible-downtimes"></a>
 
@@ -50,13 +64,6 @@ For that reason, you may want to schedule a downtime between 07:30 and
 08:00 with a duration of 15 minutes. The downtime will then last from
 its trigger time until the duration is over. After that, the downtime
 is removed (may happen before or after the actual end time!).
-
-### Scheduling a downtime <a id="scheduling-downtime"></a>
-
-You can schedule a downtime either by using the Icinga 2 API action
-[schedule-downtime](12-icinga2-api.md#icinga2-api-actions-schedule-downtime) or
-by sending an [external command](14-features.md#external-commands).
-
 
 #### Fixed Downtime <a id="fixed-downtime"></a>
 
@@ -102,22 +109,37 @@ recurring downtimes for services.
 
 Example:
 
-    apply ScheduledDowntime "backup-downtime" to Service {
-      author = "icingaadmin"
-      comment = "Scheduled downtime for backup"
+```
+apply ScheduledDowntime "backup-downtime" to Service {
+  author = "icingaadmin"
+  comment = "Scheduled downtime for backup"
 
-      ranges = {
-        monday = "02:00-03:00"
-        tuesday = "02:00-03:00"
-        wednesday = "02:00-03:00"
-        thursday = "02:00-03:00"
-        friday = "02:00-03:00"
-        saturday = "02:00-03:00"
-        sunday = "02:00-03:00"
-      }
+  ranges = {
+    monday = "02:00-03:00"
+    tuesday = "02:00-03:00"
+    wednesday = "02:00-03:00"
+    thursday = "02:00-03:00"
+    friday = "02:00-03:00"
+    saturday = "02:00-03:00"
+    sunday = "02:00-03:00"
+  }
 
-      assign where "backup" in service.groups
-    }
+  assign where "backup" in service.groups
+}
+```
+
+Icinga 2 attempts to find the next possible segment from a ScheduledDowntime object's
+`ranges` attribute, and wont create multiple downtimes in the future. In case you need
+all these downtimes planned and visible for the next days, weeks or months, schedule them
+manually via the [REST API](12-icinga2-api.md#icinga2-api-actions-schedule-downtime) using
+a script or cron job.
+
+> **Note**
+>
+> If ScheduledDowntime objects are synced in a distributed high-availability setup,
+> both will create the next possible downtime on their own. These runtime generated
+> downtimes are synced among both zone instances, and you may see sort-of duplicate downtimes
+> in Icinga Web 2.
 
 
 ## Comments <a id="comments-intro"></a>
@@ -455,18 +477,21 @@ considered flapping.
 If the next seven check results then would not be state changes, the flapping percentage would fall below the lower threshold
 of 25% and therefore the host or service would recover from flapping.
 
-## Volatile Services <a id="volatile-services"></a>
+## Volatile Services and Hosts <a id="volatile-services-hosts"></a>
 
-By default all services remain in a non-volatile state. When a problem
-occurs, the `SOFT` state applies and once `max_check_attempts` attribute
-is reached with the check counter, a `HARD` state transition happens.
-Notifications are only triggered by `HARD` state changes and are then
-re-sent defined by the `interval` attribute.
+The `volatile` option, if enabled for a host or service, makes it treat every [state change](03-monitoring-basics.md#hard-soft-states)
+as a `HARD` state change. It is comparable to `max_check_attempts = 1`. With this any `NOT-OK` result will
+ignore `max_check_attempts` and trigger notifications etc. It will further cause any additional `NOT-OK`
+result to re-send notifications.
 
-It may be reasonable to have a volatile service which stays in a `HARD`
-state type if the service stays in a `NOT-OK` state. That way each
-service recheck will automatically trigger a notification unless the
-service is acknowledged or in a scheduled downtime.
+It may be reasonable to have a volatile service which stays in a `HARD` state if the service stays in a `NOT-OK`
+state. That way each service recheck will automatically trigger a notification unless the service is acknowledged or
+in a scheduled downtime.
+
+A common example are security checks where each `NOT-OK` check result should immediately trigger a notification.
+
+The default for this option is `false` and should only be enabled when required.
+
 
 ## Monitoring Icinga 2 <a id="monitoring-icinga"></a>
 

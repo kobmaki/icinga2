@@ -62,7 +62,7 @@ bool ActionsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 		} catch (const std::exception& ex) {
 			HttpUtility::SendJsonError(response, params, 404,
 				"No objects found.",
-				HttpUtility::GetLastParameter(params, "verboseErrors") ? DiagnosticInformation(ex) : "");
+				DiagnosticInformation(ex));
 			return true;
 		}
 	} else {
@@ -75,6 +75,11 @@ bool ActionsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 	Log(LogNotice, "ApiActionHandler")
 		<< "Running action " << actionName;
 
+	bool verbose = false;
+
+	if (params)
+		verbose = HttpUtility::GetLastParameter(params, "verbose");
+
 	for (const ConfigObject::Ptr& obj : objs) {
 		try {
 			results.emplace_back(action->Invoke(obj, params));
@@ -84,18 +89,31 @@ bool ActionsHandler::HandleRequest(const ApiUser::Ptr& user, HttpRequest& reques
 				{ "status", "Action execution failed: '" + DiagnosticInformation(ex, false) + "'." }
 			});
 
-			if (HttpUtility::GetLastParameter(params, "verboseErrors"))
-				fail->Set("diagnostic information", DiagnosticInformation(ex));
+			/* Exception for actions. Normally we would handle this inside SendJsonError(). */
+			if (verbose)
+				fail->Set("diagnostic_information", DiagnosticInformation(ex));
 
 			results.emplace_back(std::move(fail));
 		}
 	}
 
+	int statusCode = 500;
+	String statusMessage = "No action executed successfully";
+
+	for (const Dictionary::Ptr& res : results) {
+		if (res->Contains("code") && res->Get("code") == 200) {
+			statusCode = 200;
+			statusMessage = "OK";
+			break;
+		}
+	}
+
+	response.SetStatus(statusCode, statusMessage);
+
 	Dictionary::Ptr result = new Dictionary({
 		{ "results", new Array(std::move(results)) }
 	});
 
-	response.SetStatus(200, "OK");
 	HttpUtility::SendJsonBody(response, params, result);
 
 	return true;

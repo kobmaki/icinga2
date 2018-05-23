@@ -60,6 +60,8 @@ void IcingaApplication::StaticInitialize()
 	ScriptGlobal::Set("NodeName", node_name);
 
 	ScriptGlobal::Set("ApplicationType", "IcingaApplication");
+
+	ScriptGlobal::Set("ApplicationVersion", Application::GetAppVersion());
 }
 
 REGISTER_STATSFUNCTION(IcingaApplication, &IcingaApplication::StatsFunc);
@@ -79,7 +81,8 @@ void IcingaApplication::StatsFunc(const Dictionary::Ptr& status, const Array::Pt
 			{ "enable_perfdata", icingaapplication->GetEnablePerfdata() },
 			{ "pid", Utility::GetPid() },
 			{ "program_start", Application::GetStartTime() },
-			{ "version", Application::GetAppVersion() }
+			{ "version", Application::GetAppVersion() },
+			{ "environment", ScriptGlobal::Get("Environment", &Empty) }
 		}));
 	}
 

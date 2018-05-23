@@ -90,25 +90,7 @@ void Application::Stop(bool runtimeRemoved)
 	WSACleanup();
 #endif /* _WIN32 */
 
-	// Getting a shutdown-signal when a restart is in progress usually
-	// means that the restart succeeded and the new process wants to take
-	// over. Write the PID of the new process to the pidfile before this
-	// process exits to keep systemd happy.
-	if (l_Restarting) {
-		try {
-			UpdatePidFile(GetPidPath(), m_ReloadProcess);
-		} catch (const std::exception&) {
-			/* abort restart */
-			Log(LogCritical, "Application", "Cannot update PID file. Aborting restart operation.");
-			return;
-		}
-
-		Log(LogDebug, "Application")
-			<< "Keeping pid  '" << m_ReloadProcess << "' open.";
-
-		ClosePidFile(false);
-	} else
-		ClosePidFile(true);
+	ClosePidFile(true);
 
 	ObjectImpl<Application>::Stop(runtimeRemoved);
 }
@@ -196,7 +178,8 @@ void Application::SetResourceLimits()
 		rl.rlim_max = rl.rlim_cur;
 
 		if (setrlimit(RLIMIT_NOFILE, &rl) < 0)
-			Log(LogNotice, "Application", "Could not adjust resource limit for open file handles (RLIMIT_NOFILE)");
+			Log(LogWarning, "Application")
+			    << "Failed to adjust resource limit for open file handles (RLIMIT_NOFILE) with error \"" << strerror(errno) << "\"";
 #	else /* RLIMIT_NOFILE */
 		Log(LogNotice, "Application", "System does not support adjusting the resource limit for open file handles (RLIMIT_NOFILE)");
 #	endif /* RLIMIT_NOFILE */
@@ -216,7 +199,8 @@ void Application::SetResourceLimits()
 		rl.rlim_max = rl.rlim_cur;
 
 		if (setrlimit(RLIMIT_NPROC, &rl) < 0)
-			Log(LogNotice, "Application", "Could not adjust resource limit for number of processes (RLIMIT_NPROC)");
+			Log(LogWarning, "Application")
+			    << "Failed adjust resource limit for number of processes (RLIMIT_NPROC) with error \"" << strerror(errno) << "\"";
 #	else /* RLIMIT_NPROC */
 		Log(LogNotice, "Application", "System does not support adjusting the resource limit for number of processes (RLIMIT_NPROC)");
 #	endif /* RLIMIT_NPROC */
@@ -255,33 +239,33 @@ void Application::SetResourceLimits()
 		else
 			rl.rlim_cur = rl.rlim_max;
 
-		if (setrlimit(RLIMIT_STACK, &rl) < 0) {
-			Log(LogNotice, "Application", "Could not adjust resource limit for stack size (RLIMIT_STACK)");
-			if (set_stack_rlimit) {
-				char **new_argv = static_cast<char **>(malloc(sizeof(char *) * (argc + 2)));
+		if (setrlimit(RLIMIT_STACK, &rl) < 0)
+			Log(LogWarning, "Application")
+			    << "Failed adjust resource limit for stack size (RLIMIT_STACK) with error \"" << strerror(errno) << "\"";
+		else if (set_stack_rlimit) {
+			char **new_argv = static_cast<char **>(malloc(sizeof(char *) * (argc + 2)));
 
-				if (!new_argv) {
-					perror("malloc");
-					Exit(EXIT_FAILURE);
-				}
-
-				new_argv[0] = argv[0];
-				new_argv[1] = strdup("--no-stack-rlimit");
-
-				if (!new_argv[1]) {
-					perror("strdup");
-					exit(1);
-				}
-
-				for (int i = 1; i < argc; i++)
-					new_argv[i + 1] = argv[i];
-
-				new_argv[argc + 1] = nullptr;
-
-				(void) execvp(new_argv[0], new_argv);
-				perror("execvp");
-				_exit(EXIT_FAILURE);
+			if (!new_argv) {
+				perror("malloc");
+				Exit(EXIT_FAILURE);
 			}
+
+			new_argv[0] = argv[0];
+			new_argv[1] = strdup("--no-stack-rlimit");
+
+			if (!new_argv[1]) {
+				perror("strdup");
+				exit(1);
+			}
+
+			for (int i = 1; i < argc; i++)
+				new_argv[i + 1] = argv[i];
+
+			new_argv[argc + 1] = nullptr;
+
+			(void) execvp(new_argv[0], new_argv);
+			perror("execvp");
+			_exit(EXIT_FAILURE);
 		}
 #	else /* RLIMIT_STACK */
 		Log(LogNotice, "Application", "System does not support adjusting the resource limit for stack size (RLIMIT_STACK)");
@@ -741,6 +725,20 @@ void Application::SigUsr2Handler(int)
 #ifdef HAVE_SYSTEMD
 	sd_notifyf(0, "MAINPID=%lu", (unsigned long) m_ReloadProcess);
 #endif /* HAVE_SYSTEMD */
+
+	/* Write the PID of the new process to the pidfile before this
+	 * process exits to keep systemd happy.
+	 */
+	Application::Ptr instance = GetInstance();
+	try {
+		instance->UpdatePidFile(GetPidPath(), m_ReloadProcess);
+	} catch (const std::exception&) {
+		/* abort restart */
+		Log(LogCritical, "Application", "Cannot update PID file. Aborting restart operation.");
+		return;
+	}
+
+	instance->ClosePidFile(false);
 
 	Exit(0);
 }

@@ -26,7 +26,9 @@ namespace icinga
 
 class CheckerComponent : ConfigObject
 {
-	[config] int concurrent_checks {
+	activation_priority 100;
+
+	[config, no_storage] int concurrent_checks {
 		get {{{
 			return Application::GetMaxConcurrentChecks();
 		}}}

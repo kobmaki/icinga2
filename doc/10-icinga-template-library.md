@@ -174,9 +174,11 @@ file:
 The plugin check commands assume that there's a global constant named `PluginDir`
 which contains the path of the plugins from the Monitoring Plugins project.
 
-**Note**: If there are command parameters missing for the provided CheckCommand
-definitions please kindly send a patch upstream. This should include an update
-for the ITL CheckCommand itself and this documentation section.
+> **Note**:
+>
+> Please be aware that the CheckCommand definitions are based on the [Monitoring Plugins](https://www.monitoring-plugins.org), other Plugin collections might not support
+> all parameters. If there are command parameters missing for the provided CheckCommand definitions please kindly send a patch upstream.
+> This should include an update for the ITL CheckCommand itself and this documentation section.
 
 ### apt <a id="plugin-check-command-apt"></a>
 
@@ -1506,8 +1508,8 @@ Custom attributes:
 
 Name                  | Description
 :---------------------|:------------
-disk\_win\_warn       | **Optional**. The warning threshold.
-disk\_win\_crit       | **Optional**. The critical threshold.
+disk\_win\_warn       | **Optional**. The warning threshold. Defaults to "20%".
+disk\_win\_crit       | **Optional**. The critical threshold. Defaults to "10%".
 disk\_win\_path       | **Optional**. Check only these paths, default checks all.
 disk\_win\_unit       | **Optional**. Use this unit to display disk space, thresholds are interpreted in this unit. Defaults to "mb", possible values are: b, kb, mb, gb and tb.
 disk\_win\_exclude    | **Optional**. Exclude these drives from check.
@@ -1541,8 +1543,8 @@ Custom attributes:
 
 Name              | Description
 :-----------------|:------------
-memory\_win\_warn | **Optional**. The warning threshold.
-memory\_win\_crit | **Optional**. The critical threshold.
+memory\_win\_warn | **Optional**. The warning threshold. Defaults to "10%".
+memory\_win\_crit | **Optional**. The critical threshold. Defaults to "5%".
 memory\_win\_unit | **Optional**. The unit to display the received value in, thresholds are interpreted in this unit. Defaults to "mb" (megabyte), possible values are: b, kb, mb, gb and tb.
 
 
@@ -1632,8 +1634,8 @@ Custom attributes:
 
 Name            | Description
 :---------------|:------------
-swap\_win\_warn | **Optional**. The warning threshold.
-swap\_win\_crit | **Optional**. The critical threshold.
+swap\_win\_warn | **Optional**. The warning threshold. Defaults to "10%".
+swap\_win\_crit | **Optional**. The critical threshold. Defaults to "5%".
 swap\_win\_unit | **Optional**. The unit to display the received value in, thresholds are interpreted in this unit. Defaults to "mb" (megabyte).
 
 
@@ -1783,6 +1785,12 @@ nscp_boot       | **Optional.** Whether to use the --boot option. Defaults to tr
 nscp_query      | **Required.** The NSClient++ query. Try `nscp client -q x` for a list.
 nscp_arguments  | **Optional.** An array of query arguments.
 nscp_showall	| **Optional.** Shows more details in plugin output, default to false.
+
+> **Tip**
+>
+> In order to measure CPU load, you'll need a running NSClient++ service.
+> Therefore it is advised to use a local [nscp-api](06-distributed-monitoring.md#distributed-monitoring-windows-nscp-check-api)
+> check against its REST API.
 
 ### nscp-local-cpu <a id="nscp-check-local-cpu"></a>
 
